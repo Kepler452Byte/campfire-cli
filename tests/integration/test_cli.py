@@ -131,6 +131,7 @@ def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> Non
     applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
     assert applied.exit_code == 0, applied.output
     assert (workspace / "_global_skills/campfire-workspace-governance/SKILL.md").is_file()
+    assert (workspace / "_global_skills/campfire-conversation-intake/SKILL.md").is_file()
     repeated = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync", "--dry-run"])
     assert json.loads(repeated.output)["operations"] == []
     checked = runner.invoke(app, ["--workspace", str(workspace), "skill", "check"])

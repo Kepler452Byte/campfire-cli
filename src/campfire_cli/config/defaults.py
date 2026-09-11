@@ -146,6 +146,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
             "targets": ["~/.claude/skills", "~/.agents/skills"],
             "managed_skills": [
                 "campfire-workspace-governance",
+                "campfire-conversation-intake",
                 "campfire-inbox-triage",
                 "mynote-knowledge-governance",
                 "mywork-project-docs-governance",

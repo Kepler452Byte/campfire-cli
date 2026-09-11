@@ -92,6 +92,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "targets": [str(tmp_path / "_global_skills")],
                 "managed_skills": [
                     "campfire-workspace-governance",
+                    "campfire-conversation-intake",
                     "campfire-inbox-triage",
                     "mynote-knowledge-governance",
                     "mywork-project-docs-governance",

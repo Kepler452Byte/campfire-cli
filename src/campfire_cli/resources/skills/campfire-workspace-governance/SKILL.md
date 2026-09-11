@@ -9,7 +9,7 @@ description: "治理 Campfire Workspace 中的共享上下文；适用于收件�
 
 受管范围内任意 Markdown 都应可被纳管：脚本负责发现、校验、生成确定性计划和执行机械变更；Agent 负责理解正文并提出标题、摘要、类型和目标领域。语义不明确时必须进入待用户确认，而不是为追求检查通过而猜测。
 
-先运行 `campfire workspace resolve` 获取目标 Workspace；需要指定其他 Workspace 时使用 `campfire --workspace <id>`。然后从返回的 Workspace 根目录读取 `AGENTS.md` 和治理 SPEC。处理 `_收件箱/` 时读取同级全局 Skill `campfire-inbox-triage`；处理 `mynote/`、`mywork/`、任务或周报时加载对应全局 Skill。
+先运行 `campfire workspace resolve` 获取目标 Workspace；需要指定其他 Workspace 时使用 `campfire --workspace <id>`。然后从返回的 Workspace 根目录读取 `AGENTS.md` 和治理 SPEC。用户直接在对话中表达交办、学习或沉淀意图时读取 `campfire-conversation-intake`；处理 `_收件箱/` 时读取 `campfire-inbox-triage`；处理 `mynote/`、`mywork/`、任务或周报时加载对应全局 Skill。
 
 ## 工作流
 
