@@ -1,0 +1,1 @@
+"""Workspace CLI delivery adapter."""

@@ -1,0 +1,29 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'file.path.startsWith("mywork/")'
+    - 'archive_requested == true'
+properties:
+  file.name: {displayName: 文档}
+  project: {displayName: 项目}
+  domain: {displayName: 领域}
+  type: {displayName: 类型}
+  archive_reason: {displayName: 归档原因}
+  superseded_by: {displayName: 替代文档}
+  updated: {displayName: 更新时间}
+views:
+  - type: table
+    name: 全部待归档
+    order: [file.name, project, domain, type, archive_reason, superseded_by, updated]
+  - type: table
+    name: 缺少归档原因
+    filters: archive_reason.isEmpty()
+    order: [file.name, project, domain, type, updated]
+  - type: table
+    name: 缺少替代文档
+    filters: '(archive_reason == "superseded" || archive_reason == "merged") && superseded_by.isEmpty()'
+    order: [file.name, project, domain, archive_reason, superseded_by, updated]
+  - type: table
+    name: 可执行候选
+    filters: '!archive_reason.isEmpty() && !((archive_reason == "superseded" || archive_reason == "merged") && superseded_by.isEmpty())'
+    order: [file.name, project, domain, type, archive_reason, superseded_by, updated]

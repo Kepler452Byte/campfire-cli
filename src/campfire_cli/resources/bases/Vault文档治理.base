@@ -1,0 +1,39 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - or:
+        - 'file.path.startsWith("mynote/")'
+        - 'file.path.startsWith("mywork/")'
+    - '!file.path.contains("/archive/")'
+    - '!file.path.contains("/generated/")'
+properties:
+  file.name:
+    displayName: 文档
+  file.folder:
+    displayName: 领域目录
+  type:
+    displayName: 类型
+  status:
+    displayName: 状态
+  updated:
+    displayName: 更新时间
+views:
+  - type: table
+    name: 全部受管文档
+    order: [file.name, file.folder, type, status, created, updated, tags]
+  - type: table
+    name: 当前文档
+    filters: 'status == "current"'
+    order: [file.name, file.folder, type, updated, tags]
+  - type: table
+    name: 草稿文档
+    filters: 'status == "draft"'
+    order: [file.name, file.folder, type, updated]
+  - type: table
+    name: 元数据待治理
+    filters: 'type.isEmpty() || status.isEmpty()'
+    order: [file.name, file.folder, type, status, updated]
+  - type: table
+    name: 最近更新
+    filters: 'file.mtime > now() - "30d"'
+    order: [file.name, file.folder, type, status, file.mtime]
