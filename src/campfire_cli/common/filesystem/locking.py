@@ -9,7 +9,7 @@ from campfire_cli.common.exceptions import GovernanceBlockedError
 
 
 @contextmanager
-def vault_write_lock(state_root: Path) -> Iterator[None]:
+def workspace_write_lock(state_root: Path) -> Iterator[None]:
     lock = state_root / "locks" / "write.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     descriptor = _acquire(lock)

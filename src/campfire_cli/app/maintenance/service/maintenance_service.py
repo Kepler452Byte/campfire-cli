@@ -29,7 +29,7 @@ from campfire_cli.common.documents import (
 )
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.filesystem import atomic_write
-from campfire_cli.common.filesystem.locking import vault_write_lock
+from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
     GovernanceRuleEngine,
     capture_snapshot,
@@ -44,7 +44,9 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 
 class MaintenanceService:
-    def __init__(self, settings: WorkspaceSettings, repository: MaintenanceRepositoryProtocol) -> None:
+    def __init__(
+        self, settings: WorkspaceSettings, repository: MaintenanceRepositoryProtocol
+    ) -> None:
         self._settings = settings
         self._repository = repository
         self._rules = GovernanceRuleEngine(settings.document_types, settings.frontmatter_schema)
@@ -103,7 +105,7 @@ class MaintenanceService:
             finished_at=completed_at,
         )
         observed = {document.path: document.content_hash for document in documents}
-        with vault_write_lock(self._settings.state_root):
+        with workspace_write_lock(self._settings.state_root):
             changed = snapshot_changes(self._settings.vault_root, observed)
             if changed:
                 return self._concurrent_result(changed)
@@ -187,7 +189,7 @@ class MaintenanceService:
                 issue_count=len(issues),
                 issues=[Issue.model_validate(enrich_issue(item)) for item in issues],
             )
-        with vault_write_lock(self._settings.state_root):
+        with workspace_write_lock(self._settings.state_root):
             changed = snapshot_changes(self._settings.vault_root, payload.get("snapshot", {}))
             if changed:
                 return self._concurrent_result(changed)
@@ -310,7 +312,7 @@ class MaintenanceService:
         for path, expected in generated_snapshot.items():
             snapshot.setdefault(path, expected)
         if not dry_run and changes:
-            with vault_write_lock(self._settings.state_root):
+            with workspace_write_lock(self._settings.state_root):
                 changed = snapshot_changes(self._settings.vault_root, snapshot)
                 if changed:
                     return self._concurrent_result(changed)
@@ -334,7 +336,7 @@ class MaintenanceService:
                 self._settings.vault_root,
                 [path for item in items for path in (item.source, item.target)],
             )
-            with vault_write_lock(self._settings.state_root):
+            with workspace_write_lock(self._settings.state_root):
                 changed = snapshot_changes(self._settings.vault_root, snapshot)
                 if changed:
                     return self._concurrent_result(changed)

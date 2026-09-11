@@ -19,7 +19,7 @@ from campfire_cli.app.skill.service.skill_service import SkillService
 from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
-from campfire_cli.config.settings import WorkspaceSettings, governance_home
+from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 
 @dataclass
@@ -33,7 +33,7 @@ class AppContainer:
 
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:
-        governance_root = governance_home()
+        governance_root = campfire_home()
         resolution = WorkspaceService(
             governance_root, FilesystemWorkspaceRepository(governance_root)
         ).resolve(str(workspace) if workspace is not None else None, Path.cwd())

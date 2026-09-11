@@ -33,9 +33,9 @@ def test_short_help_is_available_at_every_command_level() -> None:
 def test_init_creates_defaults_without_overwriting_existing_file(
     tmp_path: Path, monkeypatch
 ) -> None:
-    vg_home = tmp_path / "campfire-home"
-    monkeypatch.setenv("CAMPFIRE_HOME", str(vg_home))
-    existing = vg_home / "workspaces" / "new-workspace" / "config" / "governance.json"
+    campfire_home = tmp_path / "campfire-home"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
+    existing = campfire_home / "workspaces" / "new-workspace" / "config" / "governance.json"
     existing.parent.mkdir(parents=True)
     existing.write_text('{"custom": true}\n', encoding="utf-8")
     result = runner.invoke(
@@ -80,9 +80,9 @@ def test_multiple_registered_workspaces_can_be_selected(tmp_path: Path, monkeypa
 
 
 def test_workspace_create_builds_minimal_scaffold_and_database(tmp_path: Path, monkeypatch) -> None:
-    vg_home = tmp_path / "campfire-home"
+    campfire_home = tmp_path / "campfire-home"
     target = tmp_path / "new-workspace"
-    monkeypatch.setenv("CAMPFIRE_HOME", str(vg_home))
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     result = runner.invoke(
         app,
         ["workspace", "create", "--id", "new", "--path", str(target), "--default"],
@@ -93,7 +93,7 @@ def test_workspace_create_builds_minimal_scaffold_and_database(tmp_path: Path, m
     for relative in payload["created_directories"]:
         assert (target / relative).is_dir()
     assert not (target / ".campfire").exists()
-    assert (vg_home / "workspaces/new/db/campfire.db").is_file()
+    assert (campfire_home / "workspaces/new/db/campfire.db").is_file()
     repeated = runner.invoke(
         app,
         ["workspace", "create", "--id", "new", "--path", str(target)],
@@ -142,7 +142,9 @@ def test_skill_resolve_routes_inbox_and_knowledge(workspace: Path) -> None:
         ("_收件箱/用户输入/test.md", "campfire-inbox-triage"),
         ("mynote/【知识】软件开发/test.md", "mynote-knowledge-governance"),
     ):
-        result = runner.invoke(app, ["--workspace", str(workspace), "skill", "resolve", "--path", path])
+        result = runner.invoke(
+            app, ["--workspace", str(workspace), "skill", "resolve", "--path", path]
+        )
         assert result.exit_code == 0, result.output
         names = [item["name"] for item in json.loads(result.output)["skills"]]
         assert "campfire-workspace-governance" in names
@@ -180,14 +182,14 @@ def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None
     result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["status"] == "ok"
-    state = workspace / "_vg/workspaces/test"
+    state = workspace / "_campfire/workspaces/test"
     assert (state / "db/campfire.db").is_file()
     assert (state / "reports/current.json").is_file()
     assert (state / "reports/current.md").is_file()
 
 
 def test_maintenance_check_validates_task_business_rules(workspace: Path) -> None:
-    config_path = workspace / "_vg/workspaces/test/config"
+    config_path = workspace / "_campfire/workspaces/test/config"
     types = json.loads((config_path / "document-types.json").read_text())
     types["types"]["task"] = {"prefix": "任务-", "label": "任务"}
     (config_path / "document-types.json").write_text(json.dumps(types), encoding="utf-8")
@@ -228,15 +230,26 @@ def test_migration_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Pa
     assert (
         runner.invoke(
             app,
-            ["--workspace", str(workspace), "migration", "inventory", "--scope", "mynote", "--batch", "b1"],
+            [
+                "--workspace",
+                str(workspace),
+                "migration",
+                "inventory",
+                "--scope",
+                "mynote",
+                "--batch",
+                "b1",
+            ],
         ).exit_code
         == 0
     )
     assert (
-        runner.invoke(app, ["--workspace", str(workspace), "migration", "plan", "--batch", "b1"]).exit_code
+        runner.invoke(
+            app, ["--workspace", str(workspace), "migration", "plan", "--batch", "b1"]
+        ).exit_code
         == 0
     )
-    plan_path = workspace / "_vg/workspaces/test/batches/b1/plan.json"
+    plan_path = workspace / "_campfire/workspaces/test/batches/b1/plan.json"
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     assert plan["items"] and plan["items"][0]["approved"] is False
     plan["items"][0]["approved"] = True
@@ -262,7 +275,16 @@ def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspac
     reference.write_text("[迁移](mynote/知识-迁移.md)\n", encoding="utf-8")
     runner.invoke(
         app,
-        ["--workspace", str(workspace), "migration", "inventory", "--scope", "mynote", "--batch", "move"],
+        [
+            "--workspace",
+            str(workspace),
+            "migration",
+            "inventory",
+            "--scope",
+            "mynote",
+            "--batch",
+            "move",
+        ],
     )
     spec = workspace / "move.yaml"
     spec.write_text(
@@ -277,7 +299,16 @@ def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspac
     )
     planned = runner.invoke(
         app,
-        ["--workspace", str(workspace), "migration", "plan", "--batch", "move", "--spec", str(spec)],
+        [
+            "--workspace",
+            str(workspace),
+            "migration",
+            "plan",
+            "--batch",
+            "move",
+            "--spec",
+            str(spec),
+        ],
     )
     assert json.loads(planned.output)["item_count"] == 1
     applied = runner.invoke(
@@ -298,7 +329,16 @@ def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspa
     reference.write_text("[[知识-旧标题]]\n正文知识-旧标题不应被替换\n", encoding="utf-8")
     runner.invoke(
         app,
-        ["--workspace", str(workspace), "migration", "inventory", "--scope", "mynote", "--batch", "links"],
+        [
+            "--workspace",
+            str(workspace),
+            "migration",
+            "inventory",
+            "--scope",
+            "mynote",
+            "--batch",
+            "links",
+        ],
     )
     spec = workspace / "links.yaml"
     spec.write_text(
@@ -310,7 +350,17 @@ def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspa
         encoding="utf-8",
     )
     runner.invoke(
-        app, ["--workspace", str(workspace), "migration", "plan", "--batch", "links", "--spec", str(spec)]
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "migration",
+            "plan",
+            "--batch",
+            "links",
+            "--spec",
+            str(spec),
+        ],
     )
     result = runner.invoke(
         app, ["--workspace", str(workspace), "migration", "apply", "--batch", "links", "--confirm"]
@@ -326,7 +376,16 @@ def test_migration_spec_rejects_invalid_enum_during_plan(workspace: Path) -> Non
     source.write_text("---\ntype: knowledge\nstatus: current\n---\n", encoding="utf-8")
     runner.invoke(
         app,
-        ["--workspace", str(workspace), "migration", "inventory", "--scope", "mynote", "--batch", "enum"],
+        [
+            "--workspace",
+            str(workspace),
+            "migration",
+            "inventory",
+            "--scope",
+            "mynote",
+            "--batch",
+            "enum",
+        ],
     )
     spec = workspace / "enum.yaml"
     spec.write_text(
@@ -337,7 +396,17 @@ def test_migration_spec_rejects_invalid_enum_during_plan(workspace: Path) -> Non
         encoding="utf-8",
     )
     result = runner.invoke(
-        app, ["--workspace", str(workspace), "migration", "plan", "--batch", "enum", "--spec", str(spec)]
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "migration",
+            "plan",
+            "--batch",
+            "enum",
+            "--spec",
+            str(spec),
+        ],
     )
     payload = json.loads(result.output)
     assert payload["status"] == "blocked"
@@ -404,14 +473,16 @@ def test_maintenance_apply_blocks_when_snapshot_changed(workspace: Path) -> None
     note.write_text("# 并发\n", encoding="utf-8")
     runner.invoke(app, ["--workspace", str(workspace), "maintenance", "plan"])
     note.write_text("# 另一个会话修改\n", encoding="utf-8")
-    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "apply", "--confirm"])
+    result = runner.invoke(
+        app, ["--workspace", str(workspace), "maintenance", "apply", "--confirm"]
+    )
     payload = json.loads(result.output)
     assert payload["status"] == "blocked"
     assert payload["issues"][0]["code"] == "concurrent-change"
 
 
 def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> None:
-    config = workspace / "_vg/workspaces/test/config"
+    config = workspace / "_campfire/workspaces/test/config"
     types = json.loads((config / "document-types.json").read_text(encoding="utf-8"))
     types["types"]["task"] = {"prefix": "任务-", "label": "任务"}
     (config / "document-types.json").write_text(json.dumps(types), encoding="utf-8")

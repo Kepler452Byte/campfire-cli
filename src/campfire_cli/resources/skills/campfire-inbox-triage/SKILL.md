@@ -1,9 +1,9 @@
 ---
 name: campfire-inbox-triage
-description: "分流 Vault 全局收件箱中的用户输入；适用于判断 mynote/mywork、目标领域和文档类型，以及生成需要用户确认的归属问题。"
+description: "分流 Campfire Workspace 全局收件箱中的输入；适用于判断 mynote/mywork、目标领域和文档类型，以及生成需要用户确认的归属问题。"
 ---
 
-# Vault 收件箱分流
+# Campfire 收件箱分流
 
 处理 `_收件箱/用户输入/` 中的原始材料。先读取 `campfire-workspace-governance`，再读取候选领域的 `_领域.md`。
 

@@ -9,7 +9,7 @@ from typing import Any
 from campfire_cli.common.exceptions import ConfigurationError
 
 
-def governance_home() -> Path:
+def campfire_home() -> Path:
     return Path(os.environ.get("CAMPFIRE_HOME", "~/.campfire")).expanduser().resolve()
 
 
@@ -32,8 +32,8 @@ class WorkspaceSettings:
     @classmethod
     def load(cls, workspace_id: str, root: Path) -> WorkspaceSettings:
         if not root.is_dir():
-            raise ConfigurationError(f"已注册 Vault 不存在：{root}")
-        state_root = governance_home() / "workspaces" / workspace_id
+            raise ConfigurationError(f"已注册 Workspace 不存在：{root}")
+        state_root = campfire_home() / "workspaces" / workspace_id
         config_root = state_root / "config"
         required = {
             "governance": config_root / "governance.json",

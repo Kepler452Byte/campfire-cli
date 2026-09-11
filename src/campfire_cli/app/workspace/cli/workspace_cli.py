@@ -11,15 +11,16 @@ from campfire_cli.app.workspace.repository.workspace_repository import Filesyste
 from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceCreateRequest
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
-from campfire_cli.config.settings import governance_home
+from campfire_cli.config.settings import campfire_home
 
 workspace_cli = typer.Typer(
-    help="注册、初始化和解析多个 Workspace", context_settings={"help_option_names": ["-h", "--help"]}
+    help="注册、初始化和解析多个 Workspace",
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 
 def service() -> WorkspaceService:
-    root = governance_home()
+    root = campfire_home()
     return WorkspaceService(root, FilesystemWorkspaceRepository(root))
 
 
@@ -62,7 +63,9 @@ def create(
     make_default: bool = typer.Option(False, "--default"),
 ) -> None:
     """从零创建 Workspace 基础目录，并注册和初始化治理能力。"""
-    request = WorkspaceCreateRequest(workspace_id=workspace_id, path=path, make_default=make_default)
+    request = WorkspaceCreateRequest(
+        workspace_id=workspace_id, path=path, make_default=make_default
+    )
     emit(invoke(lambda: service().create(request)))
 
 

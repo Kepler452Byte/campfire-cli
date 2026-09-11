@@ -1,6 +1,8 @@
 # Campfire
 
-`campfire` 是面向 Markdown 与 Obsidian Vault 的本地优先治理 CLI。它把一次性存量迁移与后续增量维护分开，并为人类和 Agent 提供相同的稳定命令契约。
+`campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕持久共享上下文协作，并把一次性存量迁移与后续增量维护分开。
+
+产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。Markdown/Obsidian Vault 是当前首个存储适配器，Workspace 才是面向用户的顶层概念。
 
 ```bash
 uv sync
@@ -10,7 +12,7 @@ uv run campfire workspace list
 uv run campfire --workspace personal maintenance check
 ```
 
-CLI 通过用户级 `~/.campfire/registry.json` 管理多个 Vault。配置、SQLite、批次、报告和锁全部保存在 `~/.campfire/workspaces/<id>/`，不会向 Vault 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
+CLI 通过用户级 `~/.campfire/registry.json` 管理多个 Workspace。配置、SQLite、批次、报告和锁全部保存在 `~/.campfire/workspaces/<id>/`，不会向 Workspace 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
 
 ## 安装与调用
 
@@ -21,7 +23,7 @@ uv tool install --editable /path/to/campfire-cli
 campfire version
 ```
 
-人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Vault 的 `AGENTS.md`，并使用 Vault id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`migration apply`、
+人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Workspace 的 `AGENTS.md`，并使用 Workspace id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`migration apply`、
 `maintenance apply` 和 `archive apply` 必须先审查计划，并使用命令要求的显式确认参数。
 
 ```bash

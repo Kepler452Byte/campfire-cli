@@ -37,7 +37,7 @@ from campfire_cli.common.documents.frontmatter_plan import (
 )
 from campfire_cli.common.documents.moc import generate_relations  # noqa: E402
 from campfire_cli.common.exceptions import GovernanceBlockedError
-from campfire_cli.common.filesystem.locking import vault_write_lock
+from campfire_cli.common.filesystem.locking import workspace_write_lock
 
 
 class WriteLockTests(unittest.TestCase):
@@ -47,7 +47,7 @@ class WriteLockTests(unittest.TestCase):
             lock = state / "locks/write.lock"
             lock.parent.mkdir()
             lock.write_text("99999999", encoding="utf-8")
-            with vault_write_lock(state):
+            with workspace_write_lock(state):
                 self.assertTrue(lock.is_file())
             self.assertFalse(lock.exists())
 
@@ -57,7 +57,7 @@ class WriteLockTests(unittest.TestCase):
             lock = state / "locks/write.lock"
             lock.parent.mkdir()
             lock.write_text(str(os.getpid()), encoding="utf-8")
-            with self.assertRaises(GovernanceBlockedError), vault_write_lock(state):
+            with self.assertRaises(GovernanceBlockedError), workspace_write_lock(state):
                 pass
 
 

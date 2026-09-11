@@ -7,16 +7,16 @@ import pytest
 
 
 @pytest.fixture
-def vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    vg_home = tmp_path / "_vg"
-    monkeypatch.setenv("CAMPFIRE_HOME", str(vg_home))
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    campfire_home = tmp_path / "_campfire"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     monkeypatch.setenv("CAMPFIRE_SKILL_TARGETS", str(tmp_path / "_global_skills"))
-    config = vg_home / "workspaces" / "test" / "config"
+    config = campfire_home / "workspaces" / "test" / "config"
     config.mkdir(parents=True)
     (tmp_path / "mynote").mkdir()
     (tmp_path / "mywork").mkdir()
     (tmp_path / "_收件箱").mkdir()
-    (vg_home / "registry.json").write_text(
+    (campfire_home / "registry.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,

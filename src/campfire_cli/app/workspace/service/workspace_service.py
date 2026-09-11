@@ -14,7 +14,7 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.database import upgrade_database
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import vault_write_lock
+from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.config.defaults import default_configs
 
 SCAFFOLD_DIRECTORIES = (
@@ -41,7 +41,9 @@ class WorkspaceService:
         root = request.path.expanduser().resolve()
         self._validate_id(request.workspace_id)
         if root.exists():
-            raise ConfigurationError(f"目标路径已存在；接入现有 Workspace 请使用 workspace add：{root}")
+            raise ConfigurationError(
+                f"目标路径已存在；接入现有 Workspace 请使用 workspace add：{root}"
+            )
         directories = self._repository.create_scaffold(root, SCAFFOLD_DIRECTORIES)
         result = self._initialize(request.workspace_id, root, request.make_default)
         result.created_directories = directories
@@ -68,7 +70,7 @@ class WorkspaceService:
         )
 
     def set_default(self, workspace_id: str) -> WorkspaceDefaultResult:
-        with vault_write_lock(self._root):
+        with workspace_write_lock(self._root):
             registry = self._repository.load_registry()
             if workspace_id not in registry.workspaces:
                 raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
@@ -78,7 +80,7 @@ class WorkspaceService:
 
     def _initialize(self, workspace_id: str, root: Path, make_default: bool) -> WorkspaceResult:
         self._validate_id(workspace_id)
-        with vault_write_lock(self._root):
+        with workspace_write_lock(self._root):
             registry = self._repository.load_registry()
             existing = registry.workspaces.get(workspace_id)
             if existing and Path(existing.path).expanduser().resolve() != root:
@@ -86,7 +88,9 @@ class WorkspaceService:
             registry.workspaces[workspace_id] = WorkspaceEntry(path=str(root))
             if make_default or not registry.default_workspace:
                 registry.default_workspace = workspace_id
-            created, preserved = self._repository.initialize_configs(workspace_id, default_configs())
+            created, preserved = self._repository.initialize_configs(
+                workspace_id, default_configs()
+            )
             self._repository.save_registry(registry)
             upgrade_database(self._root / "workspaces" / workspace_id / "db" / "campfire.db")
         return WorkspaceResult(
@@ -108,7 +112,9 @@ class WorkspaceService:
             for workspace_id, entry in registry.workspaces.items():
                 if Path(entry.path).expanduser().resolve() == candidate:
                     return workspace_id, candidate
-            raise ConfigurationError(f"Workspace 未注册：{selector}；请先运行 campfire workspace add")
+            raise ConfigurationError(
+                f"Workspace 未注册：{selector}；请先运行 campfire workspace add"
+            )
         current = (cwd or Path.cwd()).resolve()
         matches = [
             (workspace_id, Path(entry.path).expanduser().resolve())

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.schema.skill_schema import SkillInfo, SkillResult
-from campfire_cli.common.filesystem import vault_write_lock
+from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.common.governance import enrich_issue
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -100,7 +100,7 @@ class SkillService:
                     )
                     writes.append((target, content, expected))
         if not dry_run and writes:
-            with vault_write_lock(self._settings.state_root):
+            with workspace_write_lock(self._settings.state_root):
                 changed = [
                     str(path)
                     for path, _content, expected in writes

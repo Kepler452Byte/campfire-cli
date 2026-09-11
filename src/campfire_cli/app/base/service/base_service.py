@@ -7,7 +7,7 @@ import yaml
 
 from campfire_cli.app.base.repository.base_repository import BaseRepository
 from campfire_cli.app.base.schema.base_schema import BaseInfo, BaseResult
-from campfire_cli.common.filesystem import vault_write_lock
+from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.common.governance import enrich_issue, snapshot_changes
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -76,7 +76,7 @@ class BaseService:
                 path.relative_to(self._settings.vault_root).as_posix(): expected
                 for path, _content, expected in writes
             }
-            with vault_write_lock(self._settings.state_root):
+            with workspace_write_lock(self._settings.state_root):
                 changed = snapshot_changes(self._settings.vault_root, snapshot)
                 if changed:
                     return BaseResult(

@@ -23,7 +23,7 @@ from campfire_cli.common.documents.document_type_apply import (
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
-from campfire_cli.common.filesystem.locking import vault_write_lock
+from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
     GovernanceRuleEngine,
     capture_snapshot,
@@ -223,7 +223,7 @@ class MigrationService:
                 *(safe_path(self._settings.vault_root, item.target) for item in approved),
             ],
         )
-        with vault_write_lock(self._settings.state_root):
+        with workspace_write_lock(self._settings.state_root):
             changed = snapshot_changes(self._settings.vault_root, snapshot)
             if changed:
                 return MigrationResult(
