@@ -1,3 +1,5 @@
+"""Persistence for the active Workspace document Profile contract."""
+
 from __future__ import annotations
 
 import json

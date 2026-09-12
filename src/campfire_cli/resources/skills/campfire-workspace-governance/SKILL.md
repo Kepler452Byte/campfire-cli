@@ -31,6 +31,6 @@ description: "治理 Campfire Workspace 中的共享上下文；适用于收件�
 - 一次性治理与日常维护使用不同命令和状态；Agent 不得用 Migration 入口处理普通增量维护。
 - 写入返回 `concurrent-change`、`source-hash-changed` 或 `migration-config-changed` 时，必须停止并重新审查，不得绕过快照保护。
 - Schema 是字段与枚举规则的唯一来源；Skill 模板不得复制出与 Schema 冲突的取值。
-- 文档 Profile 由 `base` 一层继承编译得到；使用 `campfire profile show` 或 `profile resolve` 查看有效规则，不从多个 Skill 拼接字段定义。
+- 文档 Profile 由 `base` 一层继承编译得到；使用 `campfire document profile show` 或 `document profile resolve` 查看有效规则，不从多个 Skill 拼接字段定义。
 - SQLite 只保存当前索引和工作流状态；Markdown 是内容事实来源，用户级配置是治理契约来源。
 - 保留用户原文；内容沉淀和重写超出明确授权时先提出建议。

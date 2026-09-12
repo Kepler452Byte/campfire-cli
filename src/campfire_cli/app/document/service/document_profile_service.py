@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.app.document_profile.repository.document_profile_repository import (
+from campfire_cli.app.document.repository.document_profile_repository import (
     DocumentProfileRepository,
 )
 from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry

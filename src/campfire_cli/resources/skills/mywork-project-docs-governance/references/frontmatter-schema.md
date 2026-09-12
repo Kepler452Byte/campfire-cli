@@ -71,4 +71,4 @@ archived_at:
 
 路径与状态的约束：当前目录中的 `status: archived` 是待修复异常；`archive/` 中的文档一律按历史资料检索，即使其元数据尚未补齐。正常归档必须通过 `archive_requested: true` → 检查 → 执行完成，不使用日期自动决定失效。
 
-字段必须属于当前文档 Profile；叙述信息放入正文，不临时扩展 Frontmatter。不得使用中文值替代基础枚举，如 `status: 草稿`、`status: 已完成`。使用 `campfire profile resolve --path <文档>` 查看最终有效字段。
+字段必须属于当前文档 Profile；叙述信息放入正文，不临时扩展 Frontmatter。不得使用中文值替代基础枚举，如 `status: 草稿`、`status: 已完成`。使用 `campfire document profile resolve --path <文档>` 查看最终有效字段。

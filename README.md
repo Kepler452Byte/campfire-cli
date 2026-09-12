@@ -31,11 +31,11 @@ campfire workspace add --id personal --path /path/to/vault --default
 campfire workspace create --id new-vault --path /new/path --default
 campfire project add --id joyit-ai-gateway --workspace personal --name "JoyIT AI Gateway" --document-domain "mywork/【JoyIT AI Gateway】文档中心" --local-path /path/to/aigateway
 campfire project list --workspace personal
-campfire --workspace personal profile list
-campfire --workspace personal profile show task
-campfire --workspace personal profile resolve --path "mywork/项目/任务-示例.md"
-campfire --workspace personal profile sync
-campfire --workspace personal profile sync --confirm
+campfire --workspace personal document profile list
+campfire --workspace personal document profile show task
+campfire --workspace personal document profile resolve --path "mywork/项目/任务-示例.md"
+campfire --workspace personal document profile sync
+campfire --workspace personal document profile sync --confirm
 campfire workspace export --output campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json --confirm
@@ -50,7 +50,7 @@ campfire --workspace personal maintenance sync --scope "mywork/【项目】文�
 
 `maintenance check` 统一负责文档 Schema 与枚举校验；`maintenance sync` 只因领域结构、MOC、路径或并发安全问题阻塞。单篇文档的元数据问题会继续出现在检查报告中，但不会阻止其他领域刷新生成视图。`sync` 和 `run` 可用 `--scope` 限定同步领域。
 
-Frontmatter 使用 `base → knowledge/project-doc/task` 一层配置继承。`profile show` 展示编译后的完整规则，`profile resolve` 展示指定文档最终使用的 Profile。Formatter 只按有效 Profile 排序并保留值；不允许字段由 Validator 报告，不会被自动删除。
+Frontmatter 使用 `base → knowledge/project-doc/task` 一层配置继承。`document profile show` 展示编译后的完整规则，`document profile resolve` 展示指定文档最终使用的 Profile。Formatter 只按有效 Profile 排序并保留值；不允许字段由 Validator 报告，不会被自动删除。
 
 跨目录迁移或显式修改 Frontmatter 时，先冻结范围，再传入 YAML/JSON 意图规格：
 

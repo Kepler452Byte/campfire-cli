@@ -25,8 +25,9 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "-h"],
         ["project", "-h"],
         ["project", "add", "-h"],
-        ["profile", "-h"],
-        ["profile", "show", "-h"],
+        ["document", "-h"],
+        ["document", "profile", "-h"],
+        ["document", "profile", "show", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -270,7 +271,9 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
 
 
 def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
-    listed = runner.invoke(app, ["--workspace", str(workspace), "profile", "list"])
+    listed = runner.invoke(
+        app, ["--workspace", str(workspace), "document", "profile", "list"]
+    )
     assert listed.exit_code == 0, listed.output
     profiles = json.loads(listed.output)["profiles"]
     assert [profile["name"] for profile in profiles] == [
@@ -280,7 +283,8 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
         "task",
     ]
     task = runner.invoke(
-        app, ["--workspace", str(workspace), "profile", "show", "task"]
+        app,
+        ["--workspace", str(workspace), "document", "profile", "show", "task"],
     )
     payload = json.loads(task.output)["profile"]
     assert payload["required"][:3] == ["name", "description", "type"]
@@ -295,7 +299,15 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
     )
     resolved = runner.invoke(
         app,
-        ["--workspace", str(workspace), "profile", "resolve", "--path", "mynote/知识-Profile.md"],
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "profile",
+            "resolve",
+            "--path",
+            "mynote/知识-Profile.md",
+        ],
     )
     assert json.loads(resolved.output)["profile"]["name"] == "knowledge"
 
@@ -303,11 +315,21 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
 def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
     path = workspace / "_campfire/workspaces/test/config/frontmatter-schema.json"
     path.write_text('{"version": 1}\n', encoding="utf-8")
-    preview = runner.invoke(app, ["--workspace", str(workspace), "profile", "sync"])
+    preview = runner.invoke(
+        app, ["--workspace", str(workspace), "document", "profile", "sync"]
+    )
     assert json.loads(preview.output)["status"] == "planned"
     assert json.loads(path.read_text())["version"] == 1
     applied = runner.invoke(
-        app, ["--workspace", str(workspace), "profile", "sync", "--confirm"]
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "profile",
+            "sync",
+            "--confirm",
+        ],
     )
     assert json.loads(applied.output)["status"] == "synced"
     assert json.loads(path.read_text())["version"] == 2
