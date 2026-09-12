@@ -6,17 +6,14 @@
 ---
 name: 文档名称
 description: 一到两句话概述本文的目标、范围或当前结论
+type: tech-spec
 project: 项目标识
 domain: 领域标识
-type: tech-spec
 status: draft
 lifecycle: proposed
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: []
-related: []
-superseded_by: []
-archive_requested: false
 ---
 ```
 
@@ -34,8 +31,8 @@ archive_requested: false
 | `created` | 是 | 文档首次创建日期，格式为 `YYYY-MM-DD`，创建后不修改。 |
 | `updated` | 是 | 最后一次实质内容更新日期，格式为 `YYYY-MM-DD`。 |
 | `tags` | 是 | 标签列表；没有标签时写 `[]`。 |
-| `related` | 是 | 相关文档的 wikilink 列表；没有时写 `[]`。 |
-| `superseded_by` | 是 | 替代当前文档的 wikilink 列表；无替代时写 `[]`。 |
+| `related` | 否 | 仅在确有相关文档时填写 wikilink 列表。 |
+| `superseded_by` | 否 | 仅在文档被替代或合并时填写 wikilink 列表。 |
 | `archive_requested` | 否 | `true` 表示请求归档；缺省等同 `false`。标记时不提前修改 `status`。 |
 
 ## 归档扩展字段
@@ -45,14 +42,10 @@ archive_requested: false
 ```yaml
 archive_requested: true
 archive_reason: superseded
-archive_requested_by: human
-archive_requested_at: 2026-09-07
 archived_at:
 ```
 
 - `archive_reason` 枚举：`superseded`、`completed`、`cancelled`、`obsolete`、`merged`、`project-closed`。
-- `archive_requested_by` 可选值为 `human` 或 `agent`，用于审计标记来源。
-- `archive_requested_at` 是提出归档请求的日期。
 - `archived_at` 由执行脚本在归档完成时写入。
 - `superseded` 或 `merged` 必须提供非空 `superseded_by`。
 - 已归档文档保留 `archive_reason`，并将 `archive_requested` 重置为 `false`。
@@ -78,4 +71,4 @@ archived_at:
 
 路径与状态的约束：当前目录中的 `status: archived` 是待修复异常；`archive/` 中的文档一律按历史资料检索，即使其元数据尚未补齐。正常归档必须通过 `archive_requested: true` → 检查 → 执行完成，不使用日期自动决定失效。
 
-类型专属字段可以追加在基础字段之后，例如会议记录的 `attendees`。不得使用中文值替代基础枚举，如 `status: 草稿`、`status: 已完成`。
+字段必须属于当前文档 Profile；叙述信息放入正文，不临时扩展 Frontmatter。不得使用中文值替代基础枚举，如 `status: 草稿`、`status: 已完成`。使用 `campfire profile resolve --path <文档>` 查看最终有效字段。

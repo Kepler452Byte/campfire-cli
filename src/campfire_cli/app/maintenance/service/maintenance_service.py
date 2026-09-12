@@ -183,6 +183,7 @@ class MaintenanceService:
         metadata_ops, metadata_issues = frontmatter_apply.preflight(
             self._settings.vault_root,
             payload["frontmatter"],
+            self._settings.document_types,
             self._settings.frontmatter_schema,
         )
         issues = [*type_issues, *metadata_issues]

@@ -22,11 +22,8 @@ from typing import Any
 from campfire_cli.common.documents.document_types import (
     iter_documents,
 )
-from campfire_cli.common.documents.frontmatter_schema import (
-    merged_rules,
-    parse_shape,
-    resolve_profile,
-)
+from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
+from campfire_cli.common.documents.frontmatter_schema import parse_shape
 
 
 def title(text: str) -> str | None:
@@ -41,14 +38,15 @@ def title(text: str) -> str | None:
 
 def build_plan(root: Path, type_config: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
     root = root.resolve()
+    profiles = ProfileRegistry(type_config, schema)
     items = []
     for path in iter_documents(root, type_config):
         text = path.read_text(encoding="utf-8")
         values, kinds = parse_shape(text)
-        profile = resolve_profile(values.get("type"), values, schema, path)
-        rules = merged_rules(profile, schema)
+        profile = profiles.resolve(values.get("type"), values, path)
         fields = {}
-        for field in rules["required"]:
+        conditional = set(profile.conditional_fields(values))
+        for field in profile.required_for(values):
             if field in values and (values[field] or kinds.get(field) == "list"):
                 continue
             value: Any = None
@@ -58,7 +56,7 @@ def build_plan(root: Path, type_config: dict[str, Any], schema: dict[str, Any]) 
                 value = title(text)
                 confidence = "high"
                 reason = "first-heading"
-            elif field in rules["lists"]:
+            elif field in profile.lists and field not in conditional:
                 value = []
                 confidence = "high"
                 reason = "empty-list-default"
@@ -70,6 +68,10 @@ def build_plan(root: Path, type_config: dict[str, Any], schema: dict[str, Any]) 
             }
         if fields:
             items.append(
-                {"path": str(path.relative_to(root)), "profile": profile, "fields": fields}
+                {
+                    "path": str(path.relative_to(root)),
+                    "profile": profile.name,
+                    "fields": fields,
+                }
             )
     return {"version": 1, "schema_version": schema.get("version", 1), "items": items}

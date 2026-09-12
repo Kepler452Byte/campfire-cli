@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.common.documents.frontmatter_schema import merged_rules, resolve_profile
+from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -16,6 +16,7 @@ class GovernanceRuleEngine:
     def __init__(self, type_config: dict[str, Any], schema: dict[str, Any]) -> None:
         self._type_config = type_config
         self._schema = schema
+        self._profiles = ProfileRegistry(type_config, schema)
 
     def check_document(self, root: Path, path: Path) -> list[dict[str, Any]]:
         relative = path.relative_to(root).as_posix()
@@ -51,15 +52,39 @@ class GovernanceRuleEngine:
                 }
             )
         rules = self._rules(document_type, path, frontmatter)
-        for field in rules["required"]:
+        conditional = {
+            field
+            for condition in rules["conditional_required"]
+            if all(frontmatter.get(key) == value for key, value in condition["when"].items())
+            for field in condition["require"]
+        }
+        for field in dict.fromkeys([*rules["required"], *conditional]):
             value = frontmatter.get(field)
-            if field not in frontmatter or value is None or value == "":
+            if (
+                field not in frontmatter
+                or value is None
+                or value == ""
+                or field in conditional
+                and not value
+            ):
                 issues.append(
                     {
                         "code": "frontmatter-field-missing",
                         "path": relative,
                         "detail": field,
                         "field": field,
+                    }
+                )
+        for field in frontmatter:
+            if rules["unknown_fields"] == "report" and field not in rules["allowed"]:
+                issues.append(
+                    {
+                        "code": "frontmatter-field-not-allowed",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": frontmatter[field],
+                        "allowed": rules["allowed"],
                     }
                 )
         for field in rules["lists"]:
@@ -165,12 +190,7 @@ class GovernanceRuleEngine:
         return issues
 
     def known_fields(self) -> set[str]:
-        fields = set(self._schema.get("field_order", []))
-        for rules in [self._schema.get("base", {}), *self._schema.get("profiles", {}).values()]:
-            for key in ("required", "optional", "lists", "dates"):
-                fields.update(rules.get(key, []))
-            fields.update(rules.get("enums", {}))
-        return fields
+        return self._profiles.known_fields()
 
     def validate_patch(
         self,
@@ -184,6 +204,18 @@ class GovernanceRuleEngine:
         rules = self._rules(merged.get("type"), path, merged)
         relative = path.relative_to(root).as_posix()
         issues: list[dict[str, Any]] = []
+        for field in patch:
+            if rules["unknown_fields"] == "report" and field not in rules["allowed"]:
+                issues.append(
+                    {
+                        "code": "frontmatter-field-not-allowed",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": patch[field],
+                        "allowed": rules["allowed"],
+                    }
+                )
         for field in rules["lists"]:
             if field in patch and not isinstance(patch[field], list):
                 issues.append(
@@ -211,8 +243,7 @@ class GovernanceRuleEngine:
         return issues
 
     def _rules(self, document_type: Any, path: Path, frontmatter: dict[str, Any]) -> dict[str, Any]:
-        profile = resolve_profile(document_type, frontmatter, self._schema, path)
-        return merged_rules(profile, self._schema)
+        return self._profiles.resolve(document_type, frontmatter, path).model_dump()
 
     @staticmethod
     def _state_invariants(
@@ -233,23 +264,7 @@ class GovernanceRuleEngine:
             return issues
         if status == "draft":
             issues.append({"code": "task-status-draft-invalid", "path": relative})
-        if frontmatter.get("task_source") == "assigned" and not frontmatter.get("requested_by"):
-            issues.append(
-                {"code": "task-requested-by-missing", "path": relative, "detail": "assigned"}
-            )
-        if lifecycle == "blocked" and not frontmatter.get("blocked_reason"):
-            issues.append({"code": "task-blocked-reason-missing", "path": relative})
-        if lifecycle == "completed":
-            for field in ("completed", "result_summary", "verification"):
-                if not frontmatter.get(field):
-                    issues.append(
-                        {
-                            "code": "task-completion-evidence-missing",
-                            "path": relative,
-                            "detail": field,
-                        }
-                    )
-        elif lifecycle != "archived" and frontmatter.get("completed"):
+        if lifecycle not in {"completed", "archived"} and frontmatter.get("completed"):
             issues.append(
                 {
                     "code": "task-completed-date-premature",

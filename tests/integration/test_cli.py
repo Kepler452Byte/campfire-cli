@@ -25,6 +25,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "-h"],
         ["project", "-h"],
         ["project", "add", "-h"],
+        ["profile", "-h"],
+        ["profile", "show", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -52,7 +54,7 @@ def test_init_creates_defaults_without_overwriting_existing_file(
     assert (existing.parent / "skills.json").is_file()
     assert (existing.parent / "bases.json").is_file()
     schema = json.loads((existing.parent / "frontmatter-schema.json").read_text(encoding="utf-8"))
-    assert schema["profiles"]["project-docs"]["enums"]["lifecycle"] == [
+    assert schema["profiles"]["project-doc"]["enums"]["lifecycle"] == [
         "maintained",
         "proposed",
         "completed",
@@ -267,6 +269,50 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
     ]
 
 
+def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
+    listed = runner.invoke(app, ["--workspace", str(workspace), "profile", "list"])
+    assert listed.exit_code == 0, listed.output
+    profiles = json.loads(listed.output)["profiles"]
+    assert [profile["name"] for profile in profiles] == [
+        "base",
+        "knowledge",
+        "project-doc",
+        "task",
+    ]
+    task = runner.invoke(
+        app, ["--workspace", str(workspace), "profile", "show", "task"]
+    )
+    payload = json.loads(task.output)["profile"]
+    assert payload["required"][:3] == ["name", "description", "type"]
+    assert "blocked_reason" in payload["optional"]
+    assert len(payload["field_order"]) == len(payload["allowed"])
+
+    note = workspace / "mynote/知识-Profile.md"
+    note.write_text(
+        "---\nname: Profile\ndescription: test\ntype: knowledge\nstatus: current\n"
+        "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
+        encoding="utf-8",
+    )
+    resolved = runner.invoke(
+        app,
+        ["--workspace", str(workspace), "profile", "resolve", "--path", "mynote/知识-Profile.md"],
+    )
+    assert json.loads(resolved.output)["profile"]["name"] == "knowledge"
+
+
+def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
+    path = workspace / "_campfire/workspaces/test/config/frontmatter-schema.json"
+    path.write_text('{"version": 1}\n', encoding="utf-8")
+    preview = runner.invoke(app, ["--workspace", str(workspace), "profile", "sync"])
+    assert json.loads(preview.output)["status"] == "planned"
+    assert json.loads(path.read_text())["version"] == 1
+    applied = runner.invoke(
+        app, ["--workspace", str(workspace), "profile", "sync", "--confirm"]
+    )
+    assert json.loads(applied.output)["status"] == "synced"
+    assert json.loads(path.read_text())["version"] == 2
+
+
 def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-Test.md"
     note.write_text(
@@ -290,16 +336,7 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
     types["types"]["task"] = {"prefix": "任务-", "label": "任务"}
     (config_path / "document-types.json").write_text(json.dumps(types), encoding="utf-8")
     schema = json.loads((config_path / "frontmatter-schema.json").read_text())
-    schema["profiles"]["task"] = {
-        "types": ["task"],
-        "required": ["task_id", "task_source", "source_channel", "assignee", "requires_human"],
-        "enums": {
-            "lifecycle": ["blocked", "completed"],
-            "task_source": ["personal", "assigned"],
-            "source_channel": ["self", "im"],
-        },
-        "lists": ["assignee", "verification"],
-    }
+    schema["profiles"]["task"]["enums"]["lifecycle"] = ["blocked", "completed"]
     (config_path / "frontmatter-schema.json").write_text(json.dumps(schema), encoding="utf-8")
     note = workspace / "mywork/任务-跟进事项.md"
     note.write_text(
@@ -311,9 +348,12 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
     )
     result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
     payload = json.loads(result.output)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "task-requested-by-missing" in codes
-    assert "task-blocked-reason-missing" in codes
+    missing = {
+        issue["field"]
+        for issue in payload["issues"]
+        if issue["code"] == "frontmatter-field-missing"
+    }
+    assert {"requested_by", "blocked_reason"} <= missing
 
 
 def test_migration_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Path) -> None:
@@ -583,10 +623,7 @@ def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> No
     types["types"]["task"] = {"prefix": "任务-", "label": "任务"}
     (config / "document-types.json").write_text(json.dumps(types), encoding="utf-8")
     schema = json.loads((config / "frontmatter-schema.json").read_text(encoding="utf-8"))
-    schema["profiles"]["task"] = {
-        "types": ["task"],
-        "enums": {"lifecycle": ["todo", "completed"]},
-    }
+    schema["profiles"]["task"]["enums"]["lifecycle"] = ["todo", "completed"]
     (config / "frontmatter-schema.json").write_text(json.dumps(schema), encoding="utf-8")
     template = workspace / "_global_skills" / "task" / "references" / "任务模板.md"
     template.parent.mkdir(parents=True)

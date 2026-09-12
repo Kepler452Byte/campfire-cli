@@ -8,6 +8,7 @@ import typer
 
 from campfire_cli import __version__
 from campfire_cli.app.base.cli.base_cli import base_cli
+from campfire_cli.app.document_profile.cli.document_profile_cli import document_profile_cli
 from campfire_cli.app.maintenance.cli.database_cli import database_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import archive_cli, maintenance_cli
 from campfire_cli.app.migration.cli.migration_cli import migration_cli
@@ -53,6 +54,7 @@ app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
 app.add_typer(workspace_cli, name="workspace")
 app.add_typer(project_cli, name="project")
+app.add_typer(document_profile_cli, name="profile")
 
 
 @app.callback()
@@ -61,7 +63,7 @@ def main(
     workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的 id 或路径"),
 ) -> None:
     """初始化目标 Workspace 的应用依赖。"""
-    if ctx.invoked_subcommand in {None, "version", "init", "workspace", "project"}:
+    if ctx.invoked_subcommand in {None, "version", "init", "workspace", "project", "profile"}:
         return
     ctx.obj = LazyContainer(workspace)
 

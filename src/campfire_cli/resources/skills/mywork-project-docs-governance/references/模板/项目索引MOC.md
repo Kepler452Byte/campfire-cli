@@ -1,16 +1,14 @@
 ---
 name:
 description: ""
+type: moc
 project: ""
 domain: overview
-type: moc
 status: current
 lifecycle: maintained
 created: <% tp.date.now("YYYY-MM-DD") %>
 updated: <% tp.date.now("YYYY-MM-DD") %>
 tags: []
-related: []
-superseded_by: []
 ---
 
 # <% tp.file.title %>

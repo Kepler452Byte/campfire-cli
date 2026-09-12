@@ -20,6 +20,10 @@ ISSUE_CATALOG: dict[str, tuple[str, str]] = {
         "Frontmatter 缺少必填字段。",
         "根据 detail 指定的字段补充真实值，不要编造业务信息。",
     ),
+    "frontmatter-field-not-allowed": (
+        "字段不属于当前文档 Profile。",
+        "将叙述信息移入正文，或确认文档类型和领域归属是否正确。",
+    ),
     "frontmatter-enum-invalid": (
         "Frontmatter 使用了契约之外的枚举值。",
         "使用 issue 的 allowed 值；任务完成语义应写入 lifecycle: completed。",

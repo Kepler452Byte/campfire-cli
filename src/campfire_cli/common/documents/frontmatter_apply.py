@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from campfire_cli.common.documents.document_types import safe_path, set_frontmatter_scalar
+from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
 
 
 def render(value: Any) -> str:
@@ -31,15 +32,22 @@ def render(value: Any) -> str:
 
 
 def preflight(
-    root: Path, plan: dict[str, Any], schema: dict[str, Any]
+    root: Path, plan: dict[str, Any], type_config: dict[str, Any], schema: dict[str, Any]
 ) -> tuple[list[tuple[Path, dict[str, Any]]], list[dict[str, str]]]:
-    allowed = set(schema.get("base", {}).get("required", []))
-    for profile in schema.get("profiles", {}).values():
-        allowed.update(profile.get("required", []))
-        allowed.update(profile.get("optional", []))
+    profiles = ProfileRegistry(type_config, schema)
     operations = []
     issues = []
     for item in plan.get("items", []):
+        profile_name = item.get("profile", "base")
+        if profile_name not in {profile.name for profile in profiles.list()}:
+            issues.append(
+                {
+                    "code": "frontmatter-profile-invalid",
+                    "path": str(item.get("path", "")),
+                }
+            )
+            continue
+        allowed = set(profiles.get(profile_name).allowed)
         try:
             path = safe_path(root, item.get("path", ""))
         except (ValueError, TypeError):

@@ -35,10 +35,12 @@ from campfire_cli.common.documents.frontmatter_format import format_text  # noqa
 from campfire_cli.common.documents.frontmatter_plan import (
     build_plan as build_frontmatter_plan,  # noqa: E402
 )
+from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
 from campfire_cli.common.documents.moc import generate_relations  # noqa: E402
-from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance.rules import GovernanceRuleEngine
+from campfire_cli.config.defaults import default_configs
 
 
 class WriteLockTests(unittest.TestCase):
@@ -374,18 +376,10 @@ class FrontmatterGovernanceTests(unittest.TestCase):
 
     @staticmethod
     def schema() -> dict:
-        return {
-            "version": 1,
-            "base": {
-                "required": ["name", "description", "type", "status", "created", "updated", "tags"],
-                "enums": {"status": ["draft", "current", "archived"]},
-                "lists": ["tags"],
-                "dates": ["created", "updated"],
-            },
-            "profiles": {
-                "knowledge": {"types": ["knowledge"], "required": ["domain"], "lists": []}
-            },
-        }
+        schema = default_configs()["frontmatter-schema.json"]
+        schema["profiles"]["knowledge"]["required"] = ["domain"]
+        schema["profiles"]["knowledge"]["field_order"].insert(3, "domain")
+        return schema
 
     def test_check_merges_base_and_type_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -401,6 +395,26 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             self.assertIn("frontmatter-list-invalid", codes)
             self.assertIn("frontmatter-enum-invalid", codes)
 
+    def test_profile_inheritance_compiles_one_effective_contract(self) -> None:
+        registry = ProfileRegistry(self.type_config(), self.schema())
+        knowledge = registry.get("knowledge")
+        self.assertEqual("base", registry.get("base").name)
+        self.assertIn("name", knowledge.required)
+        self.assertIn("domain", knowledge.required)
+        self.assertEqual(len(knowledge.allowed), len(knowledge.field_order))
+        self.assertEqual("preserve", knowledge.unknown_fields)
+
+    def test_profile_inheritance_rejects_deep_chain(self) -> None:
+        schema = self.schema()
+        schema["profiles"]["deep"] = {
+            "extends": "knowledge",
+            "field_order": [],
+            "required": [],
+            "optional": [],
+        }
+        with self.assertRaises(ConfigurationError):
+            ProfileRegistry(self.type_config(), schema)
+
     def test_rule_engine_reports_actionable_fields_and_collection_conflict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -412,20 +426,21 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             )
             first.write_text(content, encoding="utf-8")
             second.write_text(content, encoding="utf-8")
-            types = {"types": {"product-spec": {"prefix": "产品-", "label": "产品"}}}
-            schema = {
-                "base": {
-                    "required": ["description"],
-                    "lists": ["tags"],
-                    "dates": ["created"],
-                },
-                "profiles": {},
-            }
+            defaults = default_configs()
+            types = defaults["document-types.json"]
+            schema = defaults["frontmatter-schema.json"]
             engine = GovernanceRuleEngine(types, schema)
 
             document_issues = engine.check_document(root, first)
             by_code = {item["code"]: item for item in document_issues}
-            self.assertEqual("description", by_code["frontmatter-field-missing"]["field"])
+            self.assertIn(
+                "description",
+                {
+                    item["field"]
+                    for item in document_issues
+                    if item["code"] == "frontmatter-field-missing"
+                },
+            )
             self.assertEqual("text", by_code["frontmatter-list-invalid"]["actual"])
             self.assertEqual(["YYYY-MM-DD"], by_code["frontmatter-date-invalid"]["allowed"])
             collection_issues = engine.check_collection(root, [first, second])
@@ -462,7 +477,9 @@ class FrontmatterGovernanceTests(unittest.TestCase):
                     }
                 ]
             }
-            ops, issues = preflight_frontmatter(root, plan, self.schema())
+            ops, issues = preflight_frontmatter(
+                root, plan, self.type_config(), self.schema()
+            )
             self.assertEqual([], issues)
             self.assertEqual(1, apply_frontmatter(ops))
             text = note.read_text(encoding="utf-8")

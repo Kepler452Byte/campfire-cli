@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
 
 from campfire_cli.common.documents.document_types import frontmatter_bounds
 
@@ -41,30 +40,3 @@ def is_project_context(path: Path | None) -> bool:
             marker_values, _ = parse_shape(marker.read_text(encoding="utf-8"))
             return marker_values.get("governance") == "project-docs"
     return False
-
-
-def resolve_profile(
-    doc_type: str | None, values: dict[str, str], schema: dict[str, Any], path: Path | None = None
-) -> str | None:
-    for name, profile in schema.get("profiles", {}).items():
-        if doc_type in profile.get("types", []):
-            if (
-                name == "project-docs"
-                and not values.get("project")
-                and not is_project_context(path)
-            ):
-                continue
-            return name
-    return None
-
-
-def merged_rules(profile: str | None, schema: dict[str, Any]) -> dict[str, Any]:
-    parts = [schema.get("base", {})]
-    if profile:
-        parts.append(schema.get("profiles", {}).get(profile, {}))
-    result: dict[str, Any] = {"required": [], "lists": [], "dates": [], "enums": {}}
-    for part in parts:
-        for key in ("required", "lists", "dates"):
-            result[key].extend(part.get(key, []))
-        result["enums"].update(part.get("enums", {}))
-    return result

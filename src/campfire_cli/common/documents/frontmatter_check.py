@@ -20,29 +20,26 @@ from typing import Any
 from campfire_cli.common.documents.document_types import (
     iter_documents,
 )
-from campfire_cli.common.documents.frontmatter_schema import (
-    DATE_RE,
-    merged_rules,
-    parse_shape,
-    resolve_profile,
-)
+from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
+from campfire_cli.common.documents.frontmatter_schema import DATE_RE, parse_shape
 
 
-def check_document(root: Path, path: Path, schema: dict[str, Any]) -> list[dict[str, str]]:
+def check_document(
+    root: Path, path: Path, type_config: dict[str, Any], schema: dict[str, Any]
+) -> list[dict[str, str]]:
     rel = str(path.relative_to(root))
     values, kinds = parse_shape(path.read_text(encoding="utf-8"))
     if not values:
         return [{"code": "frontmatter-missing", "path": rel}]
-    profile = resolve_profile(values.get("type"), values, schema, path)
-    rules = merged_rules(profile, schema)
+    profile = ProfileRegistry(type_config, schema).resolve(values.get("type"), values, path)
     issues: list[dict[str, str]] = []
-    for field in rules["required"]:
+    for field in profile.required:
         if field not in values or not values[field] and kinds.get(field) != "list":
             issues.append({"code": "frontmatter-field-missing", "path": rel, "detail": field})
-    for field in rules["lists"]:
+    for field in profile.lists:
         if field in values and kinds.get(field) != "list":
             issues.append({"code": "frontmatter-list-invalid", "path": rel, "detail": field})
-    for field in rules["dates"]:
+    for field in profile.dates:
         if values.get(field) and not DATE_RE.fullmatch(values[field]):
             issues.append(
                 {
@@ -51,7 +48,7 @@ def check_document(root: Path, path: Path, schema: dict[str, Any]) -> list[dict[
                     "detail": f"{field}={values[field]}",
                 }
             )
-    for field, allowed in rules["enums"].items():
+    for field, allowed in profile.enums.items():
         if values.get(field) and values[field] not in allowed:
             issues.append(
                 {
@@ -66,7 +63,11 @@ def check_document(root: Path, path: Path, schema: dict[str, Any]) -> list[dict[
 def build_result(root: Path, type_config: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
     root = root.resolve()
     docs = iter_documents(root, type_config)
-    issues = [issue for path in docs for issue in check_document(root, path, schema)]
+    issues = [
+        issue
+        for path in docs
+        for issue in check_document(root, path, type_config, schema)
+    ]
     counts: dict[str, int] = {}
     for issue in issues:
         counts[issue["code"]] = counts.get(issue["code"], 0) + 1

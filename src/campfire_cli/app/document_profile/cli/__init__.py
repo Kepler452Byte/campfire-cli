@@ -1,0 +1,1 @@
+"""Document Profile CLI adapters."""

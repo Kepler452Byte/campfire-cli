@@ -12,7 +12,7 @@ description: "创建和维护 mywork 通用任务文档；适用于个人任务�
 - 明确属于项目的任务放在该项目文档中心的 `任务/`；项目仍是主归属。
 - 归属不明确时留在 `_收件箱/用户输入/`，不得为了收纳任务创建新领域。
 - 所有任务统一使用 `type: task` 和 `任务-` 前缀。
-- `task_source: personal` 表示个人主动任务；`assigned` 表示上级明确交办。沟通渠道另用 `source_channel`。
+- `task_source: personal` 表示个人主动任务；`assigned` 表示上级明确交办。口头、IM、会议等原始来源写入正文“原始事项”，不为沟通渠道增加 Frontmatter 字段。
 
 ## 生命周期
 
