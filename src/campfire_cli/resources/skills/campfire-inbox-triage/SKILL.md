@@ -5,7 +5,7 @@ description: "分流 Campfire Workspace 全局收件箱中的输入；适用于�
 
 # Campfire 收件箱分流
 
-只处理已经进入 `_收件箱/` 的原始材料和待确认文档，不负责从对话提炼新文档。先读取 `campfire-workspace-governance`，再读取候选领域的 `_领域.md`；涉及沉淀内容是否足以晋升时加载 `campfire-document-capture`。
+只处理已经进入 `_收件箱/` 的原始材料和待确认文档，不负责从对话提炼新文档。先读取 `campfire-workspace-maintenance`，再读取候选领域的 `_领域.md`；涉及沉淀内容是否足以晋升时加载 `campfire-document-capture`，涉及跨领域批量移动时加载 `campfire-workspace-restructure`。
 
 ## 工作流
 

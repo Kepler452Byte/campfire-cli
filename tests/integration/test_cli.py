@@ -492,7 +492,8 @@ def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> Non
     assert json.loads(preview.output)["operations"]
     applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
     assert applied.exit_code == 0, applied.output
-    assert (workspace / "_global_skills/campfire-workspace-governance/SKILL.md").is_file()
+    assert (workspace / "_global_skills/campfire-workspace-maintenance/SKILL.md").is_file()
+    assert (workspace / "_global_skills/campfire-workspace-restructure/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-context-bootstrap/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-conversation-router/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-document-capture/SKILL.md").is_file()
@@ -504,8 +505,8 @@ def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> Non
 
 def test_skill_resolve_routes_inbox_and_knowledge(workspace: Path) -> None:
     for path, expected in (
-        ("_收件箱/用户输入/test.md", ["campfire-workspace-governance", "campfire-inbox-triage"]),
-        ("mynote/【知识】软件开发/test.md", ["campfire-workspace-governance"]),
+        ("_收件箱/用户输入/test.md", ["campfire-workspace-maintenance", "campfire-inbox-triage"]),
+        ("mynote/【知识】软件开发/test.md", ["campfire-workspace-maintenance"]),
     ):
         result = runner.invoke(
             app, ["--workspace", str(workspace), "skill", "resolve", "--path", path]
@@ -530,7 +531,7 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
     assert result.exit_code == 0, result.output
     names = [item["name"] for item in json.loads(result.output)["skills"]]
     assert names == [
-        "campfire-workspace-governance",
+        "campfire-workspace-maintenance",
     ]
 
 

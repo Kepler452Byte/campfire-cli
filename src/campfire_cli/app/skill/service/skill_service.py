@@ -34,7 +34,7 @@ class SkillService:
         return SkillResult(status="ok", skills=[info], content=self._repository.read(path))
 
     def resolve(self, path: str) -> SkillResult:
-        names = ["campfire-workspace-governance"]
+        names = ["campfire-workspace-maintenance"]
         normalized = path.replace("\\", "/")
         if normalized.startswith("_收件箱/"):
             names.append("campfire-inbox-triage")

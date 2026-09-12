@@ -69,7 +69,7 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 
 ## 路由
 
-预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-governance` 选择 Space、Domain 与文档类型。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤。
+预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤；需要改变已有主物理位置时再加载 `campfire-workspace-restructure`。
 
 ## 待确认文档
 

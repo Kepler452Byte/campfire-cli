@@ -14,7 +14,7 @@
   -> 仅确认关键歧义
   -> 用户确认
   -> campfire-document-capture 检查写入上下文
-  -> campfire-workspace-governance 创建正式任务文档
+  -> campfire-workspace-maintenance 创建正式任务文档
 ```
 
 任务草案至少应让用户确认：目标、范围、非目标、验收标准、项目归属和是否允许实施。缺少普通实现细节不阻止确认；会扩大影响或改变业务方向的问题必须前置。

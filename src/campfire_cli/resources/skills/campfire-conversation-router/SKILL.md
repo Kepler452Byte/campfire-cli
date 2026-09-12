@@ -37,14 +37,14 @@ description: "路由用户在对话中表达的问答、任务、学习和文档
 4. “深入理解”“系统学习”“做实验并总结”等表达先读取[学习与知识文档接入](references/learning-intake.md)；只有用户要持续保留成果时才加载 `campfire-document-capture`。
 5. 已有文件位于 `_收件箱/` 时加载 `campfire-inbox-triage`；对话中无法及时解决的关键歧义读取[收件箱衔接规则](references/inbox-handoff.md)。
 
-本 Skill 到路由完成即结束。授权、资源、源码现状和目标文档由 `campfire-document-capture` 检查；成品内容由知识、项目文档或任务 Skill 负责；格式、链接、MOC 和治理检查由 `campfire-workspace-governance` 负责。
+本 Skill 到路由完成即结束。授权、资源、源码现状和目标文档由 `campfire-document-capture` 检查；成品内容由知识、项目文档或任务 Skill 负责；格式、链接、MOC 和持续检查由 `campfire-workspace-maintenance` 负责。
 
 ## 交互原则
 
 - 用户不需要理解 Campfire 目录、类型和字段；Agent 负责提出结构化草案。
 - 能提供即时价值时先回答，不以“先建任务”为前置条件。
 - 只询问会改变目标、范围、归属、验收或授权的关键问题，并给出推荐选项。
-- 任务计划本身就是一种正式文档；确认创建后由 `campfire-workspace-governance` 处理，字段和生命周期读取 Document Profile。
+- 任务计划本身就是一种正式文档；确认创建后由 `campfire-workspace-maintenance` 处理，字段和生命周期读取 Document Profile。
 - 沉淀的授权、资源与事实门禁完全由 `campfire-document-capture` 决定，本 Skill 不复制其规则。
 - 不在本 Skill 中设计或执行 Agent Session 交接；创建任务文档不等于已把任务交给某个 Agent。
 
