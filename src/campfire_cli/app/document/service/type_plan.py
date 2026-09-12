@@ -1,6 +1,6 @@
 """
 SPEC:
-  name: document_type_plan
+  name: type_plan
   purpose: 为 Vault 文档生成可审阅的 type 与文件名前缀治理计划
   default_env_file: none
   env_override: none

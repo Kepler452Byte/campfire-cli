@@ -5,41 +5,41 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from campfire_cli.app.document.service.document_rule_service import GovernanceRuleEngine
+from campfire_cli.app.document.service.frontmatter_apply import (
+    apply as apply_frontmatter,
+)  # noqa: E402
+from campfire_cli.app.document.service.frontmatter_apply import (
+    preflight as preflight_frontmatter,
+)
+from campfire_cli.app.document.service.frontmatter_check import (
+    build_result as build_frontmatter_check,  # noqa: E402
+)
+from campfire_cli.app.document.service.frontmatter_formatter import format_text  # noqa: E402
+from campfire_cli.app.document.service.frontmatter_plan import (
+    build_plan as build_frontmatter_plan,  # noqa: E402
+)
+from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.app.document.service.type_apply import (
+    apply_plan as apply_type_plan,
+)  # noqa: E402
+from campfire_cli.app.document.service.type_apply import (
+    preflight as preflight_type_plan,
+)
+from campfire_cli.app.document.service.type_check import (
+    build_result as build_type_check_result,  # noqa: E402
+)
+from campfire_cli.app.document.service.type_plan import (  # noqa: E402
+    build_plan as build_type_plan,
+)
 from campfire_cli.app.migration.service.migration_verifier import after, before  # noqa: E402
 from campfire_cli.common.archive.planner import (
     build_result as build_archive_result,  # noqa: E402
 )
-from campfire_cli.common.documents.document_type_apply import (
-    apply_plan as apply_type_plan,
-)  # noqa: E402
-from campfire_cli.common.documents.document_type_apply import (
-    preflight as preflight_type_plan,
-)
-from campfire_cli.common.documents.document_type_check import (
-    build_result as build_type_check_result,  # noqa: E402
-)
-from campfire_cli.common.documents.document_type_plan import (  # noqa: E402
-    build_plan as build_type_plan,
-)
 from campfire_cli.common.documents.domains import check_links
-from campfire_cli.common.documents.frontmatter_apply import (
-    apply as apply_frontmatter,
-)  # noqa: E402
-from campfire_cli.common.documents.frontmatter_apply import (
-    preflight as preflight_frontmatter,
-)
-from campfire_cli.common.documents.frontmatter_check import (
-    build_result as build_frontmatter_check,  # noqa: E402
-)
-from campfire_cli.common.documents.frontmatter_format import format_text  # noqa: E402
-from campfire_cli.common.documents.frontmatter_plan import (
-    build_plan as build_frontmatter_plan,  # noqa: E402
-)
-from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
 from campfire_cli.common.documents.moc import generate_relations  # noqa: E402
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
-from campfire_cli.common.governance.rules import GovernanceRuleEngine
 from campfire_cli.config.defaults import default_configs
 
 

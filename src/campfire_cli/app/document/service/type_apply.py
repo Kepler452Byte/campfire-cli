@@ -1,6 +1,6 @@
 """
 SPEC:
-  name: document_type_apply
+  name: type_apply
   purpose: 执行已审批的 Vault 文档单选 type 与文件名前缀治理计划
   default_env_file: none
   env_override: none

@@ -6,7 +6,7 @@ from typing import Any
 from campfire_cli.app.document.repository.document_profile_repository import (
     DocumentProfileRepository,
 )
-from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
+from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import workspace_write_lock

@@ -1,11 +1,9 @@
-"""Shared governance rules, diagnostics, and optimistic concurrency helpers."""
+"""Shared governance diagnostics and optimistic concurrency helpers."""
 
 from campfire_cli.common.governance.issues import enrich_issue, filter_issues
-from campfire_cli.common.governance.rules import GovernanceRuleEngine
 from campfire_cli.common.governance.snapshots import capture_snapshot, snapshot_changes
 
 __all__ = [
-    "GovernanceRuleEngine",
     "capture_snapshot",
     "enrich_issue",
     "filter_issues",

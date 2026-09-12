@@ -19,10 +19,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import (
     iter_documents,
 )
-from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
 from campfire_cli.common.documents.frontmatter_schema import parse_shape
 
 

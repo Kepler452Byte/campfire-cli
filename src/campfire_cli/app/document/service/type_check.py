@@ -1,6 +1,6 @@
 """
 SPEC:
-  name: document_type_check
+  name: type_check
   purpose: 只读检查 Vault 文档的单选 type 与文件名前缀是否一致
   default_env_file: none
   env_override: none

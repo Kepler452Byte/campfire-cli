@@ -8,7 +8,6 @@ from campfire_cli.app.base.service.base_service import BaseService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
-from campfire_cli.app.maintenance.service.database_service import DatabaseService
 from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
 from campfire_cli.app.migration.repository.migration_repository import (
     SqliteMigrationRepository,
@@ -27,7 +26,6 @@ class AppContainer:
     settings: WorkspaceSettings
     maintenance: MaintenanceService
     migration: MigrationService
-    database: DatabaseService
     skill: SkillService
     base: BaseService
 
@@ -48,14 +46,12 @@ class AppContainer:
             session, settings.state_root, resolution.workspace_id
         )
         migration = MigrationService(settings, migration_repository)
-        database = DatabaseService(settings, engine, session)
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())
         return cls(
             settings=settings,
             maintenance=maintenance,
             migration=migration,
-            database=database,
             skill=skill,
             base=base,
         )

@@ -5,6 +5,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from campfire_cli.app.document.service import (
+    frontmatter_apply,
+    frontmatter_plan,
+    type_apply,
+    type_plan,
+)
+from campfire_cli.app.document.service.document_rule_service import GovernanceRuleEngine
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
     Issue,
@@ -16,12 +23,6 @@ from campfire_cli.app.maintenance.service.maintenance_protocol import (
 )
 from campfire_cli.common.archive import planner as project_archive
 from campfire_cli.common.documents import (
-    document_type_apply,
-    document_type_plan,
-    frontmatter_apply,
-    frontmatter_plan,
-)
-from campfire_cli.common.documents import (
     domains as governance_check,
 )
 from campfire_cli.common.documents import (
@@ -31,7 +32,6 @@ from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.filesystem import atomic_write
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
-    GovernanceRuleEngine,
     capture_snapshot,
     enrich_issue,
     filter_issues,
@@ -139,7 +139,7 @@ class MaintenanceService:
     def plan(self) -> MaintenanceResult:
         paths = self._iter_documents()
         snapshot = capture_snapshot(self._settings.vault_root, paths)
-        type_plan = document_type_plan.build_plan(
+        type_plan_result = type_plan.build_plan(
             self._settings.vault_root, self._settings.document_types
         )
         metadata_plan = frontmatter_plan.build_plan(
@@ -152,13 +152,13 @@ class MaintenanceService:
             return self._concurrent_result(changed)
         payload = {
             "schema_version": 1,
-            "document_types": type_plan,
+            "document_types": type_plan_result,
             "frontmatter": metadata_plan,
             "snapshot": snapshot,
         }
         target = self._settings.state_root / "maintenance" / "current-plan.json"
         atomic_write(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
-        count = len(type_plan["items"]) + len(metadata_plan["items"])
+        count = len(type_plan_result["items"]) + len(metadata_plan["items"])
         return MaintenanceResult(status="planned", document_count=count, issue_count=0)
 
     def apply(self, confirm: bool) -> MaintenanceResult:
@@ -175,7 +175,7 @@ class MaintenanceService:
                 ],
             )
         payload = json.loads(plan_path.read_text(encoding="utf-8"))
-        type_ops, type_issues = document_type_apply.preflight(
+        type_ops, type_issues = type_apply.preflight(
             self._settings.vault_root,
             payload["document_types"],
             self._settings.document_types,
@@ -198,7 +198,7 @@ class MaintenanceService:
             changed = snapshot_changes(self._settings.vault_root, payload.get("snapshot", {}))
             if changed:
                 return self._concurrent_result(changed)
-            type_result = document_type_apply.apply_plan(self._settings.vault_root, type_ops)
+            type_result = type_apply.apply_plan(self._settings.vault_root, type_ops)
             changed_metadata = frontmatter_apply.apply(metadata_ops)
         return MaintenanceResult(
             status="applied",

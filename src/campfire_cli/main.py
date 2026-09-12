@@ -9,7 +9,6 @@ import typer
 from campfire_cli import __version__
 from campfire_cli.app.base.cli.base_cli import base_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
-from campfire_cli.app.maintenance.cli.database_cli import database_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import archive_cli, maintenance_cli
 from campfire_cli.app.migration.cli.migration_cli import migration_cli
 from campfire_cli.app.skill.cli.skill_cli import skill_cli
@@ -49,7 +48,6 @@ app = typer.Typer(
 app.add_typer(migration_cli, name="migration")
 app.add_typer(maintenance_cli, name="maintenance")
 app.add_typer(archive_cli, name="archive")
-app.add_typer(database_cli, name="database")
 app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
 app.add_typer(workspace_cli, name="workspace")

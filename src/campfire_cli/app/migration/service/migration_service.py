@@ -8,6 +8,11 @@ from uuid import uuid4
 
 import yaml
 
+from campfire_cli.app.document.service.document_rule_service import GovernanceRuleEngine
+from campfire_cli.app.document.service.type_apply import (
+    rewrite_same_directory_markdown_links,
+    rewrite_wikilinks,
+)
 from campfire_cli.app.migration.schema.migration_schema import (
     InventoryItem,
     MigrationIntentSpec,
@@ -16,16 +21,11 @@ from campfire_cli.app.migration.schema.migration_schema import (
     MigrationResult,
 )
 from campfire_cli.app.migration.service.migration_protocol import MigrationRepositoryProtocol
-from campfire_cli.common.documents.document_type_apply import (
-    rewrite_same_directory_markdown_links,
-    rewrite_wikilinks,
-)
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
-    GovernanceRuleEngine,
     capture_snapshot,
     snapshot_changes,
 )

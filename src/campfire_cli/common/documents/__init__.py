@@ -1,1 +1,1 @@
-"""Reusable Markdown and Obsidian governance capabilities."""
+"""Stateless Markdown parsing and Workspace document primitives."""

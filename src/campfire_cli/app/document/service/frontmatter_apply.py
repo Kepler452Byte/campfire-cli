@@ -19,8 +19,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import safe_path, set_frontmatter_scalar
-from campfire_cli.common.documents.frontmatter_profile import ProfileRegistry
 
 
 def render(value: Any) -> str:

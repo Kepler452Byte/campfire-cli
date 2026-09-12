@@ -19,7 +19,6 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["maintenance", "-h"],
         ["maintenance", "check", "-h"],
         ["archive", "-h"],
-        ["database", "-h"],
         ["skill", "-h"],
         ["base", "-h"],
         ["workspace", "-h"],
