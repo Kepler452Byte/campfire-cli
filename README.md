@@ -1,6 +1,6 @@
 # Campfire
 
-`campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕持久共享上下文协作，并把一次性存量迁移与后续增量维护分开。
+`campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕持久共享上下文协作，并把一次性 Workspace 结构重构与后续增量维护分开。
 
 产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。Markdown/Obsidian Vault 是当前首个存储适配器，Workspace 才是面向用户的顶层概念。
 
@@ -23,7 +23,7 @@ uv tool install --editable /path/to/campfire-cli
 campfire version
 ```
 
-人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Workspace 的 `AGENTS.md`，并使用 Workspace id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`migration apply`、
+人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Workspace 的 `AGENTS.md`，并使用 Workspace id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`campfire workspace restructure apply`、
 `maintenance apply` 和 `maintenance archive apply` 必须先审查计划，并使用命令要求的显式确认参数。
 
 ```bash
@@ -70,7 +70,7 @@ campfire --workspace personal maintenance sync --scope "work/example"
 
 Frontmatter 使用 `base → knowledge/project-doc/task` 一层配置继承。`document profile show` 展示编译后的完整规则，`document profile resolve` 展示指定文档最终使用的 Profile。Formatter 只按有效 Profile 排序并保留值；不允许字段由 Validator 报告，不会被自动删除。
 
-跨目录迁移或显式修改 Frontmatter 时，先冻结范围，再传入 YAML/JSON 意图规格：
+跨目录重构或显式修改 Frontmatter 时，先冻结范围，再传入 YAML/JSON 意图规格：
 
 ```yaml
 operations:
@@ -84,15 +84,15 @@ operations:
 ```
 
 ```bash
-campfire --workspace /path/to/vault migration inventory --scope work --batch move-001
-campfire --workspace /path/to/vault migration plan --batch move-001 --spec migration.yaml
+campfire --workspace /path/to/vault workspace restructure inventory --scope work --batch move-001
+campfire --workspace /path/to/vault workspace restructure plan --batch move-001 --spec restructure.yaml
 # 审查批次 plan.json，将确定项目 approved 改为 true
-campfire --workspace /path/to/vault migration apply --batch move-001
-campfire --workspace /path/to/vault migration apply --batch move-001 --confirm
-campfire --workspace /path/to/vault migration verify --batch move-001
+campfire --workspace /path/to/vault workspace restructure apply --batch move-001
+campfire --workspace /path/to/vault workspace restructure apply --batch move-001 --confirm
+campfire --workspace /path/to/vault workspace restructure verify --batch move-001
 ```
 
-Migration、Maintenance、Archive 写入前会在治理锁内复核内容哈希；检测到其他会话修改时返回
+Workspace Restructure、Maintenance、Archive 写入前会在治理锁内复核内容哈希；检测到其他会话修改时返回
 `concurrent-change` 或 `source-hash-changed`，不会覆盖新内容。文档、任务状态和 Skill 模板枚举由
 同一个治理规则引擎按照 `frontmatter-schema.json` 校验。
 

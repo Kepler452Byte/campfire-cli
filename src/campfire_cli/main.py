@@ -10,11 +10,11 @@ from campfire_cli import __version__
 from campfire_cli.app.base.cli.base_cli import base_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
-from campfire_cli.app.migration.cli.migration_cli import migration_cli
 from campfire_cli.app.skill.cli.skill_cli import skill_cli
 from campfire_cli.app.workspace.cli.config_cli import config_cli
 from campfire_cli.app.workspace.cli.domain_cli import domain_cli
 from campfire_cli.app.workspace.cli.project_cli import project_cli
+from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
 from campfire_cli.app.workspace.cli.workspace_cli import initialize, workspace_cli
 from campfire_cli.common.exceptions import AppError
@@ -52,10 +52,10 @@ workspace_cli.add_typer(project_cli, name="project")
 workspace_cli.add_typer(space_cli, name="space")
 workspace_cli.add_typer(domain_cli, name="domain")
 workspace_cli.add_typer(config_cli, name="config")
+workspace_cli.add_typer(restructure_cli, name="restructure")
 app.add_typer(workspace_cli, name="workspace")
 app.add_typer(document_cli, name="document")
 app.add_typer(maintenance_cli, name="maintenance")
-app.add_typer(migration_cli, name="migration")
 app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
 

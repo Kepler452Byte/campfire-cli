@@ -2,7 +2,7 @@
 
 本模块承载面向用户和 Agent 的文档业务能力，包括单篇检查与格式化、类型契约、Profile 契约、命名和 Frontmatter 治理。
 
-Document App 负责文档自身及其规则；Maintenance App 负责跨文档批量扫描、计划和派生内容同步；Migration App 负责存量结构迁移。纯解析、序列化和路径安全等无业务状态的原子能力保留在 `common/documents/`。
+Document App 负责文档自身及其规则；Maintenance App 负责跨文档批量扫描、计划和派生内容同步；Workspace Restructure 用例负责存量结构重构。纯解析、序列化和路径安全等无业务状态的原子能力保留在 `common/documents/`。
 
 ## 当前能力
 
@@ -35,7 +35,7 @@ document/
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。
 
-Document Service 可以被 Maintenance 和 Migration 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和迁移批次不属于 Document App。
+Document Service 可以被 Maintenance 和 Workspace Restructure 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
 
 包内默认 Profile 配置是新 Workspace 和显式同步的来源，用户级 `frontmatter-schema.json` 是该 Workspace 当前治理契约。
 

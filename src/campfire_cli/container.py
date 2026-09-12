@@ -9,13 +9,13 @@ from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
 from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
-from campfire_cli.app.migration.repository.migration_repository import (
-    SqliteMigrationRepository,
-)
-from campfire_cli.app.migration.service.migration_service import MigrationService
 from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.service.skill_service import SkillService
+from campfire_cli.app.workspace.repository.restructure_repository import (
+    SqliteRestructureRepository,
+)
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.service.restructure_service import RestructureService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
@@ -25,7 +25,7 @@ from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 class AppContainer:
     settings: WorkspaceSettings
     maintenance: MaintenanceService
-    migration: MigrationService
+    restructure: RestructureService
     skill: SkillService
     base: BaseService
 
@@ -42,16 +42,16 @@ class AppContainer:
         session = open_session(engine)
         maintenance_repository = SqliteMaintenanceRepository(session, resolution.workspace_id)
         maintenance = MaintenanceService(settings, maintenance_repository)
-        migration_repository = SqliteMigrationRepository(
+        restructure_repository = SqliteRestructureRepository(
             session, settings.state_root, resolution.workspace_id
         )
-        migration = MigrationService(settings, migration_repository)
+        restructure = RestructureService(settings, restructure_repository)
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())
         return cls(
             settings=settings,
             maintenance=maintenance,
-            migration=migration,
+            restructure=restructure,
             skill=skill,
             base=base,
         )

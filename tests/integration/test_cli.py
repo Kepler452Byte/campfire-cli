@@ -15,8 +15,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
     commands = [
         ["-h"],
         ["tree", "-h"],
-        ["migration", "-h"],
-        ["migration", "inventory", "-h"],
+        ["workspace", "restructure", "-h"],
+        ["workspace", "restructure", "inventory", "-h"],
         ["maintenance", "-h"],
         ["maintenance", "check", "-h"],
         ["maintenance", "archive", "-h"],
@@ -719,7 +719,7 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
     assert {"requested_by", "blocked_reason"} <= missing
 
 
-def test_migration_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Path) -> None:
+def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-【Test】标题.md"
     note.write_text(
         "---\nname: 标题\ndescription: test\ntype: knowledge\nstatus: current\n"
@@ -732,7 +732,8 @@ def test_migration_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Pa
             [
                 "--workspace",
                 str(workspace),
-                "migration",
+                "workspace",
+                "restructure",
                 "inventory",
                 "--scope",
                 "mynote",
@@ -744,7 +745,8 @@ def test_migration_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Pa
     )
     assert (
         runner.invoke(
-            app, ["--workspace", str(workspace), "migration", "plan", "--batch", "b1"]
+            app,
+            ["--workspace", str(workspace), "workspace", "restructure", "plan", "--batch", "b1"],
         ).exit_code
         == 0
     )
@@ -756,14 +758,23 @@ def test_migration_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Pa
     note.write_text(note.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
     result = runner.invoke(
         app,
-        ["--workspace", str(workspace), "migration", "apply", "--batch", "b1", "--confirm"],
+        [
+            "--workspace",
+            str(workspace),
+            "workspace",
+            "restructure",
+            "apply",
+            "--batch",
+            "b1",
+            "--confirm",
+        ],
     )
     assert result.exit_code == 0
     assert json.loads(result.output)["status"] == "blocked"
     assert "source-hash-changed" in result.output
 
 
-def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspace: Path) -> None:
+def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(workspace: Path) -> None:
     source = workspace / "mynote" / "知识-迁移.md"
     source.write_text(
         "---\nname: 迁移\ndescription: test\ntype: knowledge\nstatus: current\n"
@@ -777,7 +788,8 @@ def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspac
         [
             "--workspace",
             str(workspace),
-            "migration",
+            "workspace",
+            "restructure",
             "inventory",
             "--scope",
             "mynote",
@@ -801,7 +813,8 @@ def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspac
         [
             "--workspace",
             str(workspace),
-            "migration",
+            "workspace",
+            "restructure",
             "plan",
             "--batch",
             "move",
@@ -812,7 +825,16 @@ def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspac
     assert json.loads(planned.output)["item_count"] == 1
     applied = runner.invoke(
         app,
-        ["--workspace", str(workspace), "migration", "apply", "--batch", "move", "--confirm"],
+        [
+            "--workspace",
+            str(workspace),
+            "workspace",
+            "restructure",
+            "apply",
+            "--batch",
+            "move",
+            "--confirm",
+        ],
     )
     assert json.loads(applied.output)["status"] == "applied"
     target = workspace / "mywork" / "知识-迁移.md"
@@ -821,7 +843,7 @@ def test_migration_plan_spec_supports_cross_directory_move_and_metadata(workspac
     assert "mywork/知识-迁移.md" in reference.read_text(encoding="utf-8")
 
 
-def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspace: Path) -> None:
+def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(workspace: Path) -> None:
     source = workspace / "mynote/知识-旧标题.md"
     source.write_text("---\ntype: knowledge\n---\n", encoding="utf-8")
     reference = workspace / "mywork/知识-引用.md"
@@ -831,7 +853,8 @@ def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspa
         [
             "--workspace",
             str(workspace),
-            "migration",
+            "workspace",
+            "restructure",
             "inventory",
             "--scope",
             "mynote",
@@ -853,7 +876,8 @@ def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspa
         [
             "--workspace",
             str(workspace),
-            "migration",
+            "workspace",
+            "restructure",
             "plan",
             "--batch",
             "links",
@@ -862,7 +886,17 @@ def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspa
         ],
     )
     result = runner.invoke(
-        app, ["--workspace", str(workspace), "migration", "apply", "--batch", "links", "--confirm"]
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "workspace",
+            "restructure",
+            "apply",
+            "--batch",
+            "links",
+            "--confirm",
+        ],
     )
     assert json.loads(result.output)["status"] == "applied"
     updated = reference.read_text(encoding="utf-8")
@@ -870,7 +904,7 @@ def test_migration_rewrites_unique_wikilink_without_replacing_plain_text(workspa
     assert "正文知识-旧标题不应被替换" in updated
 
 
-def test_migration_spec_rejects_invalid_enum_during_plan(workspace: Path) -> None:
+def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> None:
     source = workspace / "mynote/知识-非法状态.md"
     source.write_text("---\ntype: knowledge\nstatus: current\n---\n", encoding="utf-8")
     runner.invoke(
@@ -878,7 +912,8 @@ def test_migration_spec_rejects_invalid_enum_during_plan(workspace: Path) -> Non
         [
             "--workspace",
             str(workspace),
-            "migration",
+            "workspace",
+            "restructure",
             "inventory",
             "--scope",
             "mynote",
@@ -899,7 +934,8 @@ def test_migration_spec_rejects_invalid_enum_during_plan(workspace: Path) -> Non
         [
             "--workspace",
             str(workspace),
-            "migration",
+            "workspace",
+            "restructure",
             "plan",
             "--batch",
             "enum",

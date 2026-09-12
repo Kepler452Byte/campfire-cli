@@ -1,7 +1,7 @@
 """
 SPEC:
-  name: migration_check
-  purpose: 使用迁移映射校验文档迁移前后的内容哈希和路径状态
+  name: restructure_check
+  purpose: 使用重构映射校验文档重构前后的内容哈希和路径状态
   default_env_file: none
   env_override: none
   idempotent: true

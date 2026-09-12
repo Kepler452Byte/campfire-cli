@@ -6,16 +6,16 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from campfire_cli.app.migration.schema.migration_schema import (
+from campfire_cli.app.workspace.schema.restructure_schema import (
     InventoryItem,
-    MigrationPlan,
-    MigrationResult,
+    RestructurePlan,
+    RestructureResult,
 )
-from campfire_cli.common.database.models import MigrationBatch
+from campfire_cli.common.database.models import RestructureBatch
 from campfire_cli.common.filesystem import atomic_write
 
 
-class SqliteMigrationRepository:
+class SqliteRestructureRepository:
     def __init__(self, session: Session, state_root: Path, workspace_id: str) -> None:
         self._session = session
         self._state_root = state_root
@@ -23,14 +23,14 @@ class SqliteMigrationRepository:
 
     def save_batch(self, batch_uuid: str, batch: str, scope: str, config_hash: str) -> None:
         existing = self._session.scalar(
-            select(MigrationBatch).where(
-                MigrationBatch.workspace_id == self._workspace_id,
-                MigrationBatch.batch_name == batch,
+            select(RestructureBatch).where(
+                RestructureBatch.workspace_id == self._workspace_id,
+                RestructureBatch.batch_name == batch,
             )
         )
         if existing is None:
             self._session.add(
-                MigrationBatch(
+                RestructureBatch(
                     workspace_id=self._workspace_id,
                     batch_uuid=batch_uuid,
                     batch_name=batch,
@@ -53,9 +53,9 @@ class SqliteMigrationRepository:
 
     def load_inventory(self, batch: str) -> tuple[str, str, list[InventoryItem]]:
         row = self._session.scalar(
-            select(MigrationBatch).where(
-                MigrationBatch.workspace_id == self._workspace_id,
-                MigrationBatch.batch_name == batch,
+            select(RestructureBatch).where(
+                RestructureBatch.workspace_id == self._workspace_id,
+                RestructureBatch.batch_name == batch,
             )
         )
         if row is None:
@@ -67,16 +67,16 @@ class SqliteMigrationRepository:
             [InventoryItem.model_validate(item) for item in payload["items"]],
         )
 
-    def save_plan(self, plan: MigrationPlan) -> None:
+    def save_plan(self, plan: RestructurePlan) -> None:
         self._write(plan.batch, "plan.json", plan.model_dump(mode="json"))
 
-    def load_plan(self, batch: str) -> MigrationPlan:
-        return MigrationPlan.model_validate(self._read(batch, "plan.json"))
+    def load_plan(self, batch: str) -> RestructurePlan:
+        return RestructurePlan.model_validate(self._read(batch, "plan.json"))
 
-    def save_execution(self, result: MigrationResult) -> None:
+    def save_execution(self, result: RestructureResult) -> None:
         self._write(result.batch, "execution.json", result.model_dump(mode="json"))
 
-    def save_verification(self, result: MigrationResult) -> None:
+    def save_verification(self, result: RestructureResult) -> None:
         self._write(result.batch, "verification.json", result.model_dump(mode="json"))
 
     def _path(self, batch: str, name: str) -> Path:

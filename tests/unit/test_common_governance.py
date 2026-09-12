@@ -31,7 +31,7 @@ from campfire_cli.app.maintenance.service.archive_service import (
 )
 from campfire_cli.app.maintenance.service.link_service import check_links
 from campfire_cli.app.maintenance.service.moc_service import generate_relations  # noqa: E402
-from campfire_cli.app.migration.service.migration_verifier import after, before  # noqa: E402
+from campfire_cli.app.workspace.service.restructure_verifier import after, before  # noqa: E402
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.config.defaults import default_configs
@@ -107,7 +107,7 @@ class RelationTests(unittest.TestCase):
             self.assertEqual("Go MCP Server", relations[left][0]["target_name"])
 
 
-class MigrationCheckTests(unittest.TestCase):
+class RestructureCheckTests(unittest.TestCase):
     def test_before_and_after_accept_unchanged_move(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

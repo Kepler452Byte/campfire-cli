@@ -1,6 +1,6 @@
 [project]
 name = "campfire-cli"
-version = "0.12.0"
+version = "0.13.0"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -44,7 +44,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 "src/campfire_cli/common/documents/*.py" = ["E501"]
 "src/campfire_cli/common/archive/*.py" = ["E501"]
-"src/campfire_cli/app/migration/service/migration_verifier.py" = ["E501"]
+"src/campfire_cli/app/workspace/service/restructure_verifier.py" = ["E501"]
 "src/campfire_cli/main.py" = ["B008"]
 "src/campfire_cli/app/**/cli/*.py" = ["B008"]
 "tests/unit/test_common_governance.py" = ["E501"]

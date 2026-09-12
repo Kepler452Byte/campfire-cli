@@ -11,7 +11,7 @@ class InventoryItem(BaseModel):
     size: int
 
 
-class MigrationPlanItem(BaseModel):
+class RestructurePlanItem(BaseModel):
     item_id: str
     source: str
     target: str
@@ -24,15 +24,15 @@ class MigrationPlanItem(BaseModel):
     approved: bool = False
 
 
-class MigrationPlan(BaseModel):
+class RestructurePlan(BaseModel):
     schema_version: int = 1
     batch: str
     scope: str
     config_hash: str
-    items: list[MigrationPlanItem] = Field(default_factory=list)
+    items: list[RestructurePlanItem] = Field(default_factory=list)
 
 
-class MigrationIntentItem(BaseModel):
+class RestructureIntentItem(BaseModel):
     source: str
     target: str | None = None
     frontmatter: dict[str, Any] = Field(default_factory=dict)
@@ -40,12 +40,12 @@ class MigrationIntentItem(BaseModel):
     approved: bool = False
 
 
-class MigrationIntentSpec(BaseModel):
+class RestructureIntentSpec(BaseModel):
     schema_version: int = 1
-    operations: list[MigrationIntentItem]
+    operations: list[RestructureIntentItem]
 
 
-class MigrationResult(BaseModel):
+class RestructureResult(BaseModel):
     status: str
     batch: str
     item_count: int

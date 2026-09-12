@@ -220,7 +220,7 @@ class DocumentRuleService:
         current: dict[str, Any],
         patch: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Validate values a migration would write, without requiring unrelated fields."""
+        """Validate values a restructure would write, without requiring unrelated fields."""
         merged = {**current, **patch}
         rules = self._rules(merged.get("type"), path, merged)
         relative = path.relative_to(root).as_posix()

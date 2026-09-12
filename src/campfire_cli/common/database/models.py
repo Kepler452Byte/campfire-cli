@@ -84,8 +84,8 @@ class MaintenanceRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
-class MigrationBatch(Base):
-    __tablename__ = "migration_batches"
+class RestructureBatch(Base):
+    __tablename__ = "restructure_batches"
     __table_args__ = (UniqueConstraint("workspace_id", "batch_name"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     workspace_id: Mapped[str] = mapped_column(
@@ -99,13 +99,13 @@ class MigrationBatch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
-class MigrationItem(Base):
-    __tablename__ = "migration_items"
+class RestructureItem(Base):
+    __tablename__ = "restructure_items"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     workspace_id: Mapped[str] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
     )
-    batch_id: Mapped[int] = mapped_column(ForeignKey("migration_batches.id"), index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("restructure_batches.id"), index=True)
     item_uuid: Mapped[str] = mapped_column(String(36), unique=True)
     source_path: Mapped[str] = mapped_column(Text)
     target_path: Mapped[str] = mapped_column(Text)

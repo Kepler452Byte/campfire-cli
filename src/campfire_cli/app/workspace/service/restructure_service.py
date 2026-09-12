@@ -13,14 +13,14 @@ from campfire_cli.app.document.service.type_apply import (
     rewrite_same_directory_markdown_links,
     rewrite_wikilinks,
 )
-from campfire_cli.app.migration.schema.migration_schema import (
+from campfire_cli.app.workspace.schema.restructure_schema import (
     InventoryItem,
-    MigrationIntentSpec,
-    MigrationPlan,
-    MigrationPlanItem,
-    MigrationResult,
+    RestructureIntentSpec,
+    RestructurePlan,
+    RestructurePlanItem,
+    RestructureResult,
 )
-from campfire_cli.app.migration.service.migration_protocol import MigrationRepositoryProtocol
+from campfire_cli.app.workspace.service.restructure_protocol import RestructureRepositoryProtocol
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
@@ -36,20 +36,20 @@ LEADING_CATEGORY_RE = re.compile(r"^((?:【[^】]+】)+)(.*)$")
 CATEGORY_RE = re.compile(r"【([^】]+)】")
 
 
-class MigrationService:
+class RestructureService:
     def __init__(
         self,
         settings: WorkspaceSettings,
-        repository: MigrationRepositoryProtocol,
+        repository: RestructureRepositoryProtocol,
     ) -> None:
         self._settings = settings
         self._repository = repository
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
 
-    def inventory(self, batch: str, scope: str) -> MigrationResult:
+    def inventory(self, batch: str, scope: str) -> RestructureResult:
         root = safe_path(self._settings.vault_root, scope)
         if not root.is_dir():
-            return MigrationResult(
+            return RestructureResult(
                 status="blocked",
                 batch=batch,
                 item_count=0,
@@ -66,14 +66,14 @@ class MigrationService:
         config_hash = self._config_hash()
         self._repository.save_batch(str(uuid4()), batch, scope, config_hash)
         self._repository.save_inventory(batch, items)
-        return MigrationResult(status="inventoried", batch=batch, item_count=len(items))
+        return RestructureResult(status="inventoried", batch=batch, item_count=len(items))
 
-    def plan(self, batch: str, spec_path: Path | None = None) -> MigrationResult:
+    def plan(self, batch: str, spec_path: Path | None = None) -> RestructureResult:
         scope, config_hash, inventory = self._repository.load_inventory(batch)
         if spec_path is not None:
             return self._plan_from_spec(batch, scope, config_hash, inventory, spec_path)
         types = self._settings.document_types["types"]
-        items: list[MigrationPlanItem] = []
+        items: list[RestructurePlanItem] = []
         issues: list[dict[str, object]] = []
         for record in inventory:
             path = safe_path(self._settings.vault_root, record.path)
@@ -103,7 +103,7 @@ class MigrationService:
                 if enabled
             )
             items.append(
-                MigrationPlanItem(
+                RestructurePlanItem(
                     item_id=str(uuid4()),
                     source=record.path,
                     target=target.relative_to(self._settings.vault_root).as_posix(),
@@ -116,12 +116,12 @@ class MigrationService:
                 )
             )
         if issues:
-            return MigrationResult(
+            return RestructureResult(
                 status="blocked", batch=batch, item_count=len(items), issues=issues
             )
-        plan = MigrationPlan(batch=batch, scope=scope, config_hash=config_hash, items=items)
+        plan = RestructurePlan(batch=batch, scope=scope, config_hash=config_hash, items=items)
         self._repository.save_plan(plan)
-        return MigrationResult(status="planned", batch=batch, item_count=len(items))
+        return RestructureResult(status="planned", batch=batch, item_count=len(items))
 
     def _plan_from_spec(
         self,
@@ -130,30 +130,32 @@ class MigrationService:
         config_hash: str,
         inventory: list[InventoryItem],
         spec_path: Path,
-    ) -> MigrationResult:
+    ) -> RestructureResult:
         payload = yaml.safe_load(spec_path.expanduser().read_text(encoding="utf-8"))
-        spec = MigrationIntentSpec.model_validate(payload)
+        spec = RestructureIntentSpec.model_validate(payload)
         known = {item.path: item for item in inventory}
         allowed_fields = self._rules.known_fields()
-        items: list[MigrationPlanItem] = []
+        items: list[RestructurePlanItem] = []
         issues: list[dict[str, object]] = []
         for intent in spec.operations:
             record = known.get(intent.source)
             if record is None:
-                issues.append({"code": "migration-source-not-in-inventory", "path": intent.source})
+                issues.append(
+                    {"code": "restructure-source-not-in-inventory", "path": intent.source}
+                )
                 continue
             target_name = intent.target or intent.source
             try:
                 source = safe_path(self._settings.vault_root, intent.source)
                 target = safe_path(self._settings.vault_root, target_name)
             except GovernanceBlockedError:
-                issues.append({"code": "migration-path-outside-vault", "path": target_name})
+                issues.append({"code": "restructure-path-outside-vault", "path": target_name})
                 continue
             unknown = sorted(set(intent.frontmatter) - allowed_fields)
             if unknown:
                 issues.append(
                     {
-                        "code": "migration-frontmatter-field-unknown",
+                        "code": "restructure-frontmatter-field-unknown",
                         "path": intent.source,
                         "detail": ",".join(unknown),
                     }
@@ -166,7 +168,7 @@ class MigrationService:
             ):
                 issues.append(
                     {
-                        "code": "migration-document-type-invalid",
+                        "code": "restructure-document-type-invalid",
                         "path": intent.source,
                         "detail": str(proposed_type),
                     }
@@ -184,7 +186,7 @@ class MigrationService:
                 continue
             action = "move" if source != target else "update-metadata"
             items.append(
-                MigrationPlanItem(
+                RestructurePlanItem(
                     item_id=str(uuid4()),
                     source=intent.source,
                     target=target_name,
@@ -198,19 +200,19 @@ class MigrationService:
                 )
             )
         if issues:
-            return MigrationResult(
+            return RestructureResult(
                 status="blocked", batch=batch, item_count=len(items), issues=issues
             )
-        plan = MigrationPlan(batch=batch, scope=scope, config_hash=config_hash, items=items)
+        plan = RestructurePlan(batch=batch, scope=scope, config_hash=config_hash, items=items)
         self._repository.save_plan(plan)
-        return MigrationResult(status="planned", batch=batch, item_count=len(items))
+        return RestructureResult(status="planned", batch=batch, item_count=len(items))
 
-    def apply(self, batch: str, confirm: bool) -> MigrationResult:
+    def apply(self, batch: str, confirm: bool) -> RestructureResult:
         plan = self._repository.load_plan(batch)
         approved = [item for item in plan.items if item.approved]
         issues = self._preflight(plan, approved)
         if issues or not confirm:
-            return MigrationResult(
+            return RestructureResult(
                 status="blocked" if issues else "ready",
                 batch=batch,
                 item_count=len(approved),
@@ -226,7 +228,7 @@ class MigrationService:
         with workspace_write_lock(self._settings.state_root):
             changed = snapshot_changes(self._settings.vault_root, snapshot)
             if changed:
-                return MigrationResult(
+                return RestructureResult(
                     status="blocked",
                     batch=batch,
                     item_count=len(approved),
@@ -234,7 +236,7 @@ class MigrationService:
                 )
             locked_issues = self._preflight(plan, approved)
             if locked_issues:
-                return MigrationResult(
+                return RestructureResult(
                     status="blocked",
                     batch=batch,
                     item_count=len(approved),
@@ -247,13 +249,13 @@ class MigrationService:
             for item in approved:
                 source = safe_path(self._settings.vault_root, item.source)
                 self._apply_item(item, stem_counts.get(source.stem) == 1)
-        result = MigrationResult(
+        result = RestructureResult(
             status="applied", batch=batch, item_count=len(approved), applied_count=len(approved)
         )
         self._repository.save_execution(result)
         return result
 
-    def verify(self, batch: str) -> MigrationResult:
+    def verify(self, batch: str) -> RestructureResult:
         plan = self._repository.load_plan(batch)
         issues: list[dict[str, object]] = []
         for item in [entry for entry in plan.items if entry.approved]:
@@ -265,7 +267,7 @@ class MigrationService:
                 issues.append({"code": "source-still-exists", "path": item.source})
             if target.is_file():
                 issues.extend(self._rules.check_document(self._settings.vault_root, target))
-        result = MigrationResult(
+        result = RestructureResult(
             status="ok" if not issues else "needs-review",
             batch=batch,
             item_count=len(plan.items),
@@ -288,11 +290,11 @@ class MigrationService:
         return f"{prefix}{stem}.md"
 
     def _preflight(
-        self, plan: MigrationPlan, items: list[MigrationPlanItem]
+        self, plan: RestructurePlan, items: list[RestructurePlanItem]
     ) -> list[dict[str, str]]:
         issues: list[dict[str, str]] = []
         if plan.config_hash != self._config_hash():
-            issues.append({"code": "migration-config-changed", "path": plan.batch})
+            issues.append({"code": "restructure-config-changed", "path": plan.batch})
         targets: set[Path] = set()
         sources: set[Path] = set()
         for item in items:
@@ -303,7 +305,7 @@ class MigrationService:
             elif file_sha256(source) != item.source_sha256:
                 issues.append({"code": "source-hash-changed", "path": item.source})
             if source.suffix.lower() != ".md" or target.suffix.lower() != ".md":
-                issues.append({"code": "migration-not-markdown", "path": item.source})
+                issues.append({"code": "restructure-not-markdown", "path": item.source})
             if target in targets:
                 issues.append({"code": "target-duplicate", "path": item.target})
             if source in sources:
@@ -314,7 +316,7 @@ class MigrationService:
             sources.add(source)
         return issues
 
-    def _apply_item(self, item: MigrationPlanItem, unique_source_stem: bool) -> None:
+    def _apply_item(self, item: RestructurePlanItem, unique_source_stem: bool) -> None:
         source = safe_path(self._settings.vault_root, item.source)
         target = safe_path(self._settings.vault_root, item.target)
         text = source.read_text(encoding="utf-8")
