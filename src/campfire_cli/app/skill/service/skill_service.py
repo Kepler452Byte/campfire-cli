@@ -8,10 +8,12 @@ from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.schema.skill_schema import SkillInfo, SkillResult
 from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.common.governance import enrich_issue
+from campfire_cli.config.defaults import default_configs
 from campfire_cli.config.settings import WorkspaceSettings
 
 NAME_RE = re.compile(r"^name:\s*[\"']?([^\n\"']+)", re.MULTILINE)
 DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?([^\n\"']+)", re.MULTILINE)
+RETIRED_PACKAGED_SKILLS = {"campfire-conversation-intake"}
 
 
 class SkillService:
@@ -159,4 +161,10 @@ class SkillService:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def _managed_names(self) -> list[str]:
-        return list(self._settings.skills.get("managed_skills", []))
+        configured = [
+            name
+            for name in self._settings.skills.get("managed_skills", [])
+            if name not in RETIRED_PACKAGED_SKILLS
+        ]
+        packaged = default_configs()["skills.json"].get("managed_skills", [])
+        return list(dict.fromkeys([*packaged, *configured]))

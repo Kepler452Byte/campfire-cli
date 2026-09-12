@@ -1,0 +1,3 @@
+interface:
+  display_name: "Campfire 对话路由"
+  short_description: "把自然语言意图路由到正确的文档协作流程"

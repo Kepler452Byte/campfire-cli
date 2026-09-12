@@ -16,7 +16,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
         },
         "document-types.json": {
             "version": 2,
-            "scope_roots": ["mynote", "mywork"],
+            "scope_roots": ["mynote", "mywork", "_收件箱/待用户确认"],
             "ignored_directories": ["assets", "generated", "a_skill"],
             "exempt_basenames": [
                 "_领域.md",
@@ -44,6 +44,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
                 "decision": {"prefix": "决策-", "label": "决策"},
                 "plan": {"prefix": "计划-", "label": "计划"},
                 "task": {"prefix": "任务-", "label": "任务"},
+                "human-request": {"prefix": "待确认-", "label": "待用户确认"},
                 "issue": {"prefix": "问题-", "label": "问题"},
                 "record": {"prefix": "记录-", "label": "记录"},
                 "board": {"prefix": "看板-", "label": "看板"},
@@ -211,7 +212,8 @@ def default_configs() -> dict[str, dict[str, Any]]:
             "targets": ["~/.claude/skills", "~/.agents/skills"],
             "managed_skills": [
                 "campfire-workspace-governance",
-                "campfire-conversation-intake",
+                "campfire-conversation-router",
+                "campfire-document-capture",
                 "campfire-inbox-triage",
                 "mynote-knowledge-governance",
                 "mywork-project-docs-governance",

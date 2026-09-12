@@ -246,7 +246,8 @@ def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> Non
     applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
     assert applied.exit_code == 0, applied.output
     assert (workspace / "_global_skills/campfire-workspace-governance/SKILL.md").is_file()
-    assert (workspace / "_global_skills/campfire-conversation-intake/SKILL.md").is_file()
+    assert (workspace / "_global_skills/campfire-conversation-router/SKILL.md").is_file()
+    assert (workspace / "_global_skills/campfire-document-capture/SKILL.md").is_file()
     repeated = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync", "--dry-run"])
     assert json.loads(repeated.output)["operations"] == []
     checked = runner.invoke(app, ["--workspace", str(workspace), "skill", "check"])
@@ -358,6 +359,7 @@ def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
     path = workspace / "_campfire/workspaces/test/config/document-types.json"
     contract = json.loads(path.read_text(encoding="utf-8"))
     contract["types"].pop("board")
+    contract["types"].pop("human-request")
     contract["profiles"]["project-docs"].remove("board")
     contract["types"]["custom"] = {"prefix": "自定义-", "label": "自定义"}
     path.write_text(json.dumps(contract), encoding="utf-8")
@@ -373,6 +375,8 @@ def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
     assert json.loads(applied.output)["status"] == "synced"
     updated = json.loads(path.read_text())
     assert updated["types"]["board"]["prefix"] == "看板-"
+    assert updated["types"]["human-request"]["prefix"] == "待确认-"
+    assert "_收件箱/待用户确认" in updated["scope_roots"]
     assert "board" in updated["profiles"]["project-docs"]
     assert updated["types"]["custom"]["prefix"] == "自定义-"
 

@@ -55,6 +55,14 @@ class DocumentTypeService:
             **current.get("types", {}),
             **packaged.get("types", {}),
         }
+        target["scope_roots"] = list(
+            dict.fromkeys(
+                [
+                    *packaged.get("scope_roots", []),
+                    *current.get("scope_roots", []),
+                ]
+            )
+        )
         packaged_types = set(packaged.get("types", {}))
         target["profiles"] = {
             name: list(
