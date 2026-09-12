@@ -357,6 +357,7 @@ class MaintenanceService:
             issues=issues,
             issue_counts=self._issue_counts(issues),
             changed_document_count=len(applied),
+            write_performed=bool(applied),
             operations=applied,
         )
 

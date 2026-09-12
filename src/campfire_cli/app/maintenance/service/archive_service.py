@@ -173,7 +173,13 @@ def replace_frontmatter_fields(text: str, values: dict[str, str]) -> str:
         if key in positions:
             lines[positions[key]] = rendered
         else:
-            lines.append(rendered)
+            insert_at = positions.get("created", len(lines))
+            lines.insert(insert_at, rendered)
+            positions = {
+                field: index + 1 if index >= insert_at else index
+                for field, index in positions.items()
+            }
+            positions[key] = insert_at
     return "---\n" + "\n".join(lines) + text[end:]
 
 

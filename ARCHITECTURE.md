@@ -91,7 +91,44 @@ Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`know
 
 SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索引可以从 Markdown 重建；SQLite 不是知识内容的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
 
-## 6. 稳定不变量
+### 设备本地与跨设备边界
+
+```text
+随 Workspace 同步
+  稳定 Workspace 身份
+  Space / Domain 声明
+  Project id / 名称 / 文档 Domain / Git remote
+  治理契约版本
+                │
+                ▼ 新设备 attach
+每台设备独立维护
+  Project local_path
+  SQLite 索引与运行记录
+  Decision 与事件
+  Skills 安装路径、锁、缓存和报告
+```
+
+Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器绑定：同一个 Project 在不同电脑上可以位于不同目录，也可以在某台电脑上尚未克隆。新设备通过稳定 Project id 和 `git_remote_url` 识别代码仓库，自动探测失败时由用户或 Agent 在本机显式绑定路径。
+
+可移植元数据应由 Workspace 内的轻量声明承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。现有 `_空间.md` 与 `_领域.md` 继续分别承载 Space 和 Domain 事实，Workspace 与 Project 的轻量 Manifest 在首次接管能力中统一定义。Decision 当前保持本地，不属于该 Manifest。
+
+## 6. 本地 Web 工作台
+
+Campfire 可以提供由 CLI 启动的单进程本地 HTTP 服务和浏览器工作台。CLI 与 HTTP 是同级交付适配器，必须复用同一个 Application Service、Repository、事务和审计逻辑；前端不得直接访问 SQLite，也不得复制 Decision 状态机。
+
+```text
+Agent / Terminal ──> CLI Adapter  ──┐
+                                    ├── Application Service ──> Repository
+Human / Browser  ──> HTTP Adapter ──┘                           │
+                                                                ├── SQLite
+                                                                └── Vault
+```
+
+第一期 Web UI 只处理 Decision：查看 pending、answered、closed、cancelled，阅读问题、证据、建议、关联文档与来源 Session，并执行 answer 或 cancel。用户回答后仍由原 Agent 消费答案并调用 close。Obsidian Base 继续作为只读快速视图，不承担状态写入。
+
+本地服务默认只监听 `127.0.0.1`，不内置账号、云同步、远程调度或多服务器部署。前端源码独立构建，静态产物随 Python wheel 发布；最终用户不需要 Node.js。
+
+## 7. 稳定不变量
 
 1. 人类和 Agent 使用同一套 CLI 契约，不维护两套规则。
 2. 写操作默认先计划、再确认、再执行；执行前复核并发变更。
@@ -102,6 +139,6 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
 7. 只有一个用户级 SQLite；所有 Workspace 业务表必须携带 `workspace_id`，Repository 查询不得越界。
 8. 正式文档必须归入 Domain；Space 不直接替代 Domain，系统区域不伪装成 Space。
 
-## 7. 演进方向
+## 8. 演进方向
 
 当前版本先稳定 Workspace 注册、存量结构重构、增量维护、归档、Skill 与治理视图。下一阶段围绕 Task Channel 补齐任务创建、进度事件、交接、待确认和验收协议，再连接工作日志、周报与绩效证据。只有出现真实用例时才新增模块，避免为未来能力预建空架构。

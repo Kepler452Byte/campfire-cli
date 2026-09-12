@@ -1546,5 +1546,9 @@ def test_archive_scope_does_not_apply_other_candidates(workspace: Path) -> None:
     payload = json.loads(result.output)
     assert payload["status"] == "applied"
     assert payload["changed_document_count"] == 1
-    assert (first / "archive/问题-first.md").is_file()
+    assert payload["write_performed"] is True
+    archived = first / "archive/问题-first.md"
+    assert archived.is_file()
+    archived_text = archived.read_text(encoding="utf-8")
+    assert archived_text.index("archived_at:") < archived_text.index("created:")
     assert second_doc.is_file()
