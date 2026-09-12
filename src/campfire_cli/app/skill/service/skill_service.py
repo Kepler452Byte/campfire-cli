@@ -44,9 +44,8 @@ class SkillService:
         normalized = path.replace("\\", "/")
         if normalized.startswith("_收件箱/"):
             names.append("campfire-inbox-triage")
-        elif normalized.startswith("mywork/"):
-            if "工作周报/" in normalized:
-                names.append("mywork-weekly-report-writing")
+        elif normalized.startswith("mywork/") and "工作周报/" in normalized:
+            names.append("mywork-weekly-report-writing")
         available = {item.name: item for item in self._skills()}
         return SkillResult(
             status="ok", skills=[available[name] for name in names if name in available]
