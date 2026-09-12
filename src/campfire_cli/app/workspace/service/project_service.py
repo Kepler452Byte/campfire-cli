@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import json
 import re
-import shutil
 import subprocess
-from datetime import date
 from pathlib import Path, PurePosixPath
 
 from campfire_cli.app.workspace.schema.workspace_schema import (
@@ -17,9 +14,10 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectResult,
     ProjectUpsertRequest,
 )
+from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
+from campfire_cli.common.filesystem import workspace_write_lock
 
 PROJECT_STATUSES = {"active", "paused", "archived"}
 
@@ -51,14 +49,20 @@ class ProjectService:
             raise ConfigurationError(
                 f"项目文档领域已存在；接入现有领域请使用 project add：{domain_path}"
             )
-        moc_name = self._moc_name(project.name)
-        operations = [
-            {"action": "create-directory", "path": str(domain_path)},
-            {"action": "create", "path": str(domain_path / "_领域.md")},
-            {"action": "create-directory", "path": str(domain_path / "_总览")},
-            {"action": "create", "path": str(domain_path / "_总览" / moc_name)},
-            {"action": "register-project", "path": project.id},
-        ]
+        structure = DomainService(
+            Path(self._repository.load_registry().workspaces[project.workspace_id].path), self._root
+        )
+        domain_plan = structure.create(
+            domain_id=f"project-{project.id}",
+            name=project.name,
+            path=project.document_domain,
+            space_id="work",
+            domain_type="project-domain",
+            governance="project-docs",
+            project_id=project.id,
+            confirm=False,
+        )
+        operations = [*domain_plan.operations, {"action": "register-project", "path": project.id}]
         if not confirm:
             return ProjectCreateResult(
                 status="planned",
@@ -66,18 +70,20 @@ class ProjectService:
                 document_domain_path=str(domain_path),
                 operations=operations,
             )
+        structure.create(
+            domain_id=f"project-{project.id}",
+            name=project.name,
+            path=project.document_domain,
+            space_id="work",
+            domain_type="project-domain",
+            governance="project-docs",
+            project_id=project.id,
+            confirm=True,
+        )
         with workspace_write_lock(self._root):
-            if self._repository.get_project(request.project_id) or domain_path.exists():
-                raise ConfigurationError("Project 或项目文档领域在确认后发生变化，请重新预览")
-            try:
-                (domain_path / "_总览").mkdir(parents=True)
-                atomic_write(domain_path / "_领域.md", self._domain_marker(project, moc_name))
-                atomic_write(domain_path / "_总览" / moc_name, self._project_moc(project))
-                self._repository.save_project(project)
-            except Exception:
-                if domain_path.exists():
-                    shutil.rmtree(domain_path)
-                raise
+            if self._repository.get_project(request.project_id):
+                raise ConfigurationError("Project 在确认后已被注册")
+            self._repository.save_project(project)
         return ProjectCreateResult(
             status="created",
             project=project,
@@ -226,56 +232,6 @@ class ProjectService:
         if not project.name:
             raise ConfigurationError("Project name 不能为空")
         return project, domain_path
-
-    @staticmethod
-    def _moc_name(name: str) -> str:
-        if any(character in name for character in "/\\\0"):
-            raise ConfigurationError("Project name 不能包含路径分隔符")
-        return f"MOC-{name}总览.md"
-
-    @staticmethod
-    def _domain_marker(project: ProjectEntry, moc_name: str) -> str:
-        name = json.dumps(project.name, ensure_ascii=False)
-        return (
-            "---\n"
-            f"name: {name}\n"
-            f"domain_id: project-{project.id}\n"
-            "domain_type: project-domain\n"
-            "governance: project-docs\n"
-            f'moc: "[[{Path(moc_name).stem}]]"\n'
-            "status: active\n"
-            "---\n\n"
-            f"# {project.name}\n\n"
-            "## 领域定位\n\n"
-            f"{project.name} 项目的总览与跨领域文档入口。\n\n"
-            "## 收录范围\n\n项目总览、跨领域方案、决策、计划与风险。\n\n"
-            "## 不收录\n\n已经形成稳定边界的单一业务或技术领域细节。\n\n"
-            "## 与相邻领域的边界\n\n子领域建立后，其内部文档归对应领域。\n"
-        )
-
-    @staticmethod
-    def _project_moc(project: ProjectEntry) -> str:
-        today = date.today().isoformat()
-        name = json.dumps(f"{project.name} 项目总览", ensure_ascii=False)
-        description = json.dumps(f"{project.name} 当前文档与领域导航入口。", ensure_ascii=False)
-        return (
-            "---\n"
-            f"name: {name}\n"
-            f"description: {description}\n"
-            "type: moc\n"
-            f"project: {project.id}\n"
-            "domain: overview\n"
-            "status: current\n"
-            "lifecycle: maintained\n"
-            f"created: {today}\nupdated: {today}\n"
-            "tags: []\n"
-            f"domain_id: project-{project.id}\n"
-            "---\n\n"
-            f"# {project.name} 项目总览\n\n"
-            "## 当前文档\n\n"
-            "## 进行中工作\n\n"
-            "## 历史与记录\n"
-        )
 
     @staticmethod
     def _validate_id(project_id: str) -> None:

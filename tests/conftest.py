@@ -19,6 +19,14 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     config.mkdir(parents=True)
     (tmp_path / "mynote").mkdir()
     (tmp_path / "mywork").mkdir()
+    (tmp_path / "mynote/_空间.md").write_text(
+        "---\nname: 知识\nspace_id: knowledge\nspace_type: knowledge\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
     (tmp_path / "_收件箱").mkdir()
     SqliteWorkspaceRepository(campfire_home).save_registry(
         WorkspaceRegistry(

@@ -14,7 +14,7 @@ description: "治理 Campfire Workspace 中的共享上下文；适用于收件�
 ## 工作流
 
 1. 确认已安装 `campfire-cli`，运行 `campfire workspace resolve` 和 `campfire maintenance check` 获取当前 Workspace 与状态；该命令不改原始笔记，但会刷新用户级治理状态，不得直接读写 `~/.campfire/`。
-2. 阅读目标及相邻 `_领域.md`，依据收录范围和边界判断主归属。
+2. 运行 `campfire workspace space list` 与 `campfire workspace domain list` 获取候选结构；阅读目标及相邻 `_领域.md`，依据收录范围和边界判断主归属。
 3. 一次性存量治理使用 `campfire migration inventory --scope <path> --batch <id>` 与 `campfire migration plan --batch <id>`；工具无法推断的移动或元数据修改写入 YAML/JSON 意图规格，并使用 `campfire migration plan --batch <id> --spec <file>`。日常新增和变化使用 `campfire maintenance plan`。所有计划默认未审批，有关键歧义时不执行。
 4. 只在用户授权范围内整理笔记。删除、合并、领域拆分、顶级领域创建和冲突权威判定必须由用户确认。
 5. 写入前先运行不带 `--confirm` 的 `campfire migration apply` 或 `campfire maintenance apply`；只有计划已明确审批且预检通过时才追加 `--confirm`。
@@ -24,7 +24,9 @@ description: "治理 Campfire Workspace 中的共享上下文；适用于收件�
 ## 不变量
 
 - 整个 Workspace 只有根目录一个 `_收件箱/`；领域内部不创建收件箱。
-- 正式领域以 `_领域.md` 为准；保留目录不是领域。
+- 顶级内容空间以 `_空间.md` 为准，正式领域以 `_领域.md` 为准；保留目录不是空间或领域。
+- Space 只组织领域树，不直接承载正式文档；Domain 可多级嵌套，子领域继承父领域 governance。
+- 新增顶级 Space 或根 Domain 必须获得用户确认；明确授权后使用 `workspace space/domain create`，不手写标记和 MOC。
 - 一篇笔记只有一个主物理位置，可以出现在多个自动索引中。
 - MOC 自动区域、相关文档、反向链接、关系图和统计必须由 Python 工具生成，禁止手工维护。
 - `campfire maintenance check` 必须只读原始笔记；`campfire maintenance sync` 不得移动、重命名、合并或删除原始笔记。

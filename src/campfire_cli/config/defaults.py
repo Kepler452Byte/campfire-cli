@@ -8,18 +8,20 @@ def default_configs() -> dict[str, dict[str, Any]]:
     return {
         "governance.json": {
             "version": 1,
-            "managed_roots": [],
             "inbox": "_收件箱",
+            "space_marker": "_空间.md",
             "domain_marker": "_领域.md",
             "ignored_directories": ["assets", "archive", "generated"],
             "project_reserved_directories": ["任务", "记录", "archive", "_总览", "a_skill"],
         },
         "document-types.json": {
             "version": 2,
+            "space_marker": "_空间.md",
             "scope_roots": ["mynote", "mywork", "_收件箱/待用户确认"],
             "ignored_directories": ["assets", "generated", "a_skill"],
             "exempt_basenames": [
                 "_领域.md",
+                "_空间.md",
                 "README.md",
                 "CLAUDE.md",
                 "AGENTS.md",

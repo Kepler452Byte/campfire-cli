@@ -43,7 +43,7 @@ description: "在 Agent 首次读写 Campfire 文档时解析 Workspace 和当�
 
 ## 工作流
 
-1. 运行 `campfire workspace resolve`。无法唯一解析 Workspace 时询问用户，不擅自使用无关默认值。
+1. 运行 `campfire workspace resolve`，随后运行 `campfire workspace space list`。无法唯一解析 Workspace 时询问用户，不擅自使用无关默认值。
 2. 在当前工作目录运行 `campfire workspace project resolve --path <cwd>`。`matched` 才表示唯一项目；`unmatched` 和 `ambiguous` 都不能猜测。
 3. 唯一匹配后运行 `campfire workspace project check <id>`，把 Project 元信息和实际源码、Git、文档中心进行比较。
 4. CLI 能读取的信息先自行读取：Git 根目录、origin remote、默认分支、注册项目列表和现有文档中心。只询问用户无法可靠推断的稳定身份与归属。
@@ -57,6 +57,6 @@ CLI 维护：稳定 `id`、`workspace_id`、显示 `name`、Vault 内 `document_
 
 ## 输出
 
-向后续流程提供一张紧凑上下文卡：Workspace id 与路径、Project id 与名称、源码路径、文档中心、匹配依据、检查状态和待用户确认项。未匹配到代码项目不阻止处理纯知识文档，但必须明确 Project 为空。
+向后续流程提供一张紧凑上下文卡：Workspace id 与路径、Space、Project id 与名称、源码路径、项目根 Domain、匹配依据、检查状态和待用户确认项。未匹配到代码项目不阻止处理纯知识文档，但必须明确 Project 为空。
 
 本 Skill 不创建知识、项目或任务文档，不执行代码任务，也不分派、恢复或跟踪 Agent Session。

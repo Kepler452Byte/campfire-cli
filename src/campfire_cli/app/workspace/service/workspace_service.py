@@ -7,6 +7,7 @@ from pathlib import Path
 from campfire_cli.app.workspace.schema.workspace_schema import (
     RegistryExport,
     RegistryTransferResult,
+    Space,
     WorkspaceCreateRequest,
     WorkspaceDefaultResult,
     WorkspaceEntry,
@@ -15,6 +16,7 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     WorkspaceResolution,
     WorkspaceResult,
 )
+from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
@@ -48,6 +50,16 @@ class WorkspaceService:
                 f"目标路径已存在；接入现有 Workspace 请使用 workspace add：{root}"
             )
         directories = self._repository.create_scaffold(root, SCAFFOLD_DIRECTORIES)
+        atomic_write(
+            root / "mynote" / "_空间.md",
+            SpaceService.render_marker(
+                Space(id="knowledge", name="知识", path="mynote", type="knowledge")
+            ),
+        )
+        atomic_write(
+            root / "mywork" / "_空间.md",
+            SpaceService.render_marker(Space(id="work", name="工作", path="mywork", type="work")),
+        )
         result = self._initialize(request.workspace_id, root, request.make_default)
         result.created_directories = directories
         return result

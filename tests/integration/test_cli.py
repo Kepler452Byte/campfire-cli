@@ -28,6 +28,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "project", "create", "-h"],
         ["workspace", "project", "resolve", "-h"],
         ["workspace", "project", "check", "-h"],
+        ["workspace", "space", "-h"],
+        ["workspace", "domain", "-h"],
         ["document", "-h"],
         ["document", "profile", "-h"],
         ["document", "profile", "show", "-h"],
@@ -126,11 +128,68 @@ def test_workspace_create_builds_minimal_scaffold_and_database(tmp_path: Path, m
     assert not (target / ".campfire").exists()
     assert (campfire_home / "campfire.db").is_file()
     assert not (campfire_home / "workspaces/new/db").exists()
+    assert (target / "mynote/_空间.md").is_file()
+    assert (target / "mywork/_空间.md").is_file()
     repeated = runner.invoke(
         app,
         ["workspace", "create", "--id", "new", "--path", str(target)],
     )
     assert repeated.exit_code != 0
+
+
+def test_space_and_nested_domain_commands_use_marker_files(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "campfire-home"))
+    root = tmp_path / "workspace"
+    created = runner.invoke(
+        app, ["workspace", "create", "--id", "test", "--path", str(root), "--default"]
+    )
+    assert created.exit_code == 0, created.output
+    spaces = json.loads(runner.invoke(app, ["workspace", "space", "list"]).output)
+    assert {item["id"] for item in spaces["spaces"]} == {"knowledge", "work"}
+
+    root_args = [
+        "workspace",
+        "domain",
+        "create",
+        "--id",
+        "software",
+        "--name",
+        "软件开发",
+        "--path",
+        "mynote/软件开发",
+        "--space",
+        "knowledge",
+        "--type",
+        "knowledge-domain",
+        "--governance",
+        "knowledge-docs",
+    ]
+    assert json.loads(runner.invoke(app, root_args).output)["status"] == "planned"
+    assert runner.invoke(app, [*root_args, "--confirm"]).exit_code == 0
+    child_args = [
+        "workspace",
+        "domain",
+        "create",
+        "--id",
+        "python",
+        "--name",
+        "Python",
+        "--path",
+        "mynote/软件开发/Python",
+        "--space",
+        "knowledge",
+        "--type",
+        "knowledge-domain",
+        "--governance",
+        "knowledge-docs",
+        "--parent",
+        "software",
+        "--confirm",
+    ]
+    assert runner.invoke(app, child_args).exit_code == 0
+    checked = json.loads(runner.invoke(app, ["workspace", "domain", "check"]).output)
+    assert checked["status"] == "ok"
+    assert {item["id"] for item in checked["domains"]} == {"software", "python"}
 
 
 def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None:
@@ -139,6 +198,10 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     domain = workspace / "mywork" / "【Example】文档中心"
     repository = tmp_path / "repository"
     domain.mkdir(parents=True)
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
     repository.mkdir()
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     added_workspace = runner.invoke(
@@ -205,6 +268,11 @@ def test_project_create_previews_then_initializes_document_domain(
     workspace = tmp_path / "workspace"
     repository = tmp_path / "new-project"
     workspace.mkdir()
+    (workspace / "mywork").mkdir()
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
     repository.mkdir()
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     added = runner.invoke(
@@ -256,6 +324,10 @@ def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, m
         assert added.exit_code == 0, added.output
         note = root / "mynote" / "知识-相同路径.md"
         note.parent.mkdir()
+        (root / "mynote/_空间.md").write_text(
+            "---\nname: 知识\nspace_id: knowledge\nspace_type: knowledge\nstatus: active\n---\n",
+            encoding="utf-8",
+        )
         note.write_text(
             "---\nname: 相同路径\ndescription: test\ntype: knowledge\n"
             "status: current\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
@@ -865,10 +937,10 @@ def _create_domain(workspace: Path, name: str, *, create_moc: bool = True) -> Pa
 
 
 def test_sync_reports_bad_metadata_without_blocking_generated_views(workspace: Path) -> None:
-    config = workspace / "_campfire/workspaces/test/config/governance.json"
-    governance = json.loads(config.read_text(encoding="utf-8"))
-    governance["managed_roots"] = ["mywork/Project"]
-    config.write_text(json.dumps(governance), encoding="utf-8")
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
     domain = _create_domain(workspace, "Project")
     (domain / "需求-旧文档.md").write_text("# 缺少元数据\n", encoding="utf-8")
 
@@ -883,10 +955,10 @@ def test_sync_reports_bad_metadata_without_blocking_generated_views(workspace: P
 
 
 def test_scoped_sync_ignores_structural_issue_outside_scope(workspace: Path) -> None:
-    config = workspace / "_campfire/workspaces/test/config/governance.json"
-    governance = json.loads(config.read_text(encoding="utf-8"))
-    governance["managed_roots"] = ["mywork/Healthy", "mywork/Broken"]
-    config.write_text(json.dumps(governance), encoding="utf-8")
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
     healthy = _create_domain(workspace, "Healthy")
     _create_domain(workspace, "Broken", create_moc=False)
     (healthy / "记录-进展.md").write_text("# 进展\n", encoding="utf-8")

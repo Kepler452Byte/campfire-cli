@@ -29,7 +29,7 @@ from campfire_cli.app.document.service.type_plan import (  # noqa: E402
 from campfire_cli.app.maintenance.service.archive_service import (
     build_result as build_archive_result,  # noqa: E402
 )
-from campfire_cli.app.maintenance.service.domain_service import check_links
+from campfire_cli.app.maintenance.service.link_service import check_links
 from campfire_cli.app.maintenance.service.moc_service import generate_relations  # noqa: E402
 from campfire_cli.app.migration.service.migration_verifier import after, before  # noqa: E402
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
@@ -143,6 +143,10 @@ class ProjectArchiveTests(unittest.TestCase):
     def make_vault(self, root: Path) -> Path:
         domain = root / "mywork" / "【测试】文档中心"
         domain.mkdir(parents=True)
+        (root / "mywork/_空间.md").write_text(
+            "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+            encoding="utf-8",
+        )
         (domain / "_领域.md").write_text(
             '---\nname: 测试项目\ndomain_id: test-project\ndomain_type: project-domain\ngovernance: project-docs\nmoc: "[[MOC-测试项目]]"\nstatus: active\n---\n',
             encoding="utf-8",

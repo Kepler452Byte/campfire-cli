@@ -54,6 +54,63 @@ class WorkspaceCreateRequest(BaseModel):
     make_default: bool = False
 
 
+class Space(BaseModel):
+    id: str
+    name: str
+    path: str
+    type: str
+    status: str = "active"
+
+
+class SpaceListResult(BaseModel):
+    status: str = "ok"
+    spaces: list[Space] = Field(default_factory=list)
+
+
+class SpaceCheckResult(BaseModel):
+    status: str
+    spaces: list[Space] = Field(default_factory=list)
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SpaceCreateResult(BaseModel):
+    status: str
+    space: Space
+    operations: list[dict[str, str]] = Field(default_factory=list)
+    write_performed: bool = False
+
+
+class Domain(BaseModel):
+    id: str
+    name: str
+    path: Path
+    space_id: str
+    type: str
+    governance: str
+    moc: str
+    parent_domain: str | None = None
+    project_id: str | None = None
+    status: str = "active"
+
+
+class DomainListResult(BaseModel):
+    status: str = "ok"
+    domains: list[Domain] = Field(default_factory=list)
+
+
+class DomainCheckResult(BaseModel):
+    status: str
+    domains: list[Domain] = Field(default_factory=list)
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class DomainCreateResult(BaseModel):
+    status: str
+    domain: Domain
+    operations: list[dict[str, str]] = Field(default_factory=list)
+    write_performed: bool = False
+
+
 class ProjectEntry(BaseModel):
     id: str
     workspace_id: str

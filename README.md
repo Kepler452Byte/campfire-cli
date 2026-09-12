@@ -29,6 +29,13 @@ campfire version
 ```bash
 campfire workspace add --id personal --path /path/to/vault --default
 campfire workspace create --id new-vault --path /new/path --default
+campfire workspace space list --workspace personal
+campfire workspace domain list --workspace personal
+campfire workspace domain check --workspace personal
+campfire workspace space create --id research --name "研究" --path myresearch --type research
+campfire workspace space create --id research --name "研究" --path myresearch --type research --confirm
+campfire workspace domain create --id distributed-systems --name "分布式系统" --path "mynote/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs
+campfire workspace domain create --id distributed-systems --name "分布式系统" --path "mynote/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs --confirm
 campfire workspace project add --id joyit-ai-gateway --workspace personal --name "JoyIT AI Gateway" --document-domain "mywork/【JoyIT AI Gateway】文档中心" --local-path /path/to/aigateway
 campfire workspace project list --workspace personal
 campfire --workspace personal document profile list

@@ -13,7 +13,9 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 ## 2. 核心业务对象
 
 - **Workspace**：人和 Agent 共享的上下文边界；一个 Workspace 可对应一个 Markdown Vault。
-- **Project**：Workspace 连接的工作资源，关联代码仓库、本地路径和项目文档领域。
+- **Space**：Workspace 下的顶级内容容器，例如知识、工作；由 `_空间.md` 声明。
+- **Domain**：Space 内可任意嵌套的内容边界；由 `_领域.md` 声明并拥有自动 MOC。
+- **Project**：Workspace 连接的外部工作资源，关联代码仓库、本地路径和一个项目根 Domain。
 - **Participant**：参与协作的人类或 Agent。
 - **Document**：知识、项目、决策、计划、问题、记录等持久内容。
 - **Task Channel**：围绕一项任务持续记录负责人、状态、进展、阻塞、交接、结果和验收的异步协作通道。
@@ -24,7 +26,7 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 
 ```text
 工作与学习场景
-  收件箱 ──> 知识 / 项目 / 任务 / 日志 / 周报
+  收件箱 ──> Space ──> Domain 树 ──> 文档
      │                    │
      └──── 待人确认 <─────┘
 
@@ -49,6 +51,7 @@ Task Channel 借鉴 Go 的原则：**Do not communicate by sharing memory; inste
         ┌─────────┴─────────┐
         │ Application Apps  │
         │ workspace         │
+        │  space / domain   │
         │ document          │
         │ migration         │
         │ maintenance       │
@@ -77,6 +80,7 @@ Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`know
 | 数据 | 唯一事实来源 | 派生或运行副本 |
 | --- | --- | --- |
 | 正文、知识、项目、任务 | Workspace 中的 Markdown | SQLite 索引、MOC、Base、报告 |
+| Space、Domain 结构 | Workspace 中的 `_空间.md`、`_领域.md` | CLI 发现结果、MOC |
 | 治理规则 | `~/.campfire/workspaces/<id>/config/` | 校验结果与执行计划 |
 | Workspace、Project 注册关系 | `~/.campfire/campfire.db` | JSON 导入导出备份 |
 | Campfire Skills | Python 包内 `resources/skills/` | 全局 Agent Skill 目录 |
@@ -93,6 +97,7 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
 5. 有歧义的分类和迁移进入待确认，不由 Agent 擅自决定。
 6. Markdown 内容可脱离 Campfire 阅读和迁移；SQLite 丢失后可以重建。
 7. 只有一个用户级 SQLite；所有 Workspace 业务表必须携带 `workspace_id`，Repository 查询不得越界。
+8. 正式文档必须归入 Domain；Space 不直接替代 Domain，系统区域不伪装成 Space。
 
 ## 7. 演进方向
 

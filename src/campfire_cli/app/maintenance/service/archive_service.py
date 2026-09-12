@@ -22,7 +22,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.app.maintenance.service.domain_service import parse_frontmatter
+from campfire_cli.app.workspace.service.structure_service import (
+    DomainService,
+)
+from campfire_cli.app.workspace.service.structure_service import (
+    parse_marker as parse_frontmatter,
+)
 
 ARCHIVE_REASONS = {"superseded", "completed", "cancelled", "obsolete", "merged", "project-closed"}
 REASONS_REQUIRING_SUCCESSOR = {"superseded", "merged"}
@@ -74,16 +79,11 @@ def is_under(path: Path, parent: Path) -> bool:
 
 
 def project_domains(vault_root: Path, config: dict[str, Any]) -> list[Path]:
-    marker_name = config.get("domain_marker", "_领域.md")
-    domains: set[Path] = set()
-    for relative_root in config.get("managed_roots", []):
-        root = (vault_root / relative_root).resolve()
-        if not root.is_dir():
-            continue
-        for marker in [root / marker_name, *root.rglob(marker_name)]:
-            if marker.is_file() and parse_frontmatter(marker).get("governance") == "project-docs":
-                domains.add(marker.parent.resolve())
-    return sorted(domains, key=lambda path: (len(path.parts), str(path)))
+    domains, _ = DomainService(vault_root, vault_root).discover()
+    return sorted(
+        (item.path for item in domains if item.governance == "project-docs"),
+        key=lambda path: (len(path.parts), str(path)),
+    )
 
 
 def owning_domain(path: Path, domains: list[Path]) -> Path | None:

@@ -23,12 +23,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.app.maintenance.service.domain_service import (
-    END_MARKER,
-    START_MARKER,
-    Domain,
-    parse_frontmatter,
-)
+from campfire_cli.app.workspace.schema.workspace_schema import Domain
+from campfire_cli.app.workspace.service.structure_service import parse_marker as parse_frontmatter
+
+START_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"
+END_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->"
 
 PROJECT_DOC_TYPES = {
     "moc": "MOC-",
@@ -112,7 +111,7 @@ def title_keywords(path: Path) -> set[str]:
 
 
 def direct_notes(domain: Domain, marker_name: str) -> list[Path]:
-    excluded = {marker_name, f"{domain.moc_name}.md"}
+    excluded = {marker_name, f"{domain.moc}.md"}
     return sorted(
         [path for path in domain.path.glob("*.md") if path.name not in excluded],
         key=lambda path: path.name.casefold(),
@@ -211,16 +210,14 @@ def generate_domain_content(
     domain: Domain, domains: list[Domain], notes: list[Path], relation_page: Path | None
 ) -> str:
     children = sorted(
-        [item for item in domains if item.parent_domain == domain.domain_id],
+        [item for item in domains if item.parent_domain == domain.id],
         key=lambda item: item.name.casefold(),
     )
-    parent = next((item for item in domains if item.domain_id == domain.parent_domain), None)
+    parent = next((item for item in domains if item.id == domain.parent_domain), None)
     lines = ["## 领域位置", ""]
-    lines.append(
-        f"- 父领域：[[{parent.moc_name}|{parent.name}]]" if parent else "- 父领域：当前治理根"
-    )
+    lines.append(f"- 父领域：[[{parent.moc}|{parent.name}]]" if parent else "- 父领域：当前治理根")
     lines.extend(["", "## 子领域", ""])
-    lines.extend([f"- [[{child.moc_name}|{child.name}]]" for child in children] or ["- 暂无"])
+    lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
     lines.extend(["", "## 本领域文档", ""])
     lines.extend([f"- [[{note.stem}]]" for note in notes] or ["- 暂无"])
     lines.extend(["", "## 自动关系", ""])
@@ -237,16 +234,14 @@ def generate_project_domain_content(
 ) -> str:
     """project-docs 领域的 MOC 自动区域：按文档类型分组并列出状态，不计算相似度关系。"""
     children = sorted(
-        [item for item in domains if item.parent_domain == domain.domain_id],
+        [item for item in domains if item.parent_domain == domain.id],
         key=lambda item: item.name.casefold(),
     )
-    parent = next((item for item in domains if item.domain_id == domain.parent_domain), None)
+    parent = next((item for item in domains if item.id == domain.parent_domain), None)
     lines = ["## 领域位置", ""]
-    lines.append(
-        f"- 父领域：[[{parent.moc_name}|{parent.name}]]" if parent else "- 父领域：当前治理根"
-    )
+    lines.append(f"- 父领域：[[{parent.moc}|{parent.name}]]" if parent else "- 父领域：当前治理根")
     lines.extend(["", "## 子领域", ""])
-    lines.extend([f"- [[{child.moc_name}|{child.name}]]" for child in children] or ["- 暂无"])
+    lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
     lines.extend(["", "## 文档索引", ""])
     project_doc_types = project_doc_types or PROJECT_DOC_TYPES
     by_type: dict[str, list[tuple[Path, str]]] = {}

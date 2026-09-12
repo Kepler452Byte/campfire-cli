@@ -13,7 +13,16 @@ def iter_documents(root: Path, config: dict[str, Any]) -> list[Path]:
     ignored = set(config.get("ignored_directories", []))
     exempt = set(config.get("exempt_basenames", []))
     documents: set[Path] = set()
-    for raw_root in config.get("scope_roots", []):
+    if config.get("space_marker"):
+        spaces = [
+            marker.parent.relative_to(root).as_posix()
+            for marker in root.glob(f"*/{config['space_marker']}")
+        ]
+        inboxes = [value for value in config.get("scope_roots", []) if value.startswith("_收件箱/")]
+        scope_roots = [*spaces, *inboxes]
+    else:
+        scope_roots = config.get("scope_roots", [])
+    for raw_root in scope_roots:
         scope = safe_path(root, raw_root)
         if not scope.exists():
             continue

@@ -20,11 +20,11 @@ from campfire_cli.app.maintenance.schema.maintenance_schema import (
     MaintenanceRunRecord,
 )
 from campfire_cli.app.maintenance.service import archive_service as project_archive
-from campfire_cli.app.maintenance.service import domain_service as governance_check
 from campfire_cli.app.maintenance.service import moc_service as governance_sync
 from campfire_cli.app.maintenance.service.maintenance_protocol import (
     MaintenanceRepositoryProtocol,
 )
+from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.filesystem import atomic_write
 from campfire_cli.common.filesystem.locking import workspace_write_lock
@@ -205,9 +205,9 @@ class MaintenanceService:
         )
 
     def sync(self, dry_run: bool = False, scope: str | None = None) -> MaintenanceResult:
-        domains, issues = governance_check.discover_domains(
-            self._settings.vault_root, self._settings.governance
-        )
+        domains, issues = DomainService(
+            self._settings.vault_root, self._settings.state_root
+        ).discover()
         if scope:
             scope_path = (self._settings.vault_root / scope).resolve()
             if not self._is_within_workspace(scope_path):
@@ -248,11 +248,10 @@ class MaintenanceService:
         generated_snapshot: dict[str, str | None] = {}
         note_count = 0
         notes_by_domain = {
-            domain.domain_id: governance_sync.direct_notes(domain, marker_name)
-            for domain in domains
+            domain.id: governance_sync.direct_notes(domain, marker_name) for domain in domains
         }
         project_domain_ids = {
-            domain.domain_id for domain in domains if domain.governance == "project-docs"
+            domain.id for domain in domains if domain.governance == "project-docs"
         }
         domain_by_note = {
             note: domain_id
@@ -273,8 +272,8 @@ class MaintenanceService:
             int(self._settings.governance.get("cross_domain_related_limit", 2)),
             float(self._settings.governance.get("cross_domain_min_score", 0.06)),
         )
-        for domain in sorted(domains, key=lambda item: item.domain_id):
-            notes = notes_by_domain[domain.domain_id]
+        for domain in sorted(domains, key=lambda item: item.id):
+            notes = notes_by_domain[domain.id]
             note_count += len(notes)
             if domain.governance == "project-docs":
                 generated = governance_sync.generate_project_domain_content(
@@ -297,7 +296,7 @@ class MaintenanceService:
                 generated = governance_sync.generate_domain_content(
                     domain, domains, notes, relation_page
                 )
-            moc = domain.path / f"{domain.moc_name}.md"
+            moc = domain.path / f"{domain.moc}.md"
             if not moc.is_file():
                 return MaintenanceResult(
                     status="blocked",
