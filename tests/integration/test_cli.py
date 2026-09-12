@@ -482,11 +482,11 @@ def test_base_sync_is_idempotent_and_preserves_unknown_base(workspace: Path) -> 
     custom.write_text("views: []\n", encoding="utf-8")
     preview = runner.invoke(app, ["--workspace", str(workspace), "base", "sync", "--dry-run"])
     assert preview.exit_code == 0, preview.output
-    assert len(json.loads(preview.output)["operations"]) == 5
+    assert len(json.loads(preview.output)["operations"]) == 6
     applied = runner.invoke(app, ["--workspace", str(workspace), "base", "sync"])
     assert applied.exit_code == 0, applied.output
     assert custom.read_text(encoding="utf-8") == "views: []\n"
-    assert len(list(target.glob("*.base"))) == 6
+    assert len(list(target.glob("*.base"))) == 7
     managed = target / "任务工作台.base"
     managed.write_text(
         yaml.safe_dump(yaml.safe_load(managed.read_text(encoding="utf-8")), allow_unicode=True),
@@ -1102,6 +1102,127 @@ def test_document_commands_delegate_workspace_markers(workspace: Path) -> None:
     assert payload["status"] == "not-applicable"
     assert payload["owner_command"] == "workspace space check"
     assert payload["issues"] == []
+
+
+def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
+    arguments = [
+        "--workspace",
+        str(workspace),
+        "decision",
+        "create",
+        "--key",
+        "maintenance-requested-by",
+        "--question",
+        "历史任务的交办人是谁？",
+        "--context",
+        "正文没有记录交办人。",
+        "--recommendation",
+        "请项目负责人确认。",
+        "--option",
+        "领导",
+        "--option",
+        "个人任务",
+        "--related-document",
+        "mywork/任务-示例.md",
+        "--source-type",
+        "maintenance",
+        "--source-id",
+        "run-001",
+        "--session-provider",
+        "claude-code",
+        "--session-id",
+        "session-001",
+        "--actor",
+        "agent",
+    ]
+    created = runner.invoke(app, arguments)
+    assert created.exit_code == 0, created.output
+    payload = json.loads(created.output)
+    decision_id = payload["decision"]["id"]
+    projection = workspace / f"_收件箱/待用户确认/待确认-Decision-{decision_id}.md"
+    assert payload["status"] == "created"
+    assert projection.is_file()
+    assert "AUTO-GENERATED:CAMPFIRE-DECISION" in projection.read_text(encoding="utf-8")
+    projection_check = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "inspect",
+            "--path",
+            projection.relative_to(workspace).as_posix(),
+        ],
+    )
+    assert json.loads(projection_check.output)["issues"] == []
+
+    refreshed = json.loads(runner.invoke(app, arguments).output)
+    assert refreshed["status"] == "refreshed"
+    assert refreshed["decision"]["id"] == decision_id
+    assert [event["event_type"] for event in refreshed["events"]] == [
+        "decision.created",
+        "decision.refreshed",
+    ]
+
+    pending = json.loads(
+        runner.invoke(
+            app, ["--workspace", str(workspace), "decision", "list", "--status", "pending"]
+        ).output
+    )
+    assert [item["id"] for item in pending["decisions"]] == [decision_id]
+
+    answered = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "decision",
+            "answer",
+            decision_id,
+            "--answer",
+            "这是领导交办任务",
+            "--answered-by",
+            "shaoyuanhong",
+        ],
+    )
+    assert answered.exit_code == 0, answered.output
+    assert json.loads(answered.output)["decision"]["status"] == "answered"
+    assert not projection.exists()
+
+    closed = runner.invoke(
+        app,
+        ["--workspace", str(workspace), "decision", "close", decision_id, "--actor", "agent"],
+    )
+    assert closed.exit_code == 0, closed.output
+    closed_payload = json.loads(closed.output)
+    assert closed_payload["decision"]["status"] == "closed"
+    assert [event["event_type"] for event in closed_payload["events"]][-2:] == [
+        "decision.answered",
+        "decision.closed",
+    ]
+
+
+def test_decision_rejects_invalid_transition(workspace: Path) -> None:
+    created = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "decision",
+            "create",
+            "--key",
+            "needs-answer",
+            "--question",
+            "需要确认吗？",
+            "--source-type",
+            "agent",
+        ],
+    )
+    decision_id = json.loads(created.output)["decision"]["id"]
+
+    closed = runner.invoke(app, ["--workspace", str(workspace), "decision", "close", decision_id])
+    assert closed.exit_code != 0
+    assert "expected=answered" in closed.output
 
 
 def test_filtered_check_reports_scope_status_and_workspace_status(workspace: Path) -> None:

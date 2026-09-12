@@ -17,6 +17,12 @@ campfire document inspect --path <file>
 campfire document type sync --confirm
 campfire document type list
 campfire document profile list
+campfire decision create --key <key> --question <question> --source-type <source>
+campfire decision list --status pending
+campfire decision show <decision-id>
+campfire decision answer <decision-id> --answer <answer> --answered-by <actor>
+campfire decision close <decision-id>
+campfire decision sync
 campfire maintenance check --summary
 campfire maintenance plan --id <plan-id> --scope <path> [--spec <yaml-or-json>]
 campfire maintenance show --plan <plan-id>

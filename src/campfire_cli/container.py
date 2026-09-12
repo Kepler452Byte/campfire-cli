@@ -5,6 +5,11 @@ from pathlib import Path
 
 from campfire_cli.app.base.repository.base_repository import BaseRepository
 from campfire_cli.app.base.service.base_service import BaseService
+from campfire_cli.app.decision.repository.decision_repository import SqliteDecisionRepository
+from campfire_cli.app.decision.service.decision_projection_service import (
+    DecisionProjectionService,
+)
+from campfire_cli.app.decision.service.decision_service import DecisionService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
@@ -28,6 +33,7 @@ class AppContainer:
     restructure: RestructureService
     skill: SkillService
     base: BaseService
+    decision: DecisionService
 
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:
@@ -50,10 +56,15 @@ class AppContainer:
         restructure = RestructureService(settings, restructure_repository)
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())
+        decision = DecisionService(
+            SqliteDecisionRepository(session, resolution.workspace_id),
+            DecisionProjectionService(settings),
+        )
         return cls(
             settings=settings,
             maintenance=maintenance,
             restructure=restructure,
             skill=skill,
             base=base,
+            decision=decision,
         )

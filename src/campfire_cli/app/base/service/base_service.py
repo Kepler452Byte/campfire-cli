@@ -9,6 +9,7 @@ from campfire_cli.app.base.repository.base_repository import BaseRepository
 from campfire_cli.app.base.schema.base_schema import BaseInfo, BaseResult
 from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.common.governance import enrich_issue, snapshot_changes
+from campfire_cli.config.defaults import builtin_config
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -118,7 +119,14 @@ class BaseService:
         return self._settings.vault_root / self._settings.bases.get("target", "治理视图")
 
     def _managed_names(self) -> list[str]:
-        return list(self._settings.bases.get("managed_bases", []))
+        return list(
+            dict.fromkeys(
+                [
+                    *builtin_config("bases.json").get("managed_bases", []),
+                    *self._settings.bases.get("managed_bases", []),
+                ]
+            )
+        )
 
     @staticmethod
     def _same_definition(left: str, right: str) -> bool:

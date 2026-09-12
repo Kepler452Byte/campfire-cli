@@ -84,6 +84,48 @@ class MaintenanceRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class Decision(Base):
+    __tablename__ = "decisions"
+    __table_args__ = (UniqueConstraint("workspace_id", "dedupe_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(160))
+    question: Mapped[str] = mapped_column(Text)
+    context: Mapped[str] = mapped_column(Text, default="")
+    recommendation: Mapped[str] = mapped_column(Text, default="")
+    options_json: Mapped[str] = mapped_column(Text, default="[]")
+    related_documents_json: Mapped[str] = mapped_column(Text, default="[]")
+    source_type: Mapped[str] = mapped_column(String(64))
+    source_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    session_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answered_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DecisionEvent(Base):
+    __tablename__ = "decision_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    decision_id: Mapped[str] = mapped_column(
+        ForeignKey("decisions.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    actor: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
 class RestructureBatch(Base):
     __tablename__ = "restructure_batches"
     __table_args__ = (UniqueConstraint("workspace_id", "batch_name"),)

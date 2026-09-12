@@ -20,6 +20,7 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 - **Document**：知识、项目、决策、计划、问题、记录等持久内容。
 - **Task Channel**：围绕一项任务持续记录负责人、状态、进展、阻塞、交接、结果和验收的异步协作通道。
 - **Inbox Item**：尚未完成归属、类型或意图判断的输入，以及需要人类确认的问题。
+- **Decision**：人类或高级 Agent 必须回答的持久判断；以当前状态和追加事件跨会话传递。
 - **Generated View**：由事实数据生成的 MOC、Base、报告和索引，不由人手重复维护。
 
 ## 3. 业务架构
@@ -63,11 +64,13 @@ Task Channel 借鉴 Go 的原则：**Do not communicate by sharing memory; inste
       filesystem / database / reports
                   │
       ┌───────────┴───────────┐
- Markdown Workspace Adapter   用户级状态
+Markdown Workspace Adapter   用户级状态
  文档事实、任务、知识、项目    ~/.campfire/
                               campfire.db + config/
                               batches/reports/locks
 ```
+
+Decision 以 SQLite 当前快照和追加事件为 SSOT。每个 pending Decision 在 Vault 中生成只读 Markdown 投影，并由 Base 聚合为待确认工作台；Notification 与未来 Task Channel 只通过稳定 Decision id 和事件联动，不反向拥有 Decision 状态。
 
 `app/` 按可独立理解的业务能力组织，CLI 只做参数和输出适配，Service 承担业务流程，Repository 负责外部读写。`common/` 只放跨业务复用、无独立业务流程的原子能力；不能为了“复用”把业务编排下沉到 common。
 

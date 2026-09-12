@@ -8,6 +8,7 @@ import typer
 
 from campfire_cli import __version__
 from campfire_cli.app.base.cli.base_cli import base_cli
+from campfire_cli.app.decision.cli.decision_cli import decision_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
 from campfire_cli.app.skill.cli.skill_cli import skill_cli
@@ -55,6 +56,7 @@ workspace_cli.add_typer(config_cli, name="config")
 workspace_cli.add_typer(restructure_cli, name="restructure")
 app.add_typer(workspace_cli, name="workspace")
 app.add_typer(document_cli, name="document")
+app.add_typer(decision_cli, name="decision")
 app.add_typer(maintenance_cli, name="maintenance")
 app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")

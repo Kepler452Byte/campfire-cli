@@ -71,13 +71,13 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 
 预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤；需要改变已有主物理位置时再加载 `campfire-workspace-restructure`。
 
-## 待确认文档
+## Pending Decision
 
-Agent 未获授权而静默保存，或对象、资源、事实、目标文档仍存在关键歧义时，在 `_收件箱/待用户确认/` 创建待确认文档。它是工作流对象，不是正式知识或项目事实。
+Agent 未获授权而静默保存，或对象、资源、事实、目标文档仍存在关键歧义时，调用 `campfire decision create`。Decision 是 SQLite 中的工作流事实，不是正式知识或项目事实；Agent 不手工创建待确认 Markdown。
 
-待确认文档使用 `type: human-request`、`status: draft` 和 `待确认-` 文件名前缀，并继承公共 `base` Profile；不新增专属生命周期或扩展字段。正文说明发现与价值、可核验证据、来源、建议 Workspace/Project/领域/类型、建议创建或更新的文档，以及唯一关键问题。类型和字段始终以 CLI Schema 为准。
+Decision 应提供稳定幂等 key、唯一问题、背景与证据、候选选项、推荐方案、关联文档和来源 Session。CLI 为 pending Decision 自动生成 `type: human-request`、`status: draft` 的只读投影；投影使用公共 `base` Profile，不新增专属生命周期或扩展字段。
 
-用户接受后创建或更新正式文档，再由 `campfire-inbox-triage` 关闭确认项；用户拒绝则不晋升。正式文档直接使用自身类型的生命周期，不增加通用 `pending-review`。
+获得回答后调用 `decision answer`；原流程使用答案完成创建或更新后调用 `decision close`。用户拒绝则取消或记录拒绝答案，不晋升为正式文档。正式文档直接使用自身类型的生命周期，不增加通用 `pending-review`。
 
 ## 自动沉淀边界
 

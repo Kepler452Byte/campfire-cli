@@ -18,6 +18,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 5. 依次运行 `maintenance show --plan <id>`、`maintenance apply --plan <id>` 预检、`maintenance apply --plan <id> --confirm` 执行和 `maintenance verify --plan <id>` 局部验收。出现 `concurrent-change` 或配置变化时废弃旧计划并重新生成。
 6. 使用 `maintenance sync --scope <path> --dry-run` 预览当前范围的 MOC、关系页与治理视图变更，审查后去掉 `--dry-run`。日常完整流程使用 `maintenance run --scope <path>`。
 7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。涉及跨领域移动、领域拆分或合并时停止，改用 `campfire-workspace-restructure`。
+8. 无法从正文、领域上下文或项目事实唯一决定时，统一调用 `campfire decision create`。不要判断当前是交互会话还是定时任务；当前对话获得回答后调用 `decision answer`，答案被原任务消费后调用 `decision close`。未回答事项保持 `pending` 并由 CLI 投影到待确认工作台。
 
 ## 路由
 
@@ -38,7 +39,8 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
    |      -> campfire-workspace-restructure
    |
    `-- 归属或语义不能唯一确定
-          -> _收件箱/待用户确认
+          -> decision create
+          -> pending Decision 自动投影到 _收件箱/待用户确认
 ```
 
 Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校验、计划、哈希保护、执行、引用更新和审计；用户负责确认歧义与高风险归属。不要由 Agent 手工执行本可进入 Maintenance Plan 的批量修改。
@@ -52,6 +54,7 @@ Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校�
 - Maintenance 只允许在原 Domain 内按 type 修正文件名，不改变文档主物理归属，不进行跨领域移动、领域合并或拆分。
 - 写入返回 `concurrent-change` 时停止并重新检查，不覆盖其他会话的新内容。
 - Markdown 是内容事实来源，用户级配置是治理契约；SQLite 只保存索引与工作流状态。
+- Decision 是工作流对象：SQLite 当前状态与追加事件是 SSOT，`待确认-Decision-*.md` 只读投影不得手工维护。
 
 ## 内容与任务
 
