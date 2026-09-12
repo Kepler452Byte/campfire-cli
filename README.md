@@ -29,8 +29,8 @@ campfire version
 ```bash
 campfire workspace add --id personal --path /path/to/vault --default
 campfire workspace create --id new-vault --path /new/path --default
-campfire project add --id joyit-ai-gateway --workspace personal --name "JoyIT AI Gateway" --document-domain "mywork/【JoyIT AI Gateway】文档中心" --local-path /path/to/aigateway
-campfire project list --workspace personal
+campfire workspace project add --id joyit-ai-gateway --workspace personal --name "JoyIT AI Gateway" --document-domain "mywork/【JoyIT AI Gateway】文档中心" --local-path /path/to/aigateway
+campfire workspace project list --workspace personal
 campfire --workspace personal document profile list
 campfire --workspace personal document profile show task
 campfire --workspace personal document profile resolve --path "mywork/项目/任务-示例.md"
@@ -46,6 +46,7 @@ campfire workspace export --output campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json --confirm
 campfire workspace resolve
+campfire tree
 campfire --workspace personal maintenance check
 campfire --workspace personal maintenance check --summary
 campfire --workspace personal maintenance plan

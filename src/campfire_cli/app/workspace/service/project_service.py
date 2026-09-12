@@ -25,14 +25,14 @@ class ProjectService:
     def add(self, request: ProjectUpsertRequest) -> ProjectResult:
         if self._repository.get_project(request.project_id):
             raise ConfigurationError(
-                f"Project 已存在：{request.project_id}；请使用 campfire project update"
+                f"Project 已存在：{request.project_id}；请使用 campfire workspace project update"
             )
         return self._save(request)
 
     def update(self, request: ProjectUpsertRequest) -> ProjectResult:
         if not self._repository.get_project(request.project_id):
             raise ConfigurationError(
-                f"Project 未注册：{request.project_id}；请使用 campfire project add"
+                f"Project 未注册：{request.project_id}；请使用 campfire workspace project add"
             )
         return self._save(request)
 

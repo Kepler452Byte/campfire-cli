@@ -135,8 +135,7 @@ class WorkspaceService:
                 (
                     other_id
                     for other_id, entry in registry.workspaces.items()
-                    if other_id != workspace_id
-                    and Path(entry.path).expanduser().resolve() == root
+                    if other_id != workspace_id and Path(entry.path).expanduser().resolve() == root
                 ),
                 None,
             )

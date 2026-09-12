@@ -73,9 +73,7 @@ def project_options(operation: str):
 project_cli.command("add", help="注册一个新 Project；提供本地 Git 路径时自动发现 remote 和分支。")(
     project_options("add")
 )
-project_cli.command("update", help="完整更新一个已注册 Project。")(
-    project_options("update")
-)
+project_cli.command("update", help="完整更新一个已注册 Project。")(project_options("update"))
 
 
 @project_cli.command("list")

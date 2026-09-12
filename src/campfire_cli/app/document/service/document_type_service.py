@@ -48,9 +48,7 @@ class DocumentTypeService:
         }
 
     @staticmethod
-    def _merge_contract(
-        current: dict[str, Any], packaged: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _merge_contract(current: dict[str, Any], packaged: dict[str, Any]) -> dict[str, Any]:
         """Add or update packaged types without deleting Workspace extensions."""
         target = {**current, "version": packaged.get("version", current.get("version"))}
         target["types"] = {
@@ -78,9 +76,7 @@ class DocumentTypeService:
         }
         legacy_ignored = {"assets", "archive", "generated"}
         custom_ignored = [
-            item
-            for item in current.get("ignored_directories", [])
-            if item not in legacy_ignored
+            item for item in current.get("ignored_directories", []) if item not in legacy_ignored
         ]
         target["ignored_directories"] = list(
             dict.fromkeys([*packaged.get("ignored_directories", []), *custom_ignored])

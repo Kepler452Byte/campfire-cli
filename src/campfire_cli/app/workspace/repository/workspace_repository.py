@@ -31,9 +31,7 @@ class SqliteWorkspaceRepository:
         return WorkspaceRegistry(
             default_workspace=default,
             workspaces={
-                row.id: WorkspaceEntry(
-                    path=row.path, status=row.status, default=row.is_default
-                )
+                row.id: WorkspaceEntry(path=row.path, status=row.status, default=row.is_default)
                 for row in rows
             },
         )
@@ -81,9 +79,7 @@ class SqliteWorkspaceRepository:
             row.status = project.status
         return operation
 
-    def replace_registry(
-        self, registry: WorkspaceRegistry, projects: list[ProjectEntry]
-    ) -> None:
+    def replace_registry(self, registry: WorkspaceRegistry, projects: list[ProjectEntry]) -> None:
         with open_session(self._engine) as session, session.begin():
             session.execute(delete(Project))
             session.execute(delete(Workspace))

@@ -14,6 +14,7 @@ runner = CliRunner()
 def test_short_help_is_available_at_every_command_level() -> None:
     commands = [
         ["-h"],
+        ["tree", "-h"],
         ["migration", "-h"],
         ["migration", "inventory", "-h"],
         ["maintenance", "-h"],
@@ -22,8 +23,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["skill", "-h"],
         ["base", "-h"],
         ["workspace", "-h"],
-        ["project", "-h"],
-        ["project", "add", "-h"],
+        ["workspace", "project", "-h"],
+        ["workspace", "project", "add", "-h"],
         ["document", "-h"],
         ["document", "profile", "-h"],
         ["document", "profile", "show", "-h"],
@@ -36,6 +37,25 @@ def test_short_help_is_available_at_every_command_level() -> None:
         result = runner.invoke(app, command)
         assert result.exit_code == 0, (command, result.output)
         assert "help" in result.output.lower()
+
+
+def test_tree_discovers_registered_commands_without_a_parallel_catalog() -> None:
+    result = runner.invoke(app, ["tree"])
+    assert result.exit_code == 0, result.output
+    assert "├── workspace" in result.output
+    assert "│   ├── project" in result.output or "│   └── project" in result.output
+    assert "├── document" in result.output
+    assert "profile" in result.output
+    assert "├── maintenance" in result.output
+    assert "archive" in result.output
+    assert "\n├── project" not in result.output
+    assert "\n└── project" not in result.output
+    assert "database" not in result.output
+
+
+def test_project_is_not_exposed_as_a_top_level_command() -> None:
+    result = runner.invoke(app, ["project", "-h"])
+    assert result.exit_code != 0
 
 
 def test_init_creates_defaults_without_overwriting_existing_file(
@@ -125,6 +145,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     added = runner.invoke(
         app,
         [
+            "workspace",
             "project",
             "add",
             "--id",
@@ -147,9 +168,9 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     payload = json.loads(added.output)
     assert payload["operation"] == "created"
     assert payload["local_path"] == str(repository)
-    listed = json.loads(runner.invoke(app, ["project", "list"]).output)
+    listed = json.loads(runner.invoke(app, ["workspace", "project", "list"]).output)
     assert [item["id"] for item in listed["projects"]] == ["example"]
-    shown = json.loads(runner.invoke(app, ["project", "show", "example"]).output)
+    shown = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
     assert shown["document_domain"] == "mywork/【Example】文档中心"
 
     backup = tmp_path / "registry.json"
@@ -157,16 +178,12 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     assert json.loads(exported.output)["project_count"] == 1
     preview = runner.invoke(app, ["workspace", "import", "--input", str(backup)])
     assert json.loads(preview.output)["status"] == "planned"
-    applied = runner.invoke(
-        app, ["workspace", "import", "--input", str(backup), "--confirm"]
-    )
+    applied = runner.invoke(app, ["workspace", "import", "--input", str(backup), "--confirm"])
     assert json.loads(applied.output)["status"] == "imported"
     assert not (campfire_home / "registry.json").exists()
 
 
-def test_unified_database_isolates_document_state_by_workspace(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, monkeypatch) -> None:
     campfire_home = tmp_path / "campfire-home"
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     for workspace_id in ("left", "right"):
@@ -184,9 +201,7 @@ def test_unified_database_isolates_document_state_by_workspace(
             "status: current\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
             encoding="utf-8",
         )
-        checked = runner.invoke(
-            app, ["--workspace", workspace_id, "maintenance", "check"]
-        )
+        checked = runner.invoke(app, ["--workspace", workspace_id, "maintenance", "check"])
         assert checked.exit_code == 0, checked.output
 
     import sqlite3
@@ -274,9 +289,7 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
 
 
 def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
-    listed = runner.invoke(
-        app, ["--workspace", str(workspace), "document", "profile", "list"]
-    )
+    listed = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "list"])
     assert listed.exit_code == 0, listed.output
     profiles = json.loads(listed.output)["profiles"]
     assert [profile["name"] for profile in profiles] == [
@@ -322,9 +335,7 @@ def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
         '"required": [], "optional": []}}}\n',
         encoding="utf-8",
     )
-    preview = runner.invoke(
-        app, ["--workspace", str(workspace), "document", "profile", "sync"]
-    )
+    preview = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "sync"])
     assert json.loads(preview.output)["status"] == "planned"
     assert json.loads(path.read_text())["version"] == 1
     applied = runner.invoke(
@@ -351,9 +362,7 @@ def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
     contract["types"]["custom"] = {"prefix": "自定义-", "label": "自定义"}
     path.write_text(json.dumps(contract), encoding="utf-8")
 
-    preview = runner.invoke(
-        app, ["--workspace", str(workspace), "document", "type", "sync"]
-    )
+    preview = runner.invoke(app, ["--workspace", str(workspace), "document", "type", "sync"])
     assert json.loads(preview.output)["status"] == "planned"
     assert "board" not in json.loads(path.read_text())["types"]
 

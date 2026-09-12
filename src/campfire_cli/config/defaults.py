@@ -133,9 +133,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
                         "archive_reason",
                         "archived_at",
                     ],
-                    "enums": {
-                        "lifecycle": ["maintained", "proposed", "completed", "archived"]
-                    },
+                    "enums": {"lifecycle": ["maintained", "proposed", "completed", "archived"]},
                     "lists": ["related", "superseded_by"],
                     "dates": ["archived_at"],
                 },

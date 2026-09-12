@@ -85,9 +85,7 @@ class DocumentProfileService:
         return ProfileRegistry(self._type_config, self._repository.load())
 
     @staticmethod
-    def _merge_contract(
-        current: dict[str, Any], packaged: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _merge_contract(current: dict[str, Any], packaged: dict[str, Any]) -> dict[str, Any]:
         """Upgrade standard Profiles while preserving named Workspace extensions."""
         packaged_profiles = packaged.get("profiles", {})
         custom_profiles = {

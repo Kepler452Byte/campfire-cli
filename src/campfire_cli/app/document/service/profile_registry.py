@@ -68,9 +68,7 @@ class ProfileRegistry:
         raw_profiles = schema.get("profiles", {})
         if "base" not in raw_profiles:
             raise ConfigurationError("Frontmatter Schema 缺少 base Profile")
-        self._profiles = {
-            name: self._compile(name, raw_profiles) for name in raw_profiles
-        }
+        self._profiles = {name: self._compile(name, raw_profiles) for name in raw_profiles}
         self._validate_resolver()
 
     def list(self) -> list[EffectiveProfile]:
@@ -93,11 +91,11 @@ class ProfileRegistry:
         )
         if direct:
             return self.get(direct)
-        project_types = set(
-            self._type_config.get("profiles", {}).get("project-docs", [])
-        )
-        if isinstance(document_type, str) and document_type in project_types and (
-            frontmatter.get("project") or is_project_context(path)
+        project_types = set(self._type_config.get("profiles", {}).get("project-docs", []))
+        if (
+            isinstance(document_type, str)
+            and document_type in project_types
+            and (frontmatter.get("project") or is_project_context(path))
         ):
             profile = resolver.get("profile_by_governance", {}).get("project-docs")
             if profile:
@@ -107,9 +105,7 @@ class ProfileRegistry:
     def known_fields(self) -> set[str]:
         return {field for profile in self._profiles.values() for field in profile.allowed}
 
-    def _compile(
-        self, name: str, raw_profiles: dict[str, dict[str, Any]]
-    ) -> EffectiveProfile:
+    def _compile(self, name: str, raw_profiles: dict[str, dict[str, Any]]) -> EffectiveProfile:
         raw = raw_profiles[name]
         parent_name = raw.get("extends")
         if name == "base" and parent_name:
@@ -120,22 +116,16 @@ class ProfileRegistry:
         required = ordered_union(parent.required if parent else (), raw.get("required", []))
         optional = ordered_union(parent.optional if parent else (), raw.get("optional", []))
         enums = dict(parent.enums) if parent else {}
-        enums.update(
-            {key: tuple(value) for key, value in raw.get("enums", {}).items()}
-        )
+        enums.update({key: tuple(value) for key, value in raw.get("enums", {}).items()})
         lists = ordered_union(parent.lists if parent else (), raw.get("lists", []))
         dates = ordered_union(parent.dates if parent else (), raw.get("dates", []))
         conditions = tuple(
             [*(parent.conditional_required if parent else ()), *raw.get("conditional_required", [])]
         )
         order = tuple(raw.get("field_order", parent.field_order if parent else []))
-        unknown_fields = raw.get(
-            "unknown_fields", parent.unknown_fields if parent else "preserve"
-        )
+        unknown_fields = raw.get("unknown_fields", parent.unknown_fields if parent else "preserve")
         if unknown_fields not in {"preserve", "report"}:
-            raise ConfigurationError(
-                f"Profile {name} unknown_fields 必须是 preserve 或 report"
-            )
+            raise ConfigurationError(f"Profile {name} unknown_fields 必须是 preserve 或 report")
         allowed = set(required) | set(optional)
         constrained = set(enums) | set(lists) | set(dates)
         condition_fields = {
@@ -145,9 +135,7 @@ class ProfileRegistry:
         }
         invalid_constraints = sorted((constrained | condition_fields) - allowed)
         if invalid_constraints:
-            raise ConfigurationError(
-                f"Profile {name} 约束了未允许字段：{invalid_constraints}"
-            )
+            raise ConfigurationError(f"Profile {name} 约束了未允许字段：{invalid_constraints}")
         if set(order) != allowed:
             missing = sorted(allowed - set(order))
             extra = sorted(set(order) - allowed)

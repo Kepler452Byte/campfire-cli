@@ -45,13 +45,13 @@ app = typer.Typer(
     no_args_is_help=True,
     context_settings=CONTEXT_SETTINGS,
 )
-app.add_typer(migration_cli, name="migration")
+workspace_cli.add_typer(project_cli, name="project")
+app.add_typer(workspace_cli, name="workspace")
+app.add_typer(document_cli, name="document")
 app.add_typer(maintenance_cli, name="maintenance")
+app.add_typer(migration_cli, name="migration")
 app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
-app.add_typer(workspace_cli, name="workspace")
-app.add_typer(project_cli, name="project")
-app.add_typer(document_cli, name="document")
 
 
 @app.callback()
@@ -60,7 +60,7 @@ def main(
     workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的 id 或路径"),
 ) -> None:
     """初始化目标 Workspace 的应用依赖。"""
-    if ctx.invoked_subcommand in {None, "version", "init", "workspace", "project", "document"}:
+    if ctx.invoked_subcommand in {None, "version", "init", "workspace", "document"}:
         return
     ctx.obj = LazyContainer(workspace)
 
@@ -69,6 +69,27 @@ def main(
 def version() -> None:
     """显示 CLI 版本。"""
     typer.echo(__version__)
+
+
+def render_command_tree(command: Any, name: str, prefix: str = "") -> list[str]:
+    lines = [prefix + name]
+    if not hasattr(command, "commands"):
+        return lines
+    children = list(command.commands.items())
+    for index, (child_name, child) in enumerate(children):
+        last = index == len(children) - 1
+        connector = "└── " if last else "├── "
+        child_prefix = prefix + ("    " if last else "│   ")
+        child_lines = render_command_tree(child, child_name, child_prefix)
+        child_lines[0] = prefix + connector + child_name
+        lines.extend(child_lines)
+    return lines
+
+
+@app.command("tree")
+def tree(ctx: typer.Context) -> None:
+    """显示完整 CLI 命令树，便于人类和 Agent 渐进式发现能力。"""
+    typer.echo("\n".join(render_command_tree(ctx.find_root().command, "campfire")))
 
 
 @app.command("init")

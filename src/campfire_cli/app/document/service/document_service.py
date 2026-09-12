@@ -16,12 +16,8 @@ from campfire_cli.config.settings import WorkspaceSettings
 class DocumentService:
     def __init__(self, settings: WorkspaceSettings) -> None:
         self._settings = settings
-        self._rules = DocumentRuleService(
-            settings.document_types, settings.frontmatter_schema
-        )
-        self._profiles = ProfileRegistry(
-            settings.document_types, settings.frontmatter_schema
-        )
+        self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
+        self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
 
     def check(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
@@ -46,9 +42,7 @@ class DocumentService:
                 "write_performed": False,
                 "issues": [{"code": "frontmatter-missing", "path": relative_path}],
             }
-        profile = self._profiles.resolve(
-            parsed.frontmatter.get("type"), parsed.frontmatter, path
-        )
+        profile = self._profiles.resolve(parsed.frontmatter.get("type"), parsed.frontmatter, path)
         formatted, errors = format_text(original, list(profile.field_order))
         if errors:
             return {

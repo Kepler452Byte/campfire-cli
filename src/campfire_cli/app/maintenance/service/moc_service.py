@@ -287,11 +287,7 @@ def generate_project_domain_content(
         entries = sorted(by_type.get(doc_type, []), key=lambda item: item[0].name.casefold())
         if not entries:
             continue
-        heading = (
-            label[doc_type]
-            if doc_type in label
-            else project_doc_types[doc_type].rstrip("-")
-        )
+        heading = label[doc_type] if doc_type in label else project_doc_types[doc_type].rstrip("-")
         lines.extend([f"### {heading}", ""])
         for note, status in entries:
             suffix = f" `{status}`" if status else ""

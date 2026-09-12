@@ -19,9 +19,7 @@ class SqliteMaintenanceRepository:
     def replace_current_state(self, documents: list[DocumentState], issues: list[Issue]) -> None:
         self._session.execute(delete(Document).where(Document.workspace_id == self._workspace_id))
         self._session.execute(
-            delete(GovernanceIssue).where(
-                GovernanceIssue.workspace_id == self._workspace_id
-            )
+            delete(GovernanceIssue).where(GovernanceIssue.workspace_id == self._workspace_id)
         )
         self._session.add_all(
             [

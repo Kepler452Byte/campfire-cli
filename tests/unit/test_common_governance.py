@@ -283,9 +283,7 @@ class DocumentTypeTests(unittest.TestCase):
             checked = DocumentRuleService(
                 self.config(), default_configs()["frontmatter-schema.json"]
             ).check_document(root, source)
-            self.assertIn(
-                "document-name-bracket-category", {issue["code"] for issue in checked}
-            )
+            self.assertIn("document-name-bracket-category", {issue["code"] for issue in checked})
 
     def test_plan_keeps_unknown_document_for_semantic_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -478,9 +476,7 @@ class FrontmatterGovernanceTests(unittest.TestCase):
                     }
                 ]
             }
-            ops, issues = preflight_frontmatter(
-                root, plan, self.type_config(), self.schema()
-            )
+            ops, issues = preflight_frontmatter(root, plan, self.type_config(), self.schema())
             self.assertEqual([], issues)
             self.assertEqual(1, apply_frontmatter(ops))
             text = note.read_text(encoding="utf-8")
