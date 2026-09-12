@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "space_marker": "_空间.md",
+  "scope_roots": ["_收件箱/待用户确认"],
+  "ignored_directories": ["assets", "generated", "a_skill"],
+  "exempt_basenames": ["_领域.md", "_空间.md", "README.md", "CLAUDE.md", "AGENTS.md", "COMMAND.md"],
+  "profiles": {"project-docs": ["moc", "product-spec", "tech-spec", "decision", "plan", "issue", "record", "board"]},
+  "types": {
+    "moc": {"prefix": "MOC-", "label": "索引"},
+    "product-spec": {"prefix": "产品-", "label": "产品"},
+    "tech-spec": {"prefix": "技术-", "label": "技术"},
+    "decision": {"prefix": "决策-", "label": "决策"},
+    "plan": {"prefix": "计划-", "label": "计划"},
+    "task": {"prefix": "任务-", "label": "任务"},
+    "human-request": {"prefix": "待确认-", "label": "待用户确认"},
+    "issue": {"prefix": "问题-", "label": "问题"},
+    "record": {"prefix": "记录-", "label": "记录"},
+    "board": {"prefix": "看板-", "label": "看板"},
+    "requirement-doc": {"prefix": "需求-", "label": "需求"},
+    "knowledge": {"prefix": "知识-", "label": "知识"},
+    "prompt": {"prefix": "提示词-", "label": "提示词"},
+    "meeting": {"prefix": "会议-", "label": "会议"},
+    "command": {"prefix": "命令-", "label": "命令"},
+    "weekly-report": {"prefix": "周报-", "label": "周报"},
+    "work-log": {"prefix": "日志-", "label": "日志"}
+  }
+}

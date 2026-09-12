@@ -28,9 +28,7 @@ from campfire_cli.app.workspace.service.structure_service import (
 from campfire_cli.app.workspace.service.structure_service import (
     parse_marker as parse_frontmatter,
 )
-
-ARCHIVE_REASONS = {"superseded", "completed", "cancelled", "obsolete", "merged", "project-closed"}
-REASONS_REQUIRING_SUCCESSOR = {"superseded", "merged"}
+from campfire_cli.config.defaults import builtin_config
 
 
 @dataclass(frozen=True)
@@ -95,6 +93,9 @@ def collect_items(
     vault_root: Path, config: dict[str, Any]
 ) -> tuple[list[ArchiveItem], list[dict[str, str]]]:
     domains = project_domains(vault_root, config)
+    policy = builtin_config("archive-policy.json")
+    archive_reasons = set(policy["reasons"])
+    reasons_requiring_successor = set(policy["reasons_requiring_successor"])
     marker_name = config.get("domain_marker", "_领域.md")
     ignored = set(config.get("ignored_directories", [])) - {"archive", "记录"}
     items: list[ArchiveItem] = []
@@ -128,9 +129,9 @@ def collect_items(
             reason = meta.get("archive_reason", "")
             if not reason:
                 issues.append({"code": "archive-reason-missing", "path": rel})
-            elif reason not in ARCHIVE_REASONS:
+            elif reason not in archive_reasons:
                 issues.append({"code": "archive-reason-invalid", "path": rel, "detail": reason})
-            if reason in REASONS_REQUIRING_SUCCESSOR and not frontmatter_list_has_values(
+            if reason in reasons_requiring_successor and not frontmatter_list_has_values(
                 raw_text, "superseded_by", meta.get("superseded_by", "")
             ):
                 issues.append({"code": "archive-successor-missing", "path": rel})

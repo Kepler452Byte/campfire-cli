@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "target": "治理视图",
+  "managed_bases": ["Vault文档治理.base", "项目文档.base", "待归档文档.base", "收件箱治理.base", "任务工作台.base"],
+  "unknown_base_policy": "ignore",
+  "orphaned_base_policy": "report"
+}

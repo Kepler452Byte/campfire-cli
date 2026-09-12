@@ -20,17 +20,7 @@ from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
-from campfire_cli.config.defaults import default_configs
-
-SYSTEM_DIRECTORIES = (
-    "_收件箱/用户输入",
-    "_收件箱/待用户确认",
-    "治理视图",
-)
-DEFAULT_SPACES = (
-    Space(id="knowledge", name="知识", path="mynote", type="knowledge"),
-    Space(id="work", name="工作", path="mywork", type="work"),
-)
+from campfire_cli.config.defaults import builtin_config, default_configs
 
 
 class WorkspaceService:
@@ -51,9 +41,11 @@ class WorkspaceService:
             raise ConfigurationError(
                 f"目标路径已存在；接入现有 Workspace 请使用 workspace add：{root}"
             )
-        scaffold = (*SYSTEM_DIRECTORIES, *(space.path for space in DEFAULT_SPACES))
+        template = builtin_config("workspace-template.json")
+        spaces = tuple(Space.model_validate(item) for item in template["spaces"])
+        scaffold = (*template["system_directories"], *(space.path for space in spaces))
         directories = self._repository.create_scaffold(root, scaffold)
-        for space in DEFAULT_SPACES:
+        for space in spaces:
             atomic_write(
                 root / space.path / "_空间.md",
                 SpaceService.render_marker(space),

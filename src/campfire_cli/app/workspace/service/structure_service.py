@@ -17,21 +17,15 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
 )
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
+from campfire_cli.config.defaults import builtin_config
 
 SPACE_MARKER = "_空间.md"
 DOMAIN_MARKER = "_领域.md"
-RESERVED_DIRECTORIES = {
-    "_收件箱",
-    "治理视图",
-    "assets",
-    "archive",
-    "generated",
-    "_总览",
-    "记录",
-    "任务",
-    "a_skill",
-}
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
+
+
+def reserved_directories() -> set[str]:
+    return set(builtin_config("workspace-template.json")["reserved_directories"])
 
 
 def parse_marker(path: Path) -> dict[str, str]:
@@ -106,7 +100,7 @@ class SpaceService:
         if (
             relative.is_absolute()
             or len(relative.parts) != 1
-            or relative.name in RESERVED_DIRECTORIES
+            or relative.name in reserved_directories()
         ):
             raise ConfigurationError("Space path 必须是 Workspace 根下的单层非保留目录")
         target = self.root / relative
@@ -168,7 +162,7 @@ class DomainService:
                 if not directory.is_dir() or directory == space_root:
                     continue
                 parts = directory.relative_to(space_root).parts
-                if any(part in RESERVED_DIRECTORIES or part.startswith(".") for part in parts):
+                if any(part in reserved_directories() or part.startswith(".") for part in parts):
                     continue
                 direct_notes = [
                     item for item in directory.glob("*.md") if item.name != DOMAIN_MARKER
@@ -187,7 +181,7 @@ class DomainService:
                     )
             for marker in sorted(space_root.rglob(DOMAIN_MARKER)):
                 if any(
-                    part in RESERVED_DIRECTORIES
+                    part in reserved_directories()
                     for part in marker.relative_to(space_root).parts[:-1]
                 ):
                     continue
@@ -299,7 +293,7 @@ class DomainService:
         if (
             target == space_root
             or space_root not in target.parents
-            or any(part in RESERVED_DIRECTORIES for part in target.relative_to(space_root).parts)
+            or any(part in reserved_directories() for part in target.relative_to(space_root).parts)
         ):
             raise ConfigurationError("Domain path 必须位于指定 Space 下且不能使用保留目录")
         existing = self.discover()[0]

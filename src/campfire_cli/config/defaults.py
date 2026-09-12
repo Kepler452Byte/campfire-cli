@@ -1,239 +1,30 @@
 from __future__ import annotations
 
+import json
+from copy import deepcopy
+from functools import cache
+from importlib.resources import files
 from typing import Any
+
+DEFAULT_CONFIG_NAMES = (
+    "governance.json",
+    "document-types.json",
+    "frontmatter-schema.json",
+    "skills.json",
+    "bases.json",
+)
+
+
+@cache
+def builtin_config(name: str) -> dict[str, Any]:
+    """Load one immutable product default from the packaged JSON SSOT."""
+    resource = files("campfire_cli.resources.defaults").joinpath(name)
+    value = json.loads(resource.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or not isinstance(value.get("version"), int):
+        raise ValueError(f"内置配置缺少整数 version：{name}")
+    return value
 
 
 def default_configs() -> dict[str, dict[str, Any]]:
-    """Return portable defaults for a newly managed Vault."""
-    return {
-        "governance.json": {
-            "version": 1,
-            "inbox": "_收件箱",
-            "space_marker": "_空间.md",
-            "domain_marker": "_领域.md",
-            "ignored_directories": ["assets", "archive", "generated"],
-            "project_reserved_directories": ["任务", "记录", "archive", "_总览", "a_skill"],
-        },
-        "document-types.json": {
-            "version": 2,
-            "space_marker": "_空间.md",
-            "scope_roots": ["_收件箱/待用户确认"],
-            "ignored_directories": ["assets", "generated", "a_skill"],
-            "exempt_basenames": [
-                "_领域.md",
-                "_空间.md",
-                "README.md",
-                "CLAUDE.md",
-                "AGENTS.md",
-                "COMMAND.md",
-            ],
-            "profiles": {
-                "project-docs": [
-                    "moc",
-                    "product-spec",
-                    "tech-spec",
-                    "decision",
-                    "plan",
-                    "issue",
-                    "record",
-                    "board",
-                ]
-            },
-            "types": {
-                "moc": {"prefix": "MOC-", "label": "索引"},
-                "product-spec": {"prefix": "产品-", "label": "产品"},
-                "tech-spec": {"prefix": "技术-", "label": "技术"},
-                "decision": {"prefix": "决策-", "label": "决策"},
-                "plan": {"prefix": "计划-", "label": "计划"},
-                "task": {"prefix": "任务-", "label": "任务"},
-                "human-request": {"prefix": "待确认-", "label": "待用户确认"},
-                "issue": {"prefix": "问题-", "label": "问题"},
-                "record": {"prefix": "记录-", "label": "记录"},
-                "board": {"prefix": "看板-", "label": "看板"},
-                "requirement-doc": {"prefix": "需求-", "label": "需求"},
-                "knowledge": {"prefix": "知识-", "label": "知识"},
-                "prompt": {"prefix": "提示词-", "label": "提示词"},
-                "meeting": {"prefix": "会议-", "label": "会议"},
-                "command": {"prefix": "命令-", "label": "命令"},
-                "weekly-report": {"prefix": "周报-", "label": "周报"},
-                "work-log": {"prefix": "日志-", "label": "日志"},
-            },
-        },
-        "frontmatter-schema.json": {
-            "version": 2,
-            "resolver": {
-                "fallback": "base",
-                "profile_by_type": {"knowledge": "knowledge", "task": "task"},
-                "profile_by_governance": {"project-docs": "project-doc"},
-            },
-            "profiles": {
-                "base": {
-                    "unknown_fields": "preserve",
-                    "field_order": [
-                        "name",
-                        "description",
-                        "type",
-                        "status",
-                        "created",
-                        "updated",
-                        "tags",
-                    ],
-                    "required": [
-                        "name",
-                        "description",
-                        "type",
-                        "status",
-                        "created",
-                        "updated",
-                        "tags",
-                    ],
-                    "optional": [],
-                    "enums": {"status": ["draft", "current", "archived"]},
-                    "lists": ["tags"],
-                    "dates": ["created", "updated"],
-                },
-                "knowledge": {
-                    "extends": "base",
-                    "field_order": [
-                        "name",
-                        "description",
-                        "type",
-                        "status",
-                        "sources",
-                        "related",
-                        "created",
-                        "updated",
-                        "tags",
-                    ],
-                    "required": [],
-                    "optional": ["sources", "related"],
-                    "lists": ["sources", "related"],
-                },
-                "project-doc": {
-                    "extends": "base",
-                    "field_order": [
-                        "name",
-                        "description",
-                        "type",
-                        "project",
-                        "domain",
-                        "status",
-                        "lifecycle",
-                        "related",
-                        "superseded_by",
-                        "archive_requested",
-                        "archive_reason",
-                        "archived_at",
-                        "created",
-                        "updated",
-                        "tags",
-                    ],
-                    "required": ["project", "domain", "lifecycle"],
-                    "optional": [
-                        "related",
-                        "superseded_by",
-                        "archive_requested",
-                        "archive_reason",
-                        "archived_at",
-                    ],
-                    "enums": {"lifecycle": ["maintained", "proposed", "completed", "archived"]},
-                    "lists": ["related", "superseded_by"],
-                    "dates": ["archived_at"],
-                },
-                "task": {
-                    "extends": "base",
-                    "field_order": [
-                        "name",
-                        "description",
-                        "type",
-                        "task_id",
-                        "project",
-                        "status",
-                        "lifecycle",
-                        "priority",
-                        "assignee",
-                        "task_source",
-                        "requested_by",
-                        "requires_human",
-                        "due",
-                        "completed",
-                        "blocked_reason",
-                        "result_summary",
-                        "verification",
-                        "related",
-                        "created",
-                        "updated",
-                        "tags",
-                    ],
-                    "required": [
-                        "task_id",
-                        "project",
-                        "lifecycle",
-                        "task_source",
-                        "assignee",
-                        "requires_human",
-                    ],
-                    "optional": [
-                        "priority",
-                        "requested_by",
-                        "due",
-                        "completed",
-                        "blocked_reason",
-                        "result_summary",
-                        "verification",
-                        "related",
-                    ],
-                    "enums": {
-                        "lifecycle": [
-                            "todo",
-                            "in-progress",
-                            "blocked",
-                            "review",
-                            "completed",
-                            "cancelled",
-                            "archived",
-                        ],
-                        "task_source": ["personal", "assigned"],
-                        "priority": ["urgent", "high", "medium", "low"],
-                    },
-                    "lists": ["assignee", "verification", "related"],
-                    "dates": ["due", "completed"],
-                    "conditional_required": [
-                        {"when": {"task_source": "assigned"}, "require": ["requested_by"]},
-                        {"when": {"lifecycle": "blocked"}, "require": ["blocked_reason"]},
-                        {
-                            "when": {"lifecycle": "completed"},
-                            "require": ["completed", "result_summary", "verification"],
-                        },
-                    ],
-                },
-            },
-        },
-        "skills.json": {
-            "version": 1,
-            "targets": ["~/.claude/skills", "~/.agents/skills"],
-            "managed_skills": [
-                "campfire-workspace-governance",
-                "campfire-context-bootstrap",
-                "campfire-conversation-router",
-                "campfire-document-capture",
-                "campfire-inbox-triage",
-                "campfire-weekly-report-writing",
-            ],
-            "unknown_skill_policy": "ignore",
-            "orphaned_skill_policy": "report",
-        },
-        "bases.json": {
-            "version": 1,
-            "target": "治理视图",
-            "managed_bases": [
-                "Vault文档治理.base",
-                "项目文档.base",
-                "待归档文档.base",
-                "收件箱治理.base",
-                "任务工作台.base",
-            ],
-            "unknown_base_policy": "ignore",
-            "orphaned_base_policy": "report",
-        },
-    }
+    """Return independent copies of configs used to initialize a Workspace."""
+    return {name: deepcopy(builtin_config(name)) for name in DEFAULT_CONFIG_NAMES}

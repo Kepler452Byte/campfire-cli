@@ -14,12 +14,11 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectResult,
     ProjectUpsertRequest,
 )
-from campfire_cli.app.workspace.service.structure_service import DomainService
+from campfire_cli.app.workspace.service.structure_service import DomainService, SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import workspace_write_lock
-
-PROJECT_STATUSES = {"active", "paused", "archived"}
+from campfire_cli.config.defaults import builtin_config
 
 
 class ProjectService:
@@ -52,11 +51,12 @@ class ProjectService:
         structure = DomainService(
             Path(self._repository.load_registry().workspaces[project.workspace_id].path), self._root
         )
+        space_id = self._owning_space_id(structure.spaces, project.document_domain)
         domain_plan = structure.create(
             domain_id=f"project-{project.id}",
             name=project.name,
             path=project.document_domain,
-            space_id="work",
+            space_id=space_id,
             domain_type="project-domain",
             governance="project-docs",
             project_id=project.id,
@@ -74,7 +74,7 @@ class ProjectService:
             domain_id=f"project-{project.id}",
             name=project.name,
             path=project.document_domain,
-            space_id="work",
+            space_id=space_id,
             domain_type="project-domain",
             governance="project-docs",
             project_id=project.id,
@@ -215,10 +215,9 @@ class ProjectService:
             local_path, "remote", "get-url", "origin"
         )
         branch = request.default_branch or self._detect_default_branch(local_path)
-        if request.status not in PROJECT_STATUSES:
-            raise ConfigurationError(
-                f"Project status 必须是：{', '.join(sorted(PROJECT_STATUSES))}"
-            )
+        statuses = set(builtin_config("project-policy.json")["statuses"])
+        if request.status not in statuses:
+            raise ConfigurationError(f"Project status 必须是：{', '.join(sorted(statuses))}")
         project = ProjectEntry(
             id=request.project_id,
             workspace_id=request.workspace_id,
@@ -232,6 +231,21 @@ class ProjectService:
         if not project.name:
             raise ConfigurationError("Project name 不能为空")
         return project, domain_path
+
+    @staticmethod
+    def _owning_space_id(spaces: SpaceService, document_domain: str) -> str:
+        path = PurePosixPath(document_domain)
+        matches = [
+            space
+            for space in spaces.discover()[0]
+            if path == PurePosixPath(space.path) or PurePosixPath(space.path) in path.parents
+        ]
+        if len(matches) != 1:
+            raise ConfigurationError("项目文档领域必须唯一位于一个已声明 Space 下")
+        expected = builtin_config("project-policy.json")["default_space_type"]
+        if matches[0].type != expected:
+            raise ConfigurationError(f"项目文档领域必须位于 {expected} 类型 Space")
+        return matches[0].id
 
     @staticmethod
     def _validate_id(project_id: str) -> None:

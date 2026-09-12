@@ -240,7 +240,7 @@ class MaintenanceService:
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
         profile = self._settings.document_types.get("profiles", {}).get("project-docs", [])
         type_mapping = {
-            name: self._settings.document_types["types"][name]["prefix"]
+            name: self._settings.document_types["types"][name]
             for name in profile
             if name in self._settings.document_types["types"]
         }

@@ -25,19 +25,10 @@ from typing import Any
 
 from campfire_cli.app.workspace.schema.workspace_schema import Domain
 from campfire_cli.app.workspace.service.structure_service import parse_marker as parse_frontmatter
+from campfire_cli.config.defaults import builtin_config
 
 START_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"
 END_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->"
-
-PROJECT_DOC_TYPES = {
-    "moc": "MOC-",
-    "product-spec": "产品-",
-    "tech-spec": "技术-",
-    "decision": "决策-",
-    "plan": "计划-",
-    "issue": "问题-",
-    "record": "记录-",
-}
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]")
 LATIN_RE = re.compile(r"[A-Za-z][A-Za-z0-9.+#_-]{1,}")
@@ -230,7 +221,7 @@ def generate_project_domain_content(
     domains: list[Domain],
     notes: list[Path],
     marker_name: str,
-    project_doc_types: dict[str, str] | None = None,
+    project_doc_types: dict[str, dict[str, str]] | None = None,
 ) -> str:
     """project-docs 领域的 MOC 自动区域：按文档类型分组并列出状态，不计算相似度关系。"""
     children = sorted(
@@ -243,7 +234,11 @@ def generate_project_domain_content(
     lines.extend(["", "## 子领域", ""])
     lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
     lines.extend(["", "## 文档索引", ""])
-    project_doc_types = project_doc_types or PROJECT_DOC_TYPES
+    if project_doc_types is None:
+        config = builtin_config("document-types.json")
+        project_doc_types = {
+            name: config["types"][name] for name in config["profiles"]["project-docs"]
+        }
     by_type: dict[str, list[tuple[Path, str]]] = {}
     for note in notes:
         if note.name in {"README.md", "CLAUDE.md"}:
@@ -256,33 +251,11 @@ def generate_project_domain_content(
         if doc_type not in project_doc_types:
             doc_type = "未分类"
         by_type.setdefault(doc_type, []).append((note, status))
-    label = {
-        "product-spec": "产品",
-        "tech-spec": "技术",
-        "decision": "决策",
-        "plan": "计划",
-        "issue": "问题",
-        "record": "记录",
-        "moc": "导航",
-        "未分类": "未分类",
-    }
-    preferred_order = [
-        "product-spec",
-        "tech-spec",
-        "decision",
-        "plan",
-        "issue",
-        "record",
-        "moc",
-    ]
-    configured_order = [
-        doc_type for doc_type in project_doc_types if doc_type not in preferred_order
-    ]
-    for doc_type in [*preferred_order, *configured_order, "未分类"]:
+    for doc_type in [*project_doc_types, "未分类"]:
         entries = sorted(by_type.get(doc_type, []), key=lambda item: item[0].name.casefold())
         if not entries:
             continue
-        heading = label[doc_type] if doc_type in label else project_doc_types[doc_type].rstrip("-")
+        heading = "未分类" if doc_type == "未分类" else project_doc_types[doc_type]["label"]
         lines.extend([f"### {heading}", ""])
         for note, status in entries:
             suffix = f" `{status}`" if status else ""
