@@ -1,6 +1,6 @@
 """
 SPEC:
-  name: governance_sync
+  name: moc_service
   purpose: 幂等生成领域 MOC 自动区域、相关文档页面、索引缓存和治理报告
   default_env_file: none
   env_override: none
@@ -23,7 +23,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.common.documents.domains import (
+from campfire_cli.app.maintenance.service.domain_service import (
     END_MARKER,
     START_MARKER,
     Domain,
@@ -339,7 +339,8 @@ def relation_markdown(
         for item in items:
             reason = "、".join(item["reasons"]) or "同领域内容相似"
             lines.append(
-                f"- [[{item['target']}|{item['target_name']}]]：`{item['type']}`，得分 `{item['score']:.4f}`；依据：{reason}"
+                f"- [[{item['target']}|{item['target_name']}]]："
+                f"`{item['type']}`，得分 `{item['score']:.4f}`；依据：{reason}"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

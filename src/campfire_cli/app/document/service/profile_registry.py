@@ -86,13 +86,17 @@ class ProfileRegistry:
         self, document_type: Any, frontmatter: dict[str, Any], path: Path | None = None
     ) -> EffectiveProfile:
         resolver = self._schema.get("resolver", {})
-        direct = resolver.get("profile_by_type", {}).get(document_type)
+        direct = (
+            resolver.get("profile_by_type", {}).get(document_type)
+            if isinstance(document_type, str)
+            else None
+        )
         if direct:
             return self.get(direct)
         project_types = set(
             self._type_config.get("profiles", {}).get("project-docs", [])
         )
-        if document_type in project_types and (
+        if isinstance(document_type, str) and document_type in project_types and (
             frontmatter.get("project") or is_project_context(path)
         ):
             profile = resolver.get("profile_by_governance", {}).get("project-docs")

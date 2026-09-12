@@ -19,9 +19,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.common.documents.document_types import (
     frontmatter_value,
-    iter_documents,
     prefix_type,
     prefixed_name,
 )

@@ -1,5 +1,16 @@
 # Maintenance App SPEC
 
-本模块处理后续增量维护、自动生成物同步、两阶段归档和状态库操作。语义计划默认未审批，写操作必须显式确认。
+本模块处理后续增量维护、领域发现、链接检查、MOC 等自动生成物、两阶段归档和状态索引。语义计划默认未审批，写操作必须显式确认。
 
-文档、任务状态、模板枚举和跨字段不变量均委托 `common/governance/`；本模块只负责扫描、过滤、计划、执行和报告编排。写入在治理锁内复核内容快照。
+文档扫描、类型、Profile、任务状态、模板枚举和跨字段不变量均委托 Document App；本模块只负责 Workspace 范围的扫描编排、过滤、计划、执行、派生内容和报告。写入在治理锁内复核内容快照。
+
+```text
+maintenance/
+├── domain_service.py
+├── link_service.py
+├── moc_service.py
+├── archive_service.py
+└── maintenance_service.py
+```
+
+归档是 Maintenance 子用例，对外使用 `campfire maintenance archive check/apply`，不建立独立 Archive App。

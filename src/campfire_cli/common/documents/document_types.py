@@ -72,22 +72,6 @@ def set_frontmatter_scalar(text: str, key: str, value: str) -> str:
     return "---\n" + "\n".join(output) + text[bounds[1] :]
 
 
-def iter_documents(root: Path, config: dict[str, Any]) -> list[Path]:
-    ignored = set(config.get("ignored_directories", []))
-    exempt = set(config.get("exempt_basenames", []))
-    documents: set[Path] = set()
-    for raw_root in config.get("scope_roots", []):
-        scope = safe_path(root, raw_root)
-        if not scope.exists():
-            continue
-        for path in scope.rglob("*.md"):
-            relative = path.relative_to(root.resolve())
-            if path.name in exempt or any(part in ignored for part in relative.parts):
-                continue
-            documents.add(path.resolve())
-    return sorted(documents, key=lambda path: str(path.relative_to(root.resolve())).casefold())
-
-
 def prefix_type(filename: str, config: dict[str, Any]) -> str | None:
     matches = [
         name for name, item in config["types"].items() if filename.startswith(item["prefix"])

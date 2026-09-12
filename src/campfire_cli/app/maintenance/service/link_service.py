@@ -1,6 +1,6 @@
 """
 SPEC:
-  name: link_check
+  name: link_service
   purpose: 只读检查 Vault 或已治理范围的 wikilink、Markdown 链接、嵌入和附件引用
   default_env_file: none
   env_override: none

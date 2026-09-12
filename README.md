@@ -24,7 +24,7 @@ campfire version
 ```
 
 人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Workspace 的 `AGENTS.md`，并使用 Workspace id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`migration apply`、
-`maintenance apply` 和 `archive apply` 必须先审查计划，并使用命令要求的显式确认参数。
+`maintenance apply` 和 `maintenance archive apply` 必须先审查计划，并使用命令要求的显式确认参数。
 
 ```bash
 campfire workspace add --id personal --path /path/to/vault --default
@@ -39,6 +39,9 @@ campfire --workspace personal document profile sync --confirm
 campfire --workspace personal document type list
 campfire --workspace personal document type sync
 campfire --workspace personal document type sync --confirm
+campfire --workspace personal document check --path "mynote/知识-示例.md"
+campfire --workspace personal document format --path "mynote/知识-示例.md"
+campfire --workspace personal document format --path "mynote/知识-示例.md" --confirm
 campfire workspace export --output campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json --confirm

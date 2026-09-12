@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.common.documents.domains import parse_frontmatter
+from campfire_cli.app.maintenance.service.domain_service import parse_frontmatter
 
 ARCHIVE_REASONS = {"superseded", "completed", "cancelled", "obsolete", "merged", "project-closed"}
 REASONS_REQUIRING_SUCCESSOR = {"superseded", "merged"}
@@ -182,7 +182,8 @@ def apply_items(
     applied: list[dict[str, str]] = []
     for item in items:
         rel = str(item.source.relative_to(vault_root))
-        # Path/state mismatch is repairable after an explicit manual move. Other issues block the document.
+        # A path/state mismatch is repairable after an explicit manual move.
+        # Other issues block the document.
         item_issues = [issue for issue in issues if issue["path"] == rel]
         if any(issue["code"] != "archive-path-state-mismatch" for issue in item_issues):
             continue

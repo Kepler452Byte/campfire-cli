@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.markdown import parse_document
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-class GovernanceRuleEngine:
+class DocumentRuleService:
     """Single entry point for document and template contract validation."""
 
     def __init__(self, type_config: dict[str, Any], schema: dict[str, Any]) -> None:
@@ -27,7 +28,17 @@ class GovernanceRuleEngine:
         issues: list[dict[str, Any]] = []
         document_type = frontmatter.get("type")
         types = self._type_config.get("types", {})
-        if not isinstance(document_type, str) or not document_type:
+        if isinstance(document_type, list):
+            issues.append(
+                {
+                    "code": "document-type-multiple",
+                    "path": relative,
+                    "field": "type",
+                    "actual": document_type,
+                    "allowed": sorted(types),
+                }
+            )
+        elif not isinstance(document_type, str) or not document_type:
             issues.append({"code": "document-type-missing", "path": relative, "field": "type"})
         elif document_type not in types:
             issues.append(
@@ -49,6 +60,16 @@ class GovernanceRuleEngine:
                     "field": "filename",
                     "actual": path.name,
                     "allowed": [types[document_type]["prefix"]],
+                }
+            )
+        elif prefixed_name(path.name, document_type, self._type_config) != path.name:
+            issues.append(
+                {
+                    "code": "document-name-bracket-category",
+                    "path": relative,
+                    "field": "filename",
+                    "actual": path.name,
+                    "allowed": [prefixed_name(path.name, document_type, self._type_config)],
                 }
             )
         rules = self._rules(document_type, path, frontmatter)

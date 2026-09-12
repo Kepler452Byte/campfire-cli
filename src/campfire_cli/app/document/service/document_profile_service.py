@@ -29,7 +29,7 @@ class DocumentProfileService:
 
     def sync(self, confirm: bool = False) -> dict[str, Any]:
         current = self._repository.load()
-        target = self._repository.packaged()
+        target = self._merge_contract(current, self._repository.packaged())
         changed = current != target
         if changed and confirm:
             with workspace_write_lock(self._state_root.parents[1]):
@@ -40,7 +40,7 @@ class DocumentProfileService:
             "current_version": current.get("version"),
             "target_version": target.get("version"),
             "write_performed": changed and confirm,
-            "operations": ["replace frontmatter-schema.json"] if changed else [],
+            "operations": ["merge packaged document profiles"] if changed else [],
         }
 
     def list_profiles(self) -> dict[str, Any]:
@@ -83,3 +83,29 @@ class DocumentProfileService:
 
     def _profiles(self) -> ProfileRegistry:
         return ProfileRegistry(self._type_config, self._repository.load())
+
+    @staticmethod
+    def _merge_contract(
+        current: dict[str, Any], packaged: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Upgrade standard Profiles while preserving named Workspace extensions."""
+        packaged_profiles = packaged.get("profiles", {})
+        custom_profiles = {
+            name: profile
+            for name, profile in current.get("profiles", {}).items()
+            if name not in packaged_profiles
+        }
+        current_resolver = current.get("resolver", {})
+        packaged_resolver = packaged.get("resolver", {})
+        resolver = {**current_resolver, **packaged_resolver}
+        for mapping_name in ("profile_by_type", "profile_by_governance"):
+            resolver[mapping_name] = {
+                **current_resolver.get(mapping_name, {}),
+                **packaged_resolver.get(mapping_name, {}),
+            }
+        return {
+            **current,
+            **packaged,
+            "resolver": resolver,
+            "profiles": {**packaged_profiles, **custom_profiles},
+        }

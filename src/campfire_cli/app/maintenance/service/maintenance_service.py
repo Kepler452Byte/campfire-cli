@@ -11,22 +11,19 @@ from campfire_cli.app.document.service import (
     type_apply,
     type_plan,
 )
-from campfire_cli.app.document.service.document_rule_service import GovernanceRuleEngine
+from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
     Issue,
     MaintenanceResult,
     MaintenanceRunRecord,
 )
+from campfire_cli.app.maintenance.service import archive_service as project_archive
+from campfire_cli.app.maintenance.service import domain_service as governance_check
+from campfire_cli.app.maintenance.service import moc_service as governance_sync
 from campfire_cli.app.maintenance.service.maintenance_protocol import (
     MaintenanceRepositoryProtocol,
-)
-from campfire_cli.common.archive import planner as project_archive
-from campfire_cli.common.documents import (
-    domains as governance_check,
-)
-from campfire_cli.common.documents import (
-    moc as governance_sync,
 )
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.filesystem import atomic_write
@@ -49,7 +46,7 @@ class MaintenanceService:
     ) -> None:
         self._settings = settings
         self._repository = repository
-        self._rules = GovernanceRuleEngine(settings.document_types, settings.frontmatter_schema)
+        self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
 
     def check(
         self,
@@ -405,21 +402,7 @@ class MaintenanceService:
         )
 
     def _iter_documents(self) -> list[Path]:
-        config = self._settings.document_types
-        ignored = set(config.get("ignored_directories", []))
-        exempt = set(config.get("exempt_basenames", []))
-        result: list[Path] = []
-        for raw_root in config.get("scope_roots", []):
-            root = self._settings.vault_root / raw_root
-            if not root.is_dir():
-                continue
-            result.extend(
-                path
-                for path in root.rglob("*.md")
-                if path.name not in exempt
-                and not any(part in ignored for part in path.relative_to(root).parts[:-1])
-            )
-        return sorted(set(result), key=lambda item: item.as_posix().casefold())
+        return iter_documents(self._settings.vault_root, self._settings.document_types)
 
     def _nearest_domain(self, path: Path) -> str | None:
         current = path.parent

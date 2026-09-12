@@ -1,6 +1,6 @@
 """
 SPEC:
-  name: governance_check
+  name: domain_service
   purpose: 只读检查知识库领域声明、MOC、内部链接和候选目录
   default_env_file: none
   env_override: none

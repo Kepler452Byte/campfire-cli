@@ -8,6 +8,7 @@ HELP_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 maintenance_cli = typer.Typer(help="后续增量文档维护", context_settings=HELP_SETTINGS)
 archive_cli = typer.Typer(help="项目文档两阶段归档", context_settings=HELP_SETTINGS)
+maintenance_cli.add_typer(archive_cli, name="archive")
 
 
 def emit(result: object) -> None:

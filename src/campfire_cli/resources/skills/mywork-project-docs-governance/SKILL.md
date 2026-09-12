@@ -39,7 +39,7 @@ description: "治理 mywork 下的项目文档中心：创建、分类、迁移�
 
 项目文档统一使用领域内扁平的 `archive/`，不按年份自动建立子目录。人类或 Agent 先在待归档文档的 frontmatter 中设置 `archive_requested: true`，并填写 `archive_reason`；若原因是 `superseded` 或 `merged`，还必须填写 `superseded_by`。标记阶段保留原有 `status` 和 `lifecycle`，不得提前伪装成已经完成归档。
 
-先运行 `campfire archive check` 审查候选，再运行 `campfire archive apply --confirm` 执行。CLI 仅移动校验通过的候选，目标固定为同一领域的 `archive/<原文件名>`，并更新为 `status: archived`、`lifecycle: archived`、`archive_requested: false`，写入 `archived_at`。归档后运行 `campfire maintenance run` 同步并验收治理状态。
+先运行 `campfire maintenance archive check` 审查候选，再运行 `campfire maintenance archive apply --confirm` 执行。CLI 仅移动校验通过的候选，目标固定为同一领域的 `archive/<原文件名>`，并更新为 `status: archived`、`lifecycle: archived`、`archive_requested: false`，写入 `archived_at`。归档后运行 `campfire maintenance run` 同步并验收治理状态。
 
 用户已经手工移入 `archive/` 的文档视为明确的人工归档，不移回当前目录；工具应将路径作为历史可见性的最终依据，并报告缺失或冲突的归档元数据。现有历史快照子目录允许保留，脚本不得主动创建新的年份或版本子目录。
 

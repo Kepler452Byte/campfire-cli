@@ -5,15 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from campfire_cli.app.document.service.document_rule_service import GovernanceRuleEngine
+from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_apply import (
     apply as apply_frontmatter,
 )  # noqa: E402
 from campfire_cli.app.document.service.frontmatter_apply import (
     preflight as preflight_frontmatter,
-)
-from campfire_cli.app.document.service.frontmatter_check import (
-    build_result as build_frontmatter_check,  # noqa: E402
 )
 from campfire_cli.app.document.service.frontmatter_formatter import format_text  # noqa: E402
 from campfire_cli.app.document.service.frontmatter_plan import (
@@ -26,18 +23,15 @@ from campfire_cli.app.document.service.type_apply import (
 from campfire_cli.app.document.service.type_apply import (
     preflight as preflight_type_plan,
 )
-from campfire_cli.app.document.service.type_check import (
-    build_result as build_type_check_result,  # noqa: E402
-)
 from campfire_cli.app.document.service.type_plan import (  # noqa: E402
     build_plan as build_type_plan,
 )
-from campfire_cli.app.migration.service.migration_verifier import after, before  # noqa: E402
-from campfire_cli.common.archive.planner import (
+from campfire_cli.app.maintenance.service.archive_service import (
     build_result as build_archive_result,  # noqa: E402
 )
-from campfire_cli.common.documents.domains import check_links
-from campfire_cli.common.documents.moc import generate_relations  # noqa: E402
+from campfire_cli.app.maintenance.service.domain_service import check_links
+from campfire_cli.app.maintenance.service.moc_service import generate_relations  # noqa: E402
+from campfire_cli.app.migration.service.migration_verifier import after, before  # noqa: E402
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.config.defaults import default_configs
@@ -259,10 +253,11 @@ class DocumentTypeTests(unittest.TestCase):
             (notes / "错误.md").write_text(
                 "---\ntype:\n  - knowledge\n  - tech-spec\n---\n", encoding="utf-8"
             )
-            result = build_type_check_result(root, self.config())
-            codes = {item["code"] for item in result["issues"]}
+            issues = DocumentRuleService(
+                self.config(), default_configs()["frontmatter-schema.json"]
+            ).check_document(root, notes / "错误.md")
+            codes = {item["code"] for item in issues}
             self.assertIn("document-type-multiple", codes)
-            self.assertEqual(1, result["issue_count"])
 
     def test_plan_defaults_to_unapproved(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -285,8 +280,12 @@ class DocumentTypeTests(unittest.TestCase):
             self.assertEqual(
                 "notes/知识-Algorithm-cuDNN与CUDA深度学习加速原理.md", plan["items"][0]["target"]
             )
-            checked = build_type_check_result(root, self.config())
-            self.assertEqual("document-name-bracket-category", checked["issues"][0]["code"])
+            checked = DocumentRuleService(
+                self.config(), default_configs()["frontmatter-schema.json"]
+            ).check_document(root, source)
+            self.assertIn(
+                "document-name-bracket-category", {issue["code"] for issue in checked}
+            )
 
     def test_plan_keeps_unknown_document_for_semantic_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -389,8 +388,10 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             (notes / "知识-测试.md").write_text(
                 "---\ntype: knowledge\nstatus: 当前\ntags: text\n---\n# 测试\n", encoding="utf-8"
             )
-            result = build_frontmatter_check(root, self.type_config(), self.schema())
-            codes = {issue["code"] for issue in result["issues"]}
+            issues = DocumentRuleService(self.type_config(), self.schema()).check_document(
+                root, notes / "知识-测试.md"
+            )
+            codes = {issue["code"] for issue in issues}
             self.assertIn("frontmatter-field-missing", codes)
             self.assertIn("frontmatter-list-invalid", codes)
             self.assertIn("frontmatter-enum-invalid", codes)
@@ -429,7 +430,7 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             defaults = default_configs()
             types = defaults["document-types.json"]
             schema = defaults["frontmatter-schema.json"]
-            engine = GovernanceRuleEngine(types, schema)
+            engine = DocumentRuleService(types, schema)
 
             document_issues = engine.check_document(root, first)
             by_code = {item["code"]: item for item in document_issues}

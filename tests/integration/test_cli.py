@@ -18,7 +18,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["migration", "inventory", "-h"],
         ["maintenance", "-h"],
         ["maintenance", "check", "-h"],
-        ["archive", "-h"],
+        ["maintenance", "archive", "-h"],
         ["skill", "-h"],
         ["base", "-h"],
         ["workspace", "-h"],
@@ -29,6 +29,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["document", "profile", "show", "-h"],
         ["document", "type", "-h"],
         ["document", "type", "list", "-h"],
+        ["document", "check", "-h"],
+        ["document", "format", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -315,7 +317,11 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
 
 def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
     path = workspace / "_campfire/workspaces/test/config/frontmatter-schema.json"
-    path.write_text('{"version": 1}\n', encoding="utf-8")
+    path.write_text(
+        '{"version": 1, "profiles": {"custom": {"field_order": [], '
+        '"required": [], "optional": []}}}\n',
+        encoding="utf-8",
+    )
     preview = runner.invoke(
         app, ["--workspace", str(workspace), "document", "profile", "sync"]
     )
@@ -334,6 +340,7 @@ def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
     )
     assert json.loads(applied.output)["status"] == "synced"
     assert json.loads(path.read_text())["version"] == 2
+    assert "custom" in json.loads(path.read_text())["profiles"]
 
 
 def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
@@ -359,6 +366,56 @@ def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
     assert updated["types"]["board"]["prefix"] == "看板-"
     assert "board" in updated["profiles"]["project-docs"]
     assert updated["types"]["custom"]["prefix"] == "自定义-"
+
+
+def test_single_document_check_and_format_require_confirmation(workspace: Path) -> None:
+    note = workspace / "mynote/知识-单篇治理.md"
+    original = (
+        "---\ntype: knowledge\nname: 单篇治理\ndescription: test\nstatus: current\n"
+        "created: 2026-09-12\nupdated: 2026-09-12\ntags: []\n---\n# 单篇治理\n"
+    )
+    note.write_text(original, encoding="utf-8")
+    checked = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "check",
+            "--path",
+            "mynote/知识-单篇治理.md",
+        ],
+    )
+    assert json.loads(checked.output)["status"] == "ok"
+
+    preview = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "format",
+            "--path",
+            "mynote/知识-单篇治理.md",
+        ],
+    )
+    assert json.loads(preview.output)["status"] == "planned"
+    assert note.read_text(encoding="utf-8") == original
+
+    applied = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "format",
+            "--path",
+            "mynote/知识-单篇治理.md",
+            "--confirm",
+        ],
+    )
+    assert json.loads(applied.output)["status"] == "formatted"
+    assert note.read_text(encoding="utf-8").startswith("---\nname: 单篇治理\n")
 
 
 def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None:

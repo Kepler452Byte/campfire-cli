@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import yaml
 
-from campfire_cli.app.document.service.document_rule_service import GovernanceRuleEngine
+from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.type_apply import (
     rewrite_same_directory_markdown_links,
     rewrite_wikilinks,
@@ -44,7 +44,7 @@ class MigrationService:
     ) -> None:
         self._settings = settings
         self._repository = repository
-        self._rules = GovernanceRuleEngine(settings.document_types, settings.frontmatter_schema)
+        self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
 
     def inventory(self, batch: str, scope: str) -> MigrationResult:
         root = safe_path(self._settings.vault_root, scope)
