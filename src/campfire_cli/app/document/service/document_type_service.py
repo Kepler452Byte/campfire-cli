@@ -51,6 +51,8 @@ class DocumentTypeService:
     def _merge_contract(current: dict[str, Any], packaged: dict[str, Any]) -> dict[str, Any]:
         """Add or update packaged types without deleting Workspace extensions."""
         target = {**current, "version": packaged.get("version", current.get("version"))}
+        if "space_marker" in packaged:
+            target["space_marker"] = packaged["space_marker"]
         target["types"] = {
             **current.get("types", {}),
             **packaged.get("types", {}),

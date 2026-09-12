@@ -6,6 +6,7 @@
 campfire workspace resolve
 campfire workspace space list
 campfire workspace space check
+campfire workspace space check --space <space-id>
 campfire workspace config check
 campfire workspace domain list
 campfire workspace domain check
@@ -13,6 +14,7 @@ campfire workspace restructure inventory --scope <path> --batch <id>
 campfire workspace restructure plan --batch <id>
 campfire workspace project resolve --path "$PWD"
 campfire document inspect --path <file>
+campfire document type sync --confirm
 campfire document type list
 campfire document profile list
 campfire maintenance check --summary

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.document_scanner import exempt_document
 from campfire_cli.app.document.service.frontmatter_formatter import format_text
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
@@ -21,6 +22,8 @@ class DocumentService:
 
     def check(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
+        if self._is_exempt(path):
+            return self._not_applicable(relative_path, path)
         issues = self._rules.check_document(self._settings.vault_root, path)
         return {
             "status": "ok" if not issues else "needs-review",
@@ -32,6 +35,8 @@ class DocumentService:
 
     def inspect(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
+        if self._is_exempt(path):
+            return self._not_applicable(relative_path, path)
         parsed = parse_document(path.read_text(encoding="utf-8"))
         document_type = parsed.frontmatter.get("type")
         profile = self._profiles.resolve(document_type, parsed.frontmatter, path)
@@ -61,6 +66,8 @@ class DocumentService:
 
     def format(self, relative_path: str, confirm: bool = False) -> dict[str, Any]:
         path = self._document_path(relative_path)
+        if self._is_exempt(path):
+            return self._not_applicable(relative_path, path)
         original = path.read_text(encoding="utf-8")
         parsed = parse_document(original)
         if not parsed.has_frontmatter:
@@ -104,3 +111,24 @@ class DocumentService:
         if not path.is_file() or path.suffix.lower() != ".md":
             raise ConfigurationError(f"Markdown 文档不存在：{relative_path}")
         return path
+
+    def _not_applicable(self, relative_path: str, path: Path) -> dict[str, Any]:
+        marker_commands = {
+            self._settings.governance.get("space_marker", "_空间.md"): "workspace space check",
+            self._settings.governance.get("domain_marker", "_领域.md"): "workspace domain check",
+        }
+        return {
+            "status": "not-applicable",
+            "workspace_id": self._settings.workspace_id,
+            "path": relative_path,
+            "reason": "document-exempt",
+            "owner_command": marker_commands.get(path.name),
+            "issues": [],
+        }
+
+    def _is_exempt(self, path: Path) -> bool:
+        markers = {
+            self._settings.governance.get("space_marker", "_空间.md"),
+            self._settings.governance.get("domain_marker", "_领域.md"),
+        }
+        return path.name in markers or exempt_document(path, self._settings.document_types)

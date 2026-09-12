@@ -11,6 +11,7 @@
     "frontmatter-missing": ["受管文档缺少 Frontmatter。", "由 Agent 阅读正文后生成语义治理 Spec，再运行 campfire maintenance plan --id <id> --spec <file>。"],
     "frontmatter-field-order-invalid": ["Frontmatter 属性顺序不符合当前文档 Profile。", "使用 document format，或通过 Maintenance Plan 审批后统一格式化。"],
     "frontmatter-field-missing": ["Frontmatter 缺少必填字段。", "根据 detail 指定的字段补充真实值，不要编造业务信息。"],
+    "frontmatter-field-empty": ["Frontmatter 必填字段存在但值为空。", "根据 field 补充真实值；无法确认时保留问题并请求用户确认。"],
     "frontmatter-field-not-allowed": ["字段不属于当前文档 Profile。", "将叙述信息移入正文，或确认文档类型和领域归属是否正确。"],
     "frontmatter-enum-invalid": ["Frontmatter 使用了契约之外的枚举值。", "使用 issue 的 allowed 值；任务完成语义应写入 lifecycle: completed。"],
     "task-requested-by-missing": ["上级交办任务缺少交办人。", "填写 requested_by；无法确认时设置 requires_human: true。"],

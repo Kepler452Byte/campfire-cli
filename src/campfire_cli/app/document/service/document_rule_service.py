@@ -95,20 +95,25 @@ class DocumentRuleService:
             for field in condition["require"]
         }
         for field in dict.fromkeys([*rules["required"], *conditional]):
-            value = frontmatter.get(field)
-            if (
-                field not in frontmatter
-                or value is None
-                or value == ""
-                or field in conditional
-                and not value
-            ):
+            if field not in frontmatter:
                 issues.append(
                     {
                         "code": "frontmatter-field-missing",
                         "path": relative,
                         "detail": field,
                         "field": field,
+                    }
+                )
+                continue
+            value = frontmatter[field]
+            if value is None or value == "" or field in conditional and not value:
+                issues.append(
+                    {
+                        "code": "frontmatter-field-empty",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": value,
                     }
                 )
         for field in frontmatter:

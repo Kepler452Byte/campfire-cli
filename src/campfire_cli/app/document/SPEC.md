@@ -46,4 +46,6 @@ Profile 只允许一层 `base` 继承。Service 将声明配置编译为完整 `
 
 `document profile sync` 与 `document type sync` 默认只预览，必须使用 `--confirm` 才更新用户级契约。标准契约升级时保留 Workspace 自定义类型和自定义 Profile，同步不修改任何 Workspace 文档。
 
+`_空间.md`、`_领域.md` 等声明文件由 Workspace App 按结构契约校验，不是普通 Document，不得套用 base Profile。Document 的单篇命令遇到豁免文件时返回 `not-applicable` 和对应的 Workspace 检查入口。
+
 Document Rule 必须把属性顺序错误作为正式 Issue 暴露；顺序取自同一个 Effective Profile。`document format --path <文档>` 默认只预览字段顺序变化，追加 `--confirm` 后才写入；它不新增、删除或修改属性值。

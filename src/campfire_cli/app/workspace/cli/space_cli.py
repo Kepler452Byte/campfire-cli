@@ -34,8 +34,11 @@ def show(space_id: str, workspace: str | None = typer.Option(None, "--workspace"
 
 
 @space_cli.command("check")
-def check(workspace: str | None = typer.Option(None, "--workspace")) -> None:
-    emit(invoke(lambda: service(workspace).check()))
+def check(
+    space_id: str | None = typer.Option(None, "--space", help="只检查指定 Space id"),
+    workspace: str | None = typer.Option(None, "--workspace"),
+) -> None:
+    emit(invoke(lambda: service(workspace).check(space_id)))
 
 
 @space_cli.command("create")

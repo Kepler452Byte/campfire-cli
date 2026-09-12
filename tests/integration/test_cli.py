@@ -199,6 +199,12 @@ def test_space_and_nested_domain_commands_use_marker_files(tmp_path: Path, monke
     assert checked["status"] == "ok"
     assert {item["id"] for item in checked["domains"]} == {"software", "python"}
 
+    scoped_space = json.loads(
+        runner.invoke(app, ["workspace", "space", "check", "--space", "knowledge"]).output
+    )
+    assert scoped_space["status"] == "ok"
+    assert [item["id"] for item in scoped_space["spaces"]] == ["knowledge"]
+
 
 def test_domain_adopt_declares_existing_directory_without_moving_content(
     tmp_path: Path, monkeypatch
@@ -628,6 +634,7 @@ def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
     updated = json.loads(path.read_text())
     assert updated["types"]["board"]["prefix"] == "看板-"
     assert updated["types"]["human-request"]["prefix"] == "待确认-"
+    assert updated["space_marker"] == "_空间.md"
     assert "_收件箱/待用户确认" in updated["scope_roots"]
     assert "board" in updated["profiles"]["project-docs"]
     assert updated["types"]["custom"]["prefix"] == "自定义-"
@@ -1042,6 +1049,59 @@ def test_maintenance_check_filters_enriches_and_summarizes(workspace: Path) -> N
     summary_payload = json.loads(summary.output)
     assert summary_payload["issues"] == []
     assert summary_payload["issue_counts"] == {"frontmatter-enum-invalid": 1}
+
+
+def test_maintenance_discovers_every_declared_space(workspace: Path) -> None:
+    blog = workspace / "myblog"
+    blog.mkdir()
+    (blog / "_空间.md").write_text(
+        "---\nname: 创作\nspace_id: blog\nspace_type: content\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    (blog / "随手写.md").write_text("缺少 Frontmatter\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
+    payload = json.loads(result.output)
+
+    assert any(
+        issue["path"] == "myblog/随手写.md" and issue["code"] == "frontmatter-missing"
+        for issue in payload["issues"]
+    )
+
+
+def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> None:
+    note = workspace / "mynote/知识-空字段.md"
+    note.write_text(
+        "---\nname: 空字段\ndescription: \ntype: knowledge\nstatus: current\n"
+        "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["--workspace", str(workspace), "document", "inspect", "--path", "mynote/知识-空字段.md"],
+    )
+    payload = json.loads(result.output)
+
+    assert any(
+        issue["code"] == "frontmatter-field-empty" and issue["field"] == "description"
+        for issue in payload["issues"]
+    )
+    assert not any(
+        issue["code"] == "frontmatter-field-missing" and issue["field"] == "description"
+        for issue in payload["issues"]
+    )
+
+
+def test_document_commands_delegate_workspace_markers(workspace: Path) -> None:
+    result = runner.invoke(
+        app, ["--workspace", str(workspace), "document", "inspect", "--path", "mynote/_空间.md"]
+    )
+    payload = json.loads(result.output)
+
+    assert payload["status"] == "not-applicable"
+    assert payload["owner_command"] == "workspace space check"
+    assert payload["issues"] == []
 
 
 def test_filtered_check_reports_scope_status_and_workspace_status(workspace: Path) -> None:

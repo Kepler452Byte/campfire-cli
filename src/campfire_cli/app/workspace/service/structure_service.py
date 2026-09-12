@@ -85,8 +85,16 @@ class SpaceService:
             raise ConfigurationError(f"Space 不存在或不唯一：{space_id}")
         return matches[0]
 
-    def check(self) -> SpaceCheckResult:
+    def check(self, space_id: str | None = None) -> SpaceCheckResult:
         spaces, issues = self.discover()
+        if space_id is not None:
+            matches = [space for space in spaces if space.id == space_id]
+            if len(matches) != 1:
+                raise ConfigurationError(f"Space 不存在或不唯一：{space_id}")
+            selected = matches[0]
+            spaces = matches
+            prefix = f"{selected.path}/"
+            issues = [issue for issue in issues if issue.get("path", "").startswith(prefix)]
         return SpaceCheckResult(
             status="ok" if not issues else "issues-found", spaces=spaces, issues=issues
         )
