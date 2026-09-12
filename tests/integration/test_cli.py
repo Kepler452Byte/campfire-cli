@@ -846,7 +846,8 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(worksp
 
 def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(workspace: Path) -> None:
     source = workspace / "mynote/知识-旧标题.md"
-    source.write_text("---\ntype: knowledge\n---\n", encoding="utf-8")
+    original = "---\ntype: knowledge\n---\n"
+    source.write_text(original, encoding="utf-8")
     reference = workspace / "mywork/知识-引用.md"
     reference.write_text("[[知识-旧标题]]\n正文知识-旧标题不应被替换\n", encoding="utf-8")
     runner.invoke(
@@ -903,6 +904,20 @@ def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(works
     updated = reference.read_text(encoding="utf-8")
     assert "[[知识-新标题]]" in updated
     assert "正文知识-旧标题不应被替换" in updated
+    assert (workspace / "mywork/知识-新标题.md").read_text(encoding="utf-8") == original
+    verified = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "workspace",
+            "restructure",
+            "verify",
+            "--batch",
+            "links",
+        ],
+    )
+    assert json.loads(verified.output)["status"] == "ok"
 
 
 def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> None:

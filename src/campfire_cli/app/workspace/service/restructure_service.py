@@ -265,8 +265,6 @@ class RestructureService:
                 issues.append({"code": "target-missing", "path": item.target})
             if source != target and source.exists():
                 issues.append({"code": "source-still-exists", "path": item.source})
-            if target.is_file():
-                issues.extend(self._rules.check_document(self._settings.vault_root, target))
         result = RestructureResult(
             status="ok" if not issues else "needs-review",
             batch=batch,
@@ -320,16 +318,18 @@ class RestructureService:
         source = safe_path(self._settings.vault_root, item.source)
         target = safe_path(self._settings.vault_root, item.target)
         text = source.read_text(encoding="utf-8")
-        parsed = parse_document(text)
-        frontmatter = dict(parsed.frontmatter)
-        frontmatter.update(item.frontmatter)
-        if item.proposed_type:
-            frontmatter["type"] = item.proposed_type
-        updated = render_document(
-            frontmatter,
-            parsed.body,
-            self._settings.frontmatter_schema.get("field_order", []),
-        )
+        updated = text
+        if item.frontmatter or item.proposed_type:
+            parsed = parse_document(text)
+            frontmatter = dict(parsed.frontmatter)
+            frontmatter.update(item.frontmatter)
+            if item.proposed_type:
+                frontmatter["type"] = item.proposed_type
+            updated = render_document(
+                frontmatter,
+                parsed.body,
+                self._settings.frontmatter_schema.get("field_order", []),
+            )
         atomic_write(target, updated)
         if target != source:
             source.unlink()
