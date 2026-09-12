@@ -34,6 +34,8 @@ campfire workspace domain list --workspace personal
 campfire workspace domain check --workspace personal
 campfire workspace space create --id research --name "研究" --path myresearch --type research
 campfire workspace space create --id research --name "研究" --path myresearch --type research --confirm
+campfire workspace space adopt --id research --name "研究" --path myresearch --type research
+campfire workspace config check --workspace personal
 campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs
 campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs --confirm
 campfire workspace domain adopt --id meetings --name "会议记录" --path "mywork/会议记录" --space work --type work-domain --governance work-docs

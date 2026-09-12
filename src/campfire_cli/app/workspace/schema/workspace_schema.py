@@ -111,6 +111,12 @@ class DomainCreateResult(BaseModel):
     write_performed: bool = False
 
 
+class WorkspaceConfigCheckResult(BaseModel):
+    status: str
+    checked: list[str] = Field(default_factory=list)
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ProjectEntry(BaseModel):
     id: str
     workspace_id: str

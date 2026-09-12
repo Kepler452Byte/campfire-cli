@@ -29,8 +29,11 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "project", "resolve", "-h"],
         ["workspace", "project", "check", "-h"],
         ["workspace", "space", "-h"],
+        ["workspace", "space", "adopt", "-h"],
         ["workspace", "domain", "-h"],
         ["workspace", "domain", "adopt", "-h"],
+        ["workspace", "config", "-h"],
+        ["workspace", "config", "check", "-h"],
         ["document", "-h"],
         ["document", "profile", "-h"],
         ["document", "profile", "show", "-h"],
@@ -240,6 +243,68 @@ def test_domain_adopt_declares_existing_directory_without_moving_content(
 
     repeated = runner.invoke(app, [*args, "--confirm"])
     assert repeated.exit_code != 0
+
+
+def test_space_adopt_declares_existing_root_directory_without_moving_content(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "campfire-home"))
+    root = tmp_path / "workspace"
+    created = runner.invoke(
+        app, ["workspace", "create", "--id", "test", "--path", str(root), "--default"]
+    )
+    assert created.exit_code == 0, created.output
+    existing = root / "myresearch"
+    existing.mkdir()
+    note = existing / "随手记录.md"
+    note.write_text("# 随手记录\n", encoding="utf-8")
+    args = [
+        "workspace",
+        "space",
+        "adopt",
+        "--id",
+        "research",
+        "--name",
+        "研究",
+        "--path",
+        "myresearch",
+        "--type",
+        "knowledge",
+    ]
+    preview = runner.invoke(app, args)
+    assert preview.exit_code == 0, preview.output
+    payload = json.loads(preview.output)
+    assert payload["status"] == "planned"
+    assert not any(item["action"] == "create-directory" for item in payload["operations"])
+
+    applied = runner.invoke(app, [*args, "--confirm"])
+    assert applied.exit_code == 0, applied.output
+    assert json.loads(applied.output)["status"] == "adopted"
+    assert note.read_text(encoding="utf-8") == "# 随手记录\n"
+    assert (existing / "_空间.md").is_file()
+
+
+def test_workspace_config_check_validates_effective_contracts(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "campfire-home"
+    root = tmp_path / "workspace"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(home))
+    created = runner.invoke(
+        app, ["workspace", "create", "--id", "test", "--path", str(root), "--default"]
+    )
+    assert created.exit_code == 0, created.output
+    checked = runner.invoke(app, ["workspace", "config", "check"])
+    assert checked.exit_code == 0, checked.output
+    assert json.loads(checked.output)["status"] == "ok"
+
+    path = home / "workspaces/test/config/document-types.json"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    config["types"]["record"]["prefix"] = config["types"]["issue"]["prefix"]
+    path.write_text(json.dumps(config), encoding="utf-8")
+    invalid = runner.invoke(app, ["workspace", "config", "check"])
+    assert invalid.exit_code == 0, invalid.output
+    payload = json.loads(invalid.output)
+    assert payload["status"] == "issues-found"
+    assert any(item["code"] == "duplicate-value" for item in payload["issues"])
 
 
 def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None:

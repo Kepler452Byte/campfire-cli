@@ -94,6 +94,24 @@ class SpaceService:
     def create(
         self, space_id: str, name: str, path: str, space_type: str, confirm: bool = False
     ) -> SpaceCreateResult:
+        return self._define(space_id, name, path, space_type, confirm, adopt=False)
+
+    def adopt(
+        self, space_id: str, name: str, path: str, space_type: str, confirm: bool = False
+    ) -> SpaceCreateResult:
+        """Add a Space declaration to an existing root directory without moving content."""
+        return self._define(space_id, name, path, space_type, confirm, adopt=True)
+
+    def _define(
+        self,
+        space_id: str,
+        name: str,
+        path: str,
+        space_type: str,
+        confirm: bool,
+        *,
+        adopt: bool,
+    ) -> SpaceCreateResult:
         if not ID_RE.fullmatch(space_id):
             raise ConfigurationError("Space id 只能使用小写字母、数字和连字符")
         relative = PurePosixPath(path)
@@ -113,20 +131,29 @@ class SpaceService:
         )
         if not space.name or not space.type:
             raise ConfigurationError("Space name 和 type 不能为空")
-        if target.exists() or any(item.id == space_id for item in self.discover()[0]):
-            raise ConfigurationError("Space id 或路径已存在")
-        operations = [
-            {"action": "create-directory", "path": space.path},
-            {"action": "create", "path": f"{space.path}/{SPACE_MARKER}"},
-        ]
+        existing = self.discover()[0]
+        if any(item.id == space_id or item.path == relative.as_posix() for item in existing):
+            raise ConfigurationError("Space id 或已声明路径存在")
+        if adopt:
+            if not target.is_dir():
+                raise ConfigurationError("adopt 只接入已存在的目录")
+            if (target / SPACE_MARKER).exists():
+                raise ConfigurationError("目录已经包含 Space 声明")
+        elif target.exists():
+            raise ConfigurationError("Space 目标路径已存在；请使用 space adopt 接入")
+        operations = [] if adopt else [{"action": "create-directory", "path": space.path}]
+        operations.append({"action": "create", "path": f"{space.path}/{SPACE_MARKER}"})
         if confirm:
             with workspace_write_lock(self.lock_root):
-                if target.exists():
+                marker = target / SPACE_MARKER
+                if adopt and (not target.is_dir() or marker.exists()):
+                    raise ConfigurationError("接入目录在确认后发生变化，请重新预览")
+                if not adopt and target.exists():
                     raise ConfigurationError("Space 路径在确认后发生变化，请重新预览")
-                target.mkdir(parents=True)
-                atomic_write(target / SPACE_MARKER, self.render_marker(space))
+                target.mkdir(parents=True, exist_ok=adopt)
+                atomic_write(marker, self.render_marker(space))
         return SpaceCreateResult(
-            status="created" if confirm else "planned",
+            status=("adopted" if adopt else "created") if confirm else "planned",
             space=space,
             operations=operations,
             write_performed=confirm,

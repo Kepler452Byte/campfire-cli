@@ -48,3 +48,15 @@ def create(
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(invoke(lambda: service(workspace).create(space_id, name, path, space_type, confirm)))
+
+
+@space_cli.command("adopt")
+def adopt(
+    space_id: str = typer.Option(..., "--id"),
+    name: str = typer.Option(..., "--name"),
+    path: str = typer.Option(..., "--path"),
+    space_type: str = typer.Option(..., "--type"),
+    workspace: str | None = typer.Option(None, "--workspace"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    emit(invoke(lambda: service(workspace).adopt(space_id, name, path, space_type, confirm)))
