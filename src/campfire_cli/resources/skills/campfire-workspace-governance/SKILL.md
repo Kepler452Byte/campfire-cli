@@ -36,3 +36,25 @@ description: "治理 Campfire Workspace 中的共享上下文；适用于收件�
 - 文档 Profile 由 `base` 一层继承编译得到；使用 `campfire document profile show` 或 `document profile resolve` 查看有效规则，不从多个 Skill 拼接字段定义。
 - SQLite 只保存当前索引和工作流状态；Markdown 是内容事实来源，用户级配置是治理契约来源。
 - 保留用户原文；内容沉淀和重写超出明确授权时先提出建议。
+
+## 内容归属
+
+- 跨项目可复用、可独立理解的长期认知归入 knowledge Space；仅描述某个项目当前实现、方案、决策、问题或记录的内容归入该 Project 绑定的根 Domain 或子 Domain。
+- 一篇文档只有一个主物理 Domain；跨领域关系用链接和自动索引表达。不能唯一判断 Project、Space 或 Domain 时进入待用户确认。
+- 项目当前事实不能从计划、问题或历史记录推断；写当前实现前检查已注册源码路径及相关源码、配置和测试。
+- `status` 表示文档有效性，`lifecycle` 表示项目文档工作阶段；合法字段与枚举只从 Document Profile 读取。
+
+## 项目文档归档
+
+不得仅因长时间未更新而归档。先设置 `archive_requested: true` 和明确原因；被替代或合并时补充 `superseded_by`。运行 `campfire maintenance archive check` 审查，再用 `archive apply --confirm` 移入同一 Domain 的扁平 `archive/`。归档前将仍然有效的结论回写当前产品、技术或决策文档；`archive/` 内容不能作为当前事实的唯一依据。
+
+## 任务文档
+
+任务跟踪承诺与执行，正式产品、技术和决策文档沉淀最终事实。任务必须使用 `type: task`，字段、条件必填项和合法生命周期只通过 `campfire document profile show task` 读取。创建任务正文时参考[任务正文结构](references/任务正文结构.md)。
+
+- 明确属于 Project 的任务归入其根 Domain 或约定的任务区域；Project 不明确时进入收件箱，不为了收纳任务猜测归属。
+- 保留原始要求，区分原话、当前理解、待确认、验收标准、执行计划、关键进展和结果证据。
+- `task_source: personal` 与 `assigned` 表示责任来源；Agent 不得自行把个人任务改为上级交办，也不根据来源推断优先级。
+- Agent 可以根据证据更新执行中、阻塞、待验收状态及相应说明；完成、取消和归档默认需要人类确认，除非已有范围明确且验收可自动验证的授权。
+- 完成前填写结果摘要和验证证据，并检查是否需要回写正式文档。工作日志可以引用任务过程，周报和绩效只能使用有证据的结果。
+- 小型确认保留在任务本身；影响任务是否成立、Project/Domain 归属、合并或权威结论的问题才生成收件箱待确认文档。

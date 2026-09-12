@@ -13,7 +13,12 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 NAME_RE = re.compile(r"^name:\s*[\"']?([^\n\"']+)", re.MULTILINE)
 DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?([^\n\"']+)", re.MULTILINE)
-RETIRED_PACKAGED_SKILLS = {"campfire-conversation-intake"}
+RETIRED_PACKAGED_SKILLS = {
+    "campfire-conversation-intake",
+    "mynote-knowledge-governance",
+    "mywork-project-docs-governance",
+    "mywork-task-governance",
+}
 
 
 class SkillService:
@@ -39,13 +44,7 @@ class SkillService:
         normalized = path.replace("\\", "/")
         if normalized.startswith("_收件箱/"):
             names.append("campfire-inbox-triage")
-        elif normalized.startswith("mynote/"):
-            names.append("mynote-knowledge-governance")
         elif normalized.startswith("mywork/"):
-            if "【" in normalized:
-                names.append("mywork-project-docs-governance")
-            if "/任务/" in normalized or Path(normalized).name.startswith("任务-"):
-                names.append("mywork-task-governance")
             if "工作周报/" in normalized:
                 names.append("mywork-weekly-report-writing")
         available = {item.name: item for item in self._skills()}

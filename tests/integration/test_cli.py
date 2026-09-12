@@ -413,16 +413,15 @@ def test_skill_sync_deletes_only_explicitly_retired_packaged_skills(workspace: P
 
 def test_skill_resolve_routes_inbox_and_knowledge(workspace: Path) -> None:
     for path, expected in (
-        ("_收件箱/用户输入/test.md", "campfire-inbox-triage"),
-        ("mynote/【知识】软件开发/test.md", "mynote-knowledge-governance"),
+        ("_收件箱/用户输入/test.md", ["campfire-workspace-governance", "campfire-inbox-triage"]),
+        ("mynote/【知识】软件开发/test.md", ["campfire-workspace-governance"]),
     ):
         result = runner.invoke(
             app, ["--workspace", str(workspace), "skill", "resolve", "--path", path]
         )
         assert result.exit_code == 0, result.output
         names = [item["name"] for item in json.loads(result.output)["skills"]]
-        assert "campfire-workspace-governance" in names
-        assert expected in names
+        assert names == expected
 
 
 def test_skill_resolve_routes_project_task(workspace: Path) -> None:
@@ -441,8 +440,6 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
     names = [item["name"] for item in json.loads(result.output)["skills"]]
     assert names == [
         "campfire-workspace-governance",
-        "mywork-project-docs-governance",
-        "mywork-task-governance",
     ]
 
 

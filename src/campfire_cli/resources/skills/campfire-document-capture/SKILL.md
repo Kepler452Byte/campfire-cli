@@ -69,13 +69,7 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 
 ## 路由
 
-预检通过后只加载一个主要成品 Skill：
-
-- 跨项目可复用的长期认知：`mynote-knowledge-governance`。
-- 项目当前事实、方案、决策、问题和记录：`mywork-project-docs-governance`。
-- 需要持续执行和验收的行动：`mywork-task-governance`。
-
-治理命令、MOC、链接、格式和同步由 `campfire-workspace-governance` 执行；本 Skill 不复制文档 Profile、生命周期、字段枚举或迁移步骤。
+预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-governance` 选择 Space、Domain 与文档类型。本 Skill 不复制文档 Profile、生命周期、字段枚举或迁移步骤。
 
 ## 待确认文档
 

@@ -44,7 +44,7 @@ description: "路由用户在对话中表达的问答、任务、学习和文档
 - 用户不需要理解 Campfire 目录、类型和字段；Agent 负责提出结构化草案。
 - 能提供即时价值时先回答，不以“先建任务”为前置条件。
 - 只询问会改变目标、范围、归属、验收或授权的关键问题，并给出推荐选项。
-- 任务计划本身就是一种正式文档；确认创建后由 `mywork-task-governance` 决定字段和生命周期。
+- 任务计划本身就是一种正式文档；确认创建后由 `campfire-workspace-governance` 处理，字段和生命周期读取 Document Profile。
 - 沉淀的授权、资源与事实门禁完全由 `campfire-document-capture` 决定，本 Skill 不复制其规则。
 - 不在本 Skill 中设计或执行 Agent Session 交接；创建任务文档不等于已把任务交给某个 Agent。
 
