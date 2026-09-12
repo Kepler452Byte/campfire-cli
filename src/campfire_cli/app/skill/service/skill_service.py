@@ -75,6 +75,7 @@ class SkillService:
     def sync(self, dry_run: bool = False) -> SkillResult:
         operations: list[dict[str, str]] = []
         writes: list[tuple[Path, str, str | None]] = []
+        deletes: list[tuple[Path, Path, str]] = []
         source_root = self._source_root()
         for target_root in self._target_roots():
             for name in self._managed_names():
@@ -101,13 +102,26 @@ class SkillService:
                         else None
                     )
                     writes.append((target, content, expected))
-        if not dry_run and writes:
+            for name in RETIRED_PACKAGED_SKILLS:
+                retired = target_root / name
+                for target in sorted(path for path in retired.rglob("*") if path.is_file()):
+                    expected = self._current_hash(target)
+                    if expected is None:
+                        continue
+                    operations.append({"action": "delete", "path": str(target), "sha256": expected})
+                    deletes.append((target_root, target, expected))
+        if not dry_run and (writes or deletes):
             with workspace_write_lock(self._settings.state_root):
                 changed = [
                     str(path)
                     for path, _content, expected in writes
                     if self._current_hash(path) != expected
                 ]
+                changed.extend(
+                    str(path)
+                    for _root, path, expected in deletes
+                    if self._current_hash(path) != expected
+                )
                 if changed:
                     return SkillResult(
                         status="blocked",
@@ -118,6 +132,11 @@ class SkillService:
                     )
                 for target, content, _expected in writes:
                     self._repository.write(target, content)
+                for target_root in self._target_roots():
+                    self._repository.delete_files(
+                        target_root,
+                        [path for root, path, _expected in deletes if root == target_root],
+                    )
         return SkillResult(status="dry-run" if dry_run else "synced", operations=operations)
 
     def _skills(self) -> list[SkillInfo]:

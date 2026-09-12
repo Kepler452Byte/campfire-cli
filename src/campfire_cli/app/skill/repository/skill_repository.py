@@ -15,3 +15,19 @@ class SkillRepository:
 
     def write(self, path: Path, content: str) -> None:
         atomic_write(path, content)
+
+    def delete_files(self, root: Path, paths: list[Path]) -> None:
+        root = root.resolve()
+        for path in paths:
+            path.resolve().relative_to(root)
+            path.unlink()
+        directories = sorted(
+            {parent for path in paths for parent in path.parents if parent != root},
+            key=lambda item: len(item.parts),
+            reverse=True,
+        )
+        for directory in directories:
+            try:
+                directory.rmdir()
+            except OSError:
+                continue
