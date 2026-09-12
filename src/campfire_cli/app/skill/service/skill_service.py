@@ -13,12 +13,6 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 NAME_RE = re.compile(r"^name:\s*[\"']?([^\n\"']+)", re.MULTILINE)
 DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?([^\n\"']+)", re.MULTILINE)
-RETIRED_PACKAGED_SKILLS = {
-    "campfire-conversation-intake",
-    "mynote-knowledge-governance",
-    "mywork-project-docs-governance",
-    "mywork-task-governance",
-}
 
 
 class SkillService:
@@ -44,8 +38,8 @@ class SkillService:
         normalized = path.replace("\\", "/")
         if normalized.startswith("_收件箱/"):
             names.append("campfire-inbox-triage")
-        elif normalized.startswith("mywork/") and "工作周报/" in normalized:
-            names.append("mywork-weekly-report-writing")
+        elif "工作周报/" in normalized or Path(normalized).name.startswith("周报-"):
+            names.append("campfire-weekly-report-writing")
         available = {item.name: item for item in self._skills()}
         return SkillResult(
             status="ok", skills=[available[name] for name in names if name in available]
@@ -73,7 +67,6 @@ class SkillService:
     def sync(self, dry_run: bool = False) -> SkillResult:
         operations: list[dict[str, str]] = []
         writes: list[tuple[Path, str, str | None]] = []
-        deletes: list[tuple[Path, Path, str]] = []
         source_root = self._source_root()
         for target_root in self._target_roots():
             for name in self._managed_names():
@@ -100,26 +93,13 @@ class SkillService:
                         else None
                     )
                     writes.append((target, content, expected))
-            for name in RETIRED_PACKAGED_SKILLS:
-                retired = target_root / name
-                for target in sorted(path for path in retired.rglob("*") if path.is_file()):
-                    expected = self._current_hash(target)
-                    if expected is None:
-                        continue
-                    operations.append({"action": "delete", "path": str(target), "sha256": expected})
-                    deletes.append((target_root, target, expected))
-        if not dry_run and (writes or deletes):
+        if not dry_run and writes:
             with workspace_write_lock(self._settings.state_root):
                 changed = [
                     str(path)
                     for path, _content, expected in writes
                     if self._current_hash(path) != expected
                 ]
-                changed.extend(
-                    str(path)
-                    for _root, path, expected in deletes
-                    if self._current_hash(path) != expected
-                )
                 if changed:
                     return SkillResult(
                         status="blocked",
@@ -130,11 +110,6 @@ class SkillService:
                     )
                 for target, content, _expected in writes:
                     self._repository.write(target, content)
-                for target_root in self._target_roots():
-                    self._repository.delete_files(
-                        target_root,
-                        [path for root, path, _expected in deletes if root == target_root],
-                    )
         return SkillResult(status="dry-run" if dry_run else "synced", operations=operations)
 
     def _skills(self) -> list[SkillInfo]:
@@ -178,10 +153,6 @@ class SkillService:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def _managed_names(self) -> list[str]:
-        configured = [
-            name
-            for name in self._settings.skills.get("managed_skills", [])
-            if name not in RETIRED_PACKAGED_SKILLS
-        ]
+        configured = list(self._settings.skills.get("managed_skills", []))
         packaged = default_configs()["skills.json"].get("managed_skills", [])
         return list(dict.fromkeys([*packaged, *configured]))

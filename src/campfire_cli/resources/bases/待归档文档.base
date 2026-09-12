@@ -1,7 +1,6 @@
 filters:
   and:
     - 'file.ext == "md"'
-    - 'file.path.startsWith("mywork/")'
     - 'archive_requested == true'
 properties:
   file.name: {displayName: 文档}

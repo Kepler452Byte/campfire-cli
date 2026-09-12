@@ -1,9 +1,8 @@
 filters:
   and:
     - 'file.ext == "md"'
-    - or:
-        - 'file.path.startsWith("mynote/")'
-        - 'file.path.startsWith("mywork/")'
+    - 'file.name != "_空间.md"'
+    - 'file.name != "_领域.md"'
     - '!file.path.contains("/archive/")'
     - '!file.path.contains("/generated/")'
 properties:

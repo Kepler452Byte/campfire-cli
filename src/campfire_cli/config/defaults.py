@@ -17,7 +17,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
         "document-types.json": {
             "version": 2,
             "space_marker": "_空间.md",
-            "scope_roots": ["mynote", "mywork", "_收件箱/待用户确认"],
+            "scope_roots": ["_收件箱/待用户确认"],
             "ignored_directories": ["assets", "generated", "a_skill"],
             "exempt_basenames": [
                 "_领域.md",
@@ -218,7 +218,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
                 "campfire-conversation-router",
                 "campfire-document-capture",
                 "campfire-inbox-triage",
-                "mywork-weekly-report-writing",
+                "campfire-weekly-report-writing",
             ],
             "unknown_skill_policy": "ignore",
             "orphaned_skill_policy": "report",

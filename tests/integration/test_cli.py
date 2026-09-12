@@ -387,30 +387,6 @@ def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> Non
     assert json.loads(checked.output)["status"] == "ok"
 
 
-def test_skill_sync_deletes_only_explicitly_retired_packaged_skills(workspace: Path) -> None:
-    target = workspace / "_global_skills"
-    retired = target / "campfire-conversation-intake"
-    custom = target / "custom-skill"
-    retired.mkdir(parents=True)
-    custom.mkdir(parents=True)
-    (retired / "SKILL.md").write_text("retired", encoding="utf-8")
-    (custom / "SKILL.md").write_text("custom", encoding="utf-8")
-
-    preview = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync", "--dry-run"])
-    operations = json.loads(preview.output)["operations"]
-    assert any(
-        item["action"] == "delete" and "conversation-intake" in item["path"] for item in operations
-    )
-    assert not any(
-        item["action"] == "delete" and "custom-skill" in item["path"] for item in operations
-    )
-
-    applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
-    assert applied.exit_code == 0, applied.output
-    assert not retired.exists()
-    assert (custom / "SKILL.md").is_file()
-
-
 def test_skill_resolve_routes_inbox_and_knowledge(workspace: Path) -> None:
     for path, expected in (
         ("_收件箱/用户输入/test.md", ["campfire-workspace-governance", "campfire-inbox-triage"]),

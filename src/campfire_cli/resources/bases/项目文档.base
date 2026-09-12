@@ -1,7 +1,6 @@
 filters:
   and:
     - 'file.ext == "md"'
-    - 'file.path.startsWith("mywork/")'
     - '!project.isEmpty()'
     - '!file.path.contains("/archive/")'
 properties:

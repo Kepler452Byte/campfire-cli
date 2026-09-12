@@ -34,21 +34,21 @@ campfire workspace domain list --workspace personal
 campfire workspace domain check --workspace personal
 campfire workspace space create --id research --name "研究" --path myresearch --type research
 campfire workspace space create --id research --name "研究" --path myresearch --type research --confirm
-campfire workspace domain create --id distributed-systems --name "分布式系统" --path "mynote/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs
-campfire workspace domain create --id distributed-systems --name "分布式系统" --path "mynote/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs --confirm
-campfire workspace project add --id joyit-ai-gateway --workspace personal --name "JoyIT AI Gateway" --document-domain "mywork/【JoyIT AI Gateway】文档中心" --local-path /path/to/aigateway
+campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs
+campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs --confirm
+campfire workspace project add --id example --workspace personal --name "Example" --document-domain "work/example" --local-path /path/to/repository
 campfire workspace project list --workspace personal
 campfire --workspace personal document profile list
 campfire --workspace personal document profile show task
-campfire --workspace personal document profile resolve --path "mywork/项目/任务-示例.md"
+campfire --workspace personal document profile resolve --path "work/example/任务-示例.md"
 campfire --workspace personal document profile sync
 campfire --workspace personal document profile sync --confirm
 campfire --workspace personal document type list
 campfire --workspace personal document type sync
 campfire --workspace personal document type sync --confirm
-campfire --workspace personal document check --path "mynote/知识-示例.md"
-campfire --workspace personal document format --path "mynote/知识-示例.md"
-campfire --workspace personal document format --path "mynote/知识-示例.md" --confirm
+campfire --workspace personal document check --path "knowledge/example/知识-示例.md"
+campfire --workspace personal document format --path "knowledge/example/知识-示例.md"
+campfire --workspace personal document format --path "knowledge/example/知识-示例.md" --confirm
 campfire workspace export --output campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json --confirm
@@ -59,7 +59,7 @@ campfire --workspace personal maintenance check --summary
 campfire --workspace personal maintenance plan
 campfire --workspace personal maintenance apply --confirm
 campfire --workspace personal maintenance sync --dry-run
-campfire --workspace personal maintenance sync --scope "mywork/【项目】文档中心"
+campfire --workspace personal maintenance sync --scope "work/example"
 ```
 
 `maintenance check` 统一负责文档 Schema 与枚举校验；`maintenance sync` 只因领域结构、MOC、路径或并发安全问题阻塞。单篇文档的元数据问题会继续出现在检查报告中，但不会阻止其他领域刷新生成视图。`sync` 和 `run` 可用 `--scope` 限定同步领域。
@@ -70,8 +70,8 @@ Frontmatter 使用 `base → knowledge/project-doc/task` 一层配置继承。`d
 
 ```yaml
 operations:
-  - source: mywork/旧项目/技术-架构.md
-    target: mywork/新项目/平台/技术-架构.md
+  - source: work/old-project/技术-架构.md
+    target: work/new-project/platform/技术-架构.md
     frontmatter:
       project: new-project
       domain: platform
@@ -80,7 +80,7 @@ operations:
 ```
 
 ```bash
-campfire --workspace /path/to/vault migration inventory --scope mywork --batch move-001
+campfire --workspace /path/to/vault migration inventory --scope work --batch move-001
 campfire --workspace /path/to/vault migration plan --batch move-001 --spec migration.yaml
 # 审查批次 plan.json，将确定项目 approved 改为 true
 campfire --workspace /path/to/vault migration apply --batch move-001
