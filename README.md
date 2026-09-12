@@ -75,7 +75,7 @@ campfire --workspace personal maintenance sync --scope "work/example"
 
 所有受管内容文档都使用 `base` 或 `base → knowledge/project-doc/task` 的一层配置继承；`human-request` 等没有专属字段的类型直接使用 `base`。`_空间.md`、`_领域.md` 是 Workspace 声明，不是内容文档。`document profile show` 展示编译后的完整规则，`document profile resolve` 展示指定文档最终使用的 Profile。Formatter 只按有效 Profile 排序并保留值；不允许字段由 Validator 报告，不会被自动删除。
 
-Decision 的当前状态和追加事件位于全局 SQLite。每个 pending Decision 自动投影为 `_收件箱/待用户确认/待确认-Decision-*.md`，并显示在 `治理视图/待确认工作台.base`；投影不是事实源，不接受手工更新。
+Decision 的当前状态和追加事件位于全局 SQLite。全部状态自动投影到 `_协作/decisions/`，并统一显示在 `治理视图/决策工作台.base` 的不同状态视图中。投影不是事实源，不接受手工更新。
 
 跨目录重构或显式修改 Frontmatter 时，先冻结范围，再传入 YAML/JSON 意图规格：
 

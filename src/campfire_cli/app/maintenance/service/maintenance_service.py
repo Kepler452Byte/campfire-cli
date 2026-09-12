@@ -20,7 +20,7 @@ from campfire_cli.app.maintenance.service.maintenance_protocol import (
 from campfire_cli.app.maintenance.service.plan_service import MaintenancePlanService
 from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.common.documents.markdown import parse_document
-from campfire_cli.common.filesystem import atomic_write
+from campfire_cli.common.filesystem import atomic_write, safe_path
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
     capture_snapshot,
@@ -318,10 +318,21 @@ class MaintenanceService:
             normalized_scope + "/"
         )
 
-    def archive(self, confirm: bool = False) -> MaintenanceResult:
+    def archive(self, confirm: bool = False, scope: str | None = None) -> MaintenanceResult:
         items, raw_issues = project_archive.collect_items(
             self._settings.vault_root, self._settings.governance
         )
+        if scope is not None:
+            scope_path = safe_path(self._settings.vault_root, scope)
+            items = [
+                item
+                for item in items
+                if item.source == scope_path or scope_path in item.source.parents
+            ]
+            paths = {
+                item.source.relative_to(self._settings.vault_root).as_posix() for item in items
+            }
+            raw_issues = [issue for issue in raw_issues if issue.get("path") in paths]
         applied: list[dict[str, str]] = []
         if confirm and items:
             snapshot = capture_snapshot(

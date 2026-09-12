@@ -75,7 +75,7 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 
 Agent 未获授权而静默保存，或对象、资源、事实、目标文档仍存在关键歧义时，调用 `campfire decision create`。Decision 是 SQLite 中的工作流事实，不是正式知识或项目事实；Agent 不手工创建待确认 Markdown。
 
-Decision 应提供稳定幂等 key、唯一问题、背景与证据、候选选项、推荐方案、关联文档和来源 Session。CLI 为 pending Decision 自动生成 `type: human-request`、`status: draft` 的只读投影；投影使用公共 `base` Profile，不新增专属生命周期或扩展字段。
+Decision 应提供稳定幂等 key、唯一问题、背景与证据、候选选项、推荐方案、关联文档和来源 Session。CLI 在 `_协作/decisions/` 自动生成工作流专属只读投影；它不是正式内容文档，不使用普通 Document Profile，也不新增文档生命周期。
 
 获得回答后调用 `decision answer`；原流程使用答案完成创建或更新后调用 `decision close`。用户拒绝则取消或记录拒绝答案，不晋升为正式文档。正式文档直接使用自身类型的生命周期，不增加通用 `pending-review`。
 

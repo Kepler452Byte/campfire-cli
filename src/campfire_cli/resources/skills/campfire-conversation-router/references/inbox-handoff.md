@@ -5,14 +5,14 @@
 ```text
 对话输入（主要） -> Agent 捕获和路由
 文件投递（补充） -> _收件箱/用户输入/
-关键歧义         -> Pending Decision -> 自动投影到 _收件箱/待用户确认/
+关键歧义         -> Pending Decision -> 自动投影到 _协作/decisions/pending/
 ```
 
 能够在当前对话中形成单一任务草案时，不额外创建原始收件箱文件；在任务的来源区保留必要原话即可。
 
 以下情况进入 `_收件箱/用户输入/`：长篇原始材料、批量 IM 或会议内容、一次包含多个意图、不知道项目或类型、需要异步处理，或者必须完整保留来源。
 
-以下情况调用 `campfire decision create`：项目或领域不明确、任务与知识难以区分、可能与已有内容冲突、合并或删除需要授权、目标范围或权威性无法判断。CLI 自动把 pending Decision 投影到 `_收件箱/待用户确认/`；Agent 不手工创建或编辑投影。
+以下情况调用 `campfire decision create`：项目或领域不明确、任务与知识难以区分、可能与已有内容冲突、合并或删除需要授权、目标范围或权威性无法判断。CLI 自动把 pending Decision 投影到 `_协作/decisions/pending/`；Agent 不手工创建或编辑投影。
 
 Decision 必须关联原始输入，说明 Agent 的理解、推荐去向、候选选项和一个明确问题。当前对话可提问时同步向用户展示；获得答案后调用 `decision answer`，答案被原流程消费后调用 `decision close`。
 

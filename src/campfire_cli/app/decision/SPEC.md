@@ -2,7 +2,7 @@
 
 本模块维护人类或高级 Agent 必须作出的显式判断。调用方不判断交互模式：不能唯一决定时创建 Decision，得到答案后写入并关闭；尚未回答的 Decision 自然跨会话保留。
 
-SQLite 的 `decisions` 保存当前状态，`decision_events` 追加保存审计历史，两者是 Decision 的 SSOT。Vault 中 `_收件箱/待用户确认/待确认-Decision-*.md` 是只读投影，可由 `decision sync` 重建，不接受反向写入。
+SQLite 的 `decisions` 保存当前状态，`decision_events` 追加保存审计历史，两者是 Decision 的 SSOT。Vault 中 `_协作/decisions/` 按 `pending/`、`answered/`、`closed/`、`cancelled/` 保存全状态只读投影，目录与状态一一对应。投影可由 `decision sync` 重建，不接受反向写入。
 
 状态机保持最小：
 

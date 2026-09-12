@@ -44,7 +44,6 @@
       "lists": ["assignee", "verification", "related"],
       "dates": ["due", "completed"],
       "conditional_required": [
-        {"when": {"task_source": "assigned"}, "require": ["requested_by"]},
         {"when": {"lifecycle": "blocked"}, "require": ["blocked_reason"]},
         {"when": {"lifecycle": "completed"}, "require": ["completed", "result_summary", "verification"]}
       ]

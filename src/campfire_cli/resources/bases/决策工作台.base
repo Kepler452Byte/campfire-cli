@@ -1,0 +1,40 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'file.path.startsWith("_协作/decisions/")'
+    - 'object_type == "decision"'
+properties:
+  file.name: {displayName: 决策事项}
+  decision_status: {displayName: 状态}
+  source_type: {displayName: 来源}
+  answered_by: {displayName: 回答者}
+  created_at: {displayName: 创建时间}
+  updated_at: {displayName: 更新时间}
+  answered_at: {displayName: 回答时间}
+  closed_at: {displayName: 关闭时间}
+views:
+  - type: table
+    name: 待我确认
+    filters: 'decision_status == "pending"'
+    order: [file.name, source_type, decision_status, created_at, updated_at]
+    sort:
+      - property: updated_at
+        direction: DESC
+  - type: table
+    name: 已回答待消费
+    filters: 'decision_status == "answered"'
+    order: [file.name, source_type, answered_by, answered_at, updated_at]
+  - type: table
+    name: 已关闭
+    filters: 'decision_status == "closed"'
+    order: [file.name, source_type, answered_by, closed_at]
+  - type: table
+    name: 已取消
+    filters: 'decision_status == "cancelled"'
+    order: [file.name, source_type, closed_at]
+  - type: table
+    name: 全部决策
+    order: [file.name, decision_status, source_type, answered_by, created_at, answered_at, closed_at]
+    sort:
+      - property: updated_at
+        direction: DESC

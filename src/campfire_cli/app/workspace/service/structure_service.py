@@ -471,19 +471,20 @@ class DomainService:
     @staticmethod
     def render_moc(domain: Domain) -> str:
         today = date.today().isoformat()
-        project_fields = ""
+        project_identity = ""
+        project_lifecycle = ""
         if domain.governance == "project-docs":
-            project_fields = (
-                f"project: {domain.project_id}\ndomain: {domain.id}\nlifecycle: maintained\n"
-            )
+            project_identity = f"project: {domain.project_id}\ndomain: {domain.id}\n"
+            project_lifecycle = "lifecycle: maintained\n"
         return "".join(
             [
                 "---\n",
                 f"name: {json.dumps(domain.name + '总览', ensure_ascii=False)}\n",
                 f"description: {json.dumps(domain.name + '领域导航入口。', ensure_ascii=False)}\n",
                 "type: moc\n",
-                project_fields,
+                project_identity,
                 "status: current\n",
+                project_lifecycle,
                 f"created: {today}\nupdated: {today}\n",
                 "tags: []\n---\n\n",
                 f"# {domain.name}总览\n\n",

@@ -119,14 +119,7 @@ class BaseService:
         return self._settings.vault_root / self._settings.bases.get("target", "治理视图")
 
     def _managed_names(self) -> list[str]:
-        return list(
-            dict.fromkeys(
-                [
-                    *builtin_config("bases.json").get("managed_bases", []),
-                    *self._settings.bases.get("managed_bases", []),
-                ]
-            )
-        )
+        return list(builtin_config("bases.json").get("managed_bases", []))
 
     @staticmethod
     def _same_definition(left: str, right: str) -> bool:

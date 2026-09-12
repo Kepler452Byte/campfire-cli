@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -23,6 +24,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["maintenance", "show", "-h"],
         ["maintenance", "verify", "-h"],
         ["maintenance", "archive", "-h"],
+        ["maintenance", "archive", "check", "-h"],
+        ["maintenance", "archive", "apply", "-h"],
         ["skill", "-h"],
         ["base", "-h"],
         ["workspace", "-h"],
@@ -329,6 +332,12 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
         encoding="utf-8",
     )
     repository.mkdir()
+    subprocess.run(
+        ["git", "init", "--initial-branch", "main", str(repository)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     added_workspace = runner.invoke(
         app, ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"]
@@ -376,6 +385,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     checked = json.loads(runner.invoke(app, ["workspace", "project", "check", "example"]).output)
     assert checked["status"] == "ok"
     assert checked["observed"]["document_domain_exists"] is True
+    assert checked["observed"]["default_branch"] == "main"
 
     backup = tmp_path / "registry.json"
     exported = runner.invoke(app, ["workspace", "export", "--output", str(backup)])
@@ -433,6 +443,18 @@ def test_project_create_previews_then_initializes_document_domain(
     assert json.loads(applied.output)["status"] == "created"
     assert (domain / "_领域.md").is_file()
     assert (domain / "_总览/MOC-New Project总览.md").is_file()
+    moc_check = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "personal",
+            "document",
+            "check",
+            "--path",
+            "mywork/【New Project】文档中心/_总览/MOC-New Project总览.md",
+        ],
+    )
+    assert json.loads(moc_check.output)["status"] == "ok"
     checked = runner.invoke(app, ["workspace", "project", "check", "new-project"])
     checked_payload = json.loads(checked.output)
     assert checked_payload["status"] == "ok"
@@ -482,11 +504,11 @@ def test_base_sync_is_idempotent_and_preserves_unknown_base(workspace: Path) -> 
     custom.write_text("views: []\n", encoding="utf-8")
     preview = runner.invoke(app, ["--workspace", str(workspace), "base", "sync", "--dry-run"])
     assert preview.exit_code == 0, preview.output
-    assert len(json.loads(preview.output)["operations"]) == 6
+    assert len(json.loads(preview.output)["operations"]) == 5
     applied = runner.invoke(app, ["--workspace", str(workspace), "base", "sync"])
     assert applied.exit_code == 0, applied.output
     assert custom.read_text(encoding="utf-8") == "views: []\n"
-    assert len(list(target.glob("*.base"))) == 7
+    assert len(list(target.glob("*.base"))) == 6
     managed = target / "任务工作台.base"
     managed.write_text(
         yaml.safe_dump(yaml.safe_load(managed.read_text(encoding="utf-8")), allow_unicode=True),
@@ -635,7 +657,7 @@ def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
     assert updated["types"]["board"]["prefix"] == "看板-"
     assert updated["types"]["human-request"]["prefix"] == "待确认-"
     assert updated["space_marker"] == "_空间.md"
-    assert "_收件箱/待用户确认" in updated["scope_roots"]
+    assert updated["scope_roots"] == []
     assert "board" in updated["profiles"]["project-docs"]
     assert updated["types"]["custom"]["prefix"] == "自定义-"
 
@@ -678,6 +700,22 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
     planned_operation = json.loads(maintenance_plan.output)["operations"][0]
     assert planned_operation["format_frontmatter"] is True
     assert planned_operation["frontmatter"] == {}
+
+    unapproved = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "apply",
+            "--plan",
+            "field-order",
+            "--confirm",
+        ],
+    )
+    unapproved_payload = json.loads(unapproved.output)
+    assert unapproved_payload["status"] == "blocked"
+    assert unapproved_payload["issues"][0]["code"] == "maintenance-item-unapproved"
 
     preview = runner.invoke(
         app,
@@ -761,7 +799,8 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
         for issue in payload["issues"]
         if issue["code"] == "frontmatter-field-missing"
     }
-    assert {"requested_by", "blocked_reason"} <= missing
+    assert "requested_by" not in missing
+    assert "blocked_reason" in missing
 
 
 def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Path) -> None:
@@ -881,7 +920,8 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(worksp
             "--confirm",
         ],
     )
-    assert json.loads(applied.output)["status"] == "applied"
+    applied_payload = json.loads(applied.output)
+    assert applied_payload["status"] == "applied"
     target = workspace / "mywork" / "知识-迁移.md"
     assert target.is_file() and not source.exists()
     assert "status: draft" in target.read_text(encoding="utf-8")
@@ -1139,7 +1179,7 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
     assert created.exit_code == 0, created.output
     payload = json.loads(created.output)
     decision_id = payload["decision"]["id"]
-    projection = workspace / f"_收件箱/待用户确认/待确认-Decision-{decision_id}.md"
+    projection = workspace / f"_协作/decisions/pending/Decision-{decision_id}.md"
     assert payload["status"] == "created"
     assert projection.is_file()
     assert "AUTO-GENERATED:CAMPFIRE-DECISION" in projection.read_text(encoding="utf-8")
@@ -1188,6 +1228,8 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
     assert answered.exit_code == 0, answered.output
     assert json.loads(answered.output)["decision"]["status"] == "answered"
     assert not projection.exists()
+    answered_projection = workspace / f"_协作/decisions/answered/Decision-{decision_id}.md"
+    assert answered_projection.is_file()
 
     closed = runner.invoke(
         app,
@@ -1196,6 +1238,8 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
     assert closed.exit_code == 0, closed.output
     closed_payload = json.loads(closed.output)
     assert closed_payload["decision"]["status"] == "closed"
+    assert not answered_projection.exists()
+    assert (workspace / f"_协作/decisions/closed/Decision-{decision_id}.md").is_file()
     assert [event["event_type"] for event in closed_payload["events"]][-2:] == [
         "decision.answered",
         "decision.closed",
@@ -1345,7 +1389,9 @@ def test_maintenance_semantic_spec_applies_and_verifies_one_plan(workspace: Path
             "--confirm",
         ],
     )
-    assert json.loads(applied.output)["status"] == "applied"
+    applied_payload = json.loads(applied.output)
+    assert applied_payload["status"] == "applied"
+    assert applied_payload["write_performed"] is True
     target = workspace / "mynote/知识-临时笔记.md"
     assert target.is_file() and not source.exists()
     assert target.read_text(encoding="utf-8").startswith("---\nname: Go 并发模型\n")
@@ -1467,3 +1513,38 @@ def test_scoped_sync_ignores_structural_issue_outside_scope(workspace: Path) -> 
     assert payload["status"] == "synced"
     assert payload["write_performed"] is True
     assert "记录-进展" in (healthy / "MOC-Healthy.md").read_text(encoding="utf-8")
+
+
+def test_archive_scope_does_not_apply_other_candidates(workspace: Path) -> None:
+    first = _create_domain(workspace, "First")
+    second = _create_domain(workspace, "Second")
+    frontmatter = (
+        "---\nname: done\ndescription: done\ntype: issue\nproject: test\n"
+        "domain: test\nstatus: current\nlifecycle: completed\nrelated: []\n"
+        "archive_requested: true\narchive_reason: completed\ncreated: 2026-01-01\n"
+        "updated: 2026-01-01\ntags: []\n---\n# done\n"
+    )
+    first_doc = first / "问题-first.md"
+    second_doc = second / "问题-second.md"
+    first_doc.write_text(frontmatter, encoding="utf-8")
+    second_doc.write_text(frontmatter, encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "archive",
+            "apply",
+            "--scope",
+            "mywork/First/问题-first.md",
+            "--confirm",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert payload["status"] == "applied"
+    assert payload["changed_document_count"] == 1
+    assert (first / "archive/问题-first.md").is_file()
+    assert second_doc.is_file()

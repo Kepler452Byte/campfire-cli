@@ -85,12 +85,19 @@ def run(
 
 
 @archive_cli.command("check")
-def archive_check(ctx: typer.Context) -> None:
+def archive_check(
+    ctx: typer.Context,
+    scope: str | None = typer.Option(None, "--scope", help="只检查指定 Vault 相对路径"),
+) -> None:
     """只读检查归档候选。"""
-    emit(ctx.obj.maintenance.archive(False))
+    emit(ctx.obj.maintenance.archive(False, scope))
 
 
 @archive_cli.command("apply")
-def archive_apply(ctx: typer.Context, confirm: bool = typer.Option(False, "--confirm")) -> None:
+def archive_apply(
+    ctx: typer.Context,
+    confirm: bool = typer.Option(False, "--confirm"),
+    scope: str | None = typer.Option(None, "--scope", help="只归档指定 Vault 相对路径"),
+) -> None:
     """执行已经标记并通过检查的归档请求。"""
-    emit(ctx.obj.maintenance.archive(confirm))
+    emit(ctx.obj.maintenance.archive(confirm, scope))

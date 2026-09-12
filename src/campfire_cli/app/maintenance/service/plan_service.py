@@ -121,6 +121,27 @@ class MaintenancePlanService:
     def apply(self, plan_id: str, confirm: bool) -> MaintenanceResult:
         plan = self._repository.load_plan(plan_id)
         approved = [item for item in plan.items if item.approved]
+        unapproved = [item for item in plan.items if not item.approved]
+        if unapproved:
+            issues = [
+                Issue.model_validate(
+                    enrich_issue(
+                        {
+                            "code": "maintenance-item-unapproved",
+                            "path": item.source,
+                            "detail": item.reason,
+                        }
+                    )
+                )
+                for item in unapproved
+            ]
+            return MaintenanceResult(
+                status="blocked",
+                document_count=len(plan.items),
+                issue_count=len(issues),
+                issues=issues,
+                operations=[item.model_dump(mode="json") for item in plan.items],
+            )
         issues = self._preflight(plan, approved)
         if issues or not confirm:
             return MaintenanceResult(
@@ -145,6 +166,7 @@ class MaintenancePlanService:
             document_count=len(approved),
             issue_count=0,
             changed_document_count=len(approved),
+            write_performed=bool(approved),
             operations=[item.model_dump(mode="json") for item in approved],
         )
 

@@ -121,4 +121,4 @@ class DecisionService:
         return self._sync_projection()
 
     def _sync_projection(self) -> DecisionSyncResult:
-        return self._projection.sync(self._repository.list("pending"))
+        return self._projection.sync(self._repository.list())

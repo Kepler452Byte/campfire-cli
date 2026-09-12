@@ -114,8 +114,7 @@ class ProjectService:
             basis: list[str] = []
             if project.local_path:
                 registered = Path(project.local_path).expanduser().resolve()
-                candidate = git_root or query
-                if candidate == registered or registered in candidate.parents:
+                if query == registered or registered in query.parents:
                     basis.append("local-path")
             if (
                 normalized_remote
@@ -125,6 +124,14 @@ class ProjectService:
                 basis.append("git-remote")
             if basis:
                 matches.append(ProjectMatch(project=project, match_basis=basis))
+        local_matches = [item for item in matches if "local-path" in item.match_basis]
+        if local_matches:
+            deepest = max(len(Path(item.project.local_path or "/").parts) for item in local_matches)
+            matches = [
+                item
+                for item in local_matches
+                if len(Path(item.project.local_path or "/").parts) == deepest
+            ]
         status = "matched" if len(matches) == 1 else "ambiguous" if matches else "unmatched"
         return ProjectResolutionResult(
             status=status,
@@ -261,7 +268,7 @@ class ProjectService:
 
     @staticmethod
     def _git_value(local_path: Path | None, *arguments: str) -> str | None:
-        if not local_path or not (local_path / ".git").exists():
+        if not local_path or not local_path.is_dir():
             return None
         result = subprocess.run(
             ["git", "-C", str(local_path), *arguments],

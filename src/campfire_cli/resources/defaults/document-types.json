@@ -1,7 +1,7 @@
 {
   "version": 2,
   "space_marker": "_空间.md",
-  "scope_roots": ["_收件箱/待用户确认"],
+  "scope_roots": [],
   "ignored_directories": ["assets", "generated", "a_skill"],
   "exempt_basenames": ["_领域.md", "_空间.md", "README.md", "CLAUDE.md", "AGENTS.md", "COMMAND.md"],
   "profiles": {"project-docs": ["moc", "product-spec", "tech-spec", "decision", "plan", "issue", "record", "board"]},

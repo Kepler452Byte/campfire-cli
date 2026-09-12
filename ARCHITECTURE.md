@@ -70,7 +70,7 @@ Markdown Workspace Adapter   用户级状态
                               batches/reports/locks
 ```
 
-Decision 以 SQLite 当前快照和追加事件为 SSOT。每个 pending Decision 在 Vault 中生成只读 Markdown 投影，并由 Base 聚合为待确认工作台；Notification 与未来 Task Channel 只通过稳定 Decision id 和事件联动，不反向拥有 Decision 状态。
+Decision 以 SQLite 当前快照和追加事件为 SSOT。全部状态在 `_协作/decisions/` 生成只读 Markdown 投影，并由统一的决策工作台按 pending、answered、closed、cancelled 展示。Notification 与未来 Task Channel 只通过稳定 Decision id 和事件联动，不反向拥有 Decision 状态。
 
 `app/` 按可独立理解的业务能力组织，CLI 只做参数和输出适配，Service 承担业务流程，Repository 负责外部读写。`common/` 只放跨业务复用、无独立业务流程的原子能力；不能为了“复用”把业务编排下沉到 common。
 

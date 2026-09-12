@@ -36,10 +36,6 @@ views:
     groupBy: {property: project, direction: ASC}
     order: [file.name, lifecycle, priority, assignee, due, updated]
   - type: table
-    name: Agent执行中
-    filters: 'list(assignee).contains("agent") && lifecycle == "in-progress"'
-    order: [file.name, project, priority, due, updated]
-  - type: table
     name: 当前阻塞
     filters: 'lifecycle == "blocked"'
     order: [file.name, project, task_source, priority, blocked_reason, updated]

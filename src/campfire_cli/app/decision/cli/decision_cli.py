@@ -108,5 +108,5 @@ def cancel(
 
 @decision_cli.command("sync")
 def sync(ctx: typer.Context) -> None:
-    """从 SQLite 重建所有 pending Decision 的 Vault 投影。"""
+    """从 SQLite 重建全部 Decision 的 Vault 投影。"""
     invoke(ctx.obj.decision.sync)

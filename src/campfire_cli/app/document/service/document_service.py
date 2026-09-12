@@ -127,6 +127,10 @@ class DocumentService:
         }
 
     def _is_exempt(self, path: Path) -> bool:
+        relative = path.relative_to(self._settings.vault_root)
+        collaboration_root = self._settings.governance.get("collaboration_root", "_协作")
+        if relative.parts and relative.parts[0] == collaboration_root:
+            return True
         markers = {
             self._settings.governance.get("space_marker", "_空间.md"),
             self._settings.governance.get("domain_marker", "_领域.md"),
