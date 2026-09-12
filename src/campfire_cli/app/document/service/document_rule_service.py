@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.document.service.frontmatter_formatter import ordered_keys
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.markdown import parse_document
@@ -73,6 +74,20 @@ class DocumentRuleService:
                 }
             )
         rules = self._rules(document_type, path, frontmatter)
+        actual_order = list(frontmatter)
+        expected_order = ordered_keys(
+            [(key, []) for key in actual_order], list(rules["field_order"])
+        )
+        if actual_order != expected_order:
+            issues.append(
+                {
+                    "code": "frontmatter-field-order-invalid",
+                    "path": relative,
+                    "field": "frontmatter",
+                    "actual": actual_order,
+                    "allowed": expected_order,
+                }
+            )
         conditional = {
             field
             for condition in rules["conditional_required"]

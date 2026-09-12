@@ -39,6 +39,40 @@ class MaintenanceResult(BaseModel):
     blocked_scope: str | None = None
     issue_counts: dict[str, int] = Field(default_factory=dict)
     operations: list[dict[str, Any]] = Field(default_factory=list)
+    scope: str | None = None
+    workspace_status: str | None = None
+
+
+class MaintenanceIntentItem(BaseModel):
+    path: str
+    frontmatter: dict[str, Any] = Field(default_factory=dict)
+    filename: str | None = None
+    format_frontmatter: bool = True
+    reason: str
+    approved: bool = False
+
+
+class MaintenanceIntentSpec(BaseModel):
+    schema_version: int = 1
+    operations: list[MaintenanceIntentItem]
+
+
+class MaintenancePlanItem(BaseModel):
+    source: str
+    target: str
+    source_sha256: str
+    frontmatter: dict[str, Any] = Field(default_factory=dict)
+    format_frontmatter: bool = False
+    reason: str
+    approved: bool = False
+
+
+class MaintenancePlan(BaseModel):
+    schema_version: int = 1
+    plan_id: str
+    scope: str | None = None
+    config_hash: str
+    items: list[MaintenancePlanItem] = Field(default_factory=list)
 
 
 class MaintenanceRunRecord(BaseModel):

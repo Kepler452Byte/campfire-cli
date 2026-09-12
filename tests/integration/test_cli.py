@@ -19,6 +19,9 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "restructure", "inventory", "-h"],
         ["maintenance", "-h"],
         ["maintenance", "check", "-h"],
+        ["maintenance", "plan", "-h"],
+        ["maintenance", "show", "-h"],
+        ["maintenance", "verify", "-h"],
         ["maintenance", "archive", "-h"],
         ["skill", "-h"],
         ["base", "-h"],
@@ -40,6 +43,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["document", "type", "-h"],
         ["document", "type", "list", "-h"],
         ["document", "check", "-h"],
+        ["document", "inspect", "-h"],
         ["document", "format", "-h"],
     ]
     for command in commands:
@@ -294,7 +298,8 @@ def test_workspace_config_check_validates_effective_contracts(tmp_path: Path, mo
     assert created.exit_code == 0, created.output
     checked = runner.invoke(app, ["workspace", "config", "check"])
     assert checked.exit_code == 0, checked.output
-    assert json.loads(checked.output)["status"] == "ok"
+    checked_payload = json.loads(checked.output)
+    assert checked_payload["status"] == "ok"
 
     path = home / "workspaces/test/config/document-types.json"
     config = json.loads(path.read_text(encoding="utf-8"))
@@ -423,7 +428,8 @@ def test_project_create_previews_then_initializes_document_domain(
     assert (domain / "_领域.md").is_file()
     assert (domain / "_总览/MOC-New Project总览.md").is_file()
     checked = runner.invoke(app, ["workspace", "project", "check", "new-project"])
-    assert json.loads(checked.output)["status"] == "ok"
+    checked_payload = json.loads(checked.output)
+    assert checked_payload["status"] == "ok"
 
 
 def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, monkeypatch) -> None:
@@ -645,7 +651,26 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
             "mynote/知识-单篇治理.md",
         ],
     )
-    assert json.loads(checked.output)["status"] == "ok"
+    checked_payload = json.loads(checked.output)
+    assert checked_payload["status"] == "needs-review"
+    assert checked_payload["issues"][0]["code"] == "frontmatter-field-order-invalid"
+
+    maintenance_plan = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "plan",
+            "--id",
+            "field-order",
+            "--scope",
+            "mynote/知识-单篇治理.md",
+        ],
+    )
+    planned_operation = json.loads(maintenance_plan.output)["operations"][0]
+    assert planned_operation["format_frontmatter"] is True
+    assert planned_operation["frontmatter"] == {}
 
     preview = runner.invoke(
         app,
@@ -675,6 +700,18 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
     )
     assert json.loads(applied.output)["status"] == "formatted"
     assert note.read_text(encoding="utf-8").startswith("---\nname: 单篇治理\n")
+    checked_after = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "check",
+            "--path",
+            "mynote/知识-单篇治理.md",
+        ],
+    )
+    assert json.loads(checked_after.output)["status"] == "ok"
 
 
 def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None:
@@ -1007,7 +1044,7 @@ def test_maintenance_check_filters_enriches_and_summarizes(workspace: Path) -> N
     assert summary_payload["issue_counts"] == {"frontmatter-enum-invalid": 1}
 
 
-def test_filtered_check_preserves_overall_status(workspace: Path) -> None:
+def test_filtered_check_reports_scope_status_and_workspace_status(workspace: Path) -> None:
     (workspace / "mynote/坏文档.md").write_text("无 frontmatter\n", encoding="utf-8")
     result = runner.invoke(
         app,
@@ -1016,20 +1053,149 @@ def test_filtered_check_preserves_overall_status(workspace: Path) -> None:
     payload = json.loads(result.output)
     assert payload["issue_count"] == 0
     assert payload["total_issue_count"] > 0
-    assert payload["status"] == "needs-review"
+    assert payload["status"] == "ok"
+    assert payload["workspace_status"] == "needs-review"
 
 
 def test_maintenance_apply_blocks_when_snapshot_changed(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-并发.md"
     note.write_text("# 并发\n", encoding="utf-8")
-    runner.invoke(app, ["--workspace", str(workspace), "maintenance", "plan"])
+    spec = workspace / "maintenance.yaml"
+    spec.write_text(
+        "operations:\n"
+        "  - path: mynote/知识-并发.md\n"
+        "    frontmatter:\n"
+        "      type: knowledge\n"
+        "    reason: test\n"
+        "    approved: true\n",
+        encoding="utf-8",
+    )
+    runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "plan",
+            "--id",
+            "concurrent",
+            "--spec",
+            str(spec),
+        ],
+    )
     note.write_text("# 另一个会话修改\n", encoding="utf-8")
     result = runner.invoke(
-        app, ["--workspace", str(workspace), "maintenance", "apply", "--confirm"]
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "apply",
+            "--plan",
+            "concurrent",
+            "--confirm",
+        ],
     )
     payload = json.loads(result.output)
     assert payload["status"] == "blocked"
     assert payload["issues"][0]["code"] == "concurrent-change"
+
+
+def test_maintenance_semantic_spec_applies_and_verifies_one_plan(workspace: Path) -> None:
+    source = workspace / "mynote/临时笔记.md"
+    source.write_text("# Go 并发模型\n\n理解 goroutine 与 channel。\n", encoding="utf-8")
+    spec = workspace / "semantic-maintenance.yaml"
+    spec.write_text(
+        "operations:\n"
+        "  - path: mynote/临时笔记.md\n"
+        "    frontmatter:\n"
+        "      name: Go 并发模型\n"
+        "      description: 理解 goroutine 与 channel 的协作模型\n"
+        "      type: knowledge\n"
+        "      status: current\n"
+        "      created: 2026-09-12\n"
+        "      updated: 2026-09-12\n"
+        "      tags: [go, concurrency]\n"
+        "    reason: Agent 根据正文完成语义治理\n"
+        "    approved: true\n",
+        encoding="utf-8",
+    )
+    planned = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "plan",
+            "--id",
+            "go-note",
+            "--scope",
+            "mynote",
+            "--spec",
+            str(spec),
+        ],
+    )
+    planned_payload = json.loads(planned.output)
+    assert planned.exit_code == 0, planned.output
+    assert planned_payload["status"] == "planned"
+    assert planned_payload["operations"][0]["target"] == "mynote/知识-临时笔记.md"
+
+    preview = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "apply",
+            "--plan",
+            "go-note",
+        ],
+    )
+    assert json.loads(preview.output)["status"] == "ready"
+    applied = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "apply",
+            "--plan",
+            "go-note",
+            "--confirm",
+        ],
+    )
+    assert json.loads(applied.output)["status"] == "applied"
+    target = workspace / "mynote/知识-临时笔记.md"
+    assert target.is_file() and not source.exists()
+    assert target.read_text(encoding="utf-8").startswith("---\nname: Go 并发模型\n")
+    verified = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "verify",
+            "--plan",
+            "go-note",
+        ],
+    )
+    assert json.loads(verified.output)["status"] == "ok"
+
+    inspected = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "document",
+            "inspect",
+            "--path",
+            "mynote/知识-临时笔记.md",
+        ],
+    )
+    inspected_payload = json.loads(inspected.output)
+    assert inspected_payload["status"] == "ok"
+    assert inspected_payload["type"] == "knowledge"
+    assert inspected_payload["profile"]["name"] == "knowledge"
 
 
 def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> None:

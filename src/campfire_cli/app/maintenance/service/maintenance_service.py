@@ -1,16 +1,9 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from campfire_cli.app.document.service import (
-    frontmatter_apply,
-    frontmatter_plan,
-    type_apply,
-    type_plan,
-)
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
@@ -24,6 +17,7 @@ from campfire_cli.app.maintenance.service import moc_service as governance_sync
 from campfire_cli.app.maintenance.service.maintenance_protocol import (
     MaintenanceRepositoryProtocol,
 )
+from campfire_cli.app.maintenance.service.plan_service import MaintenancePlanService
 from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.filesystem import atomic_write
@@ -47,6 +41,7 @@ class MaintenanceService:
         self._settings = settings
         self._repository = repository
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
+        self._plans = MaintenancePlanService(settings, repository)
 
     def check(
         self,
@@ -117,13 +112,20 @@ class MaintenanceService:
             (item.model_dump() for item in issues), scope=scope, code=code, severity=severity
         )
         selected_issues = [Issue.model_validate(item) for item in selected]
+        scoped_documents = [
+            item
+            for item in documents
+            if scope is None or self._path_matches_scope(item.path, scope)
+        ]
         return MaintenanceResult(
-            status=result.status,
-            document_count=len(documents),
+            status="ok" if not selected_issues else "needs-review",
+            document_count=len(scoped_documents),
             issue_count=len(selected_issues),
             total_issue_count=len(issues),
             issues=[] if summary else selected_issues,
             issue_counts=self._issue_counts(selected_issues),
+            scope=scope,
+            workspace_status=result.status,
         )
 
     def _export_current_report(self, result: MaintenanceResult, exported_at: datetime) -> None:
@@ -133,76 +135,23 @@ class MaintenanceService:
         atomic_write(report_root / "current.json", render_json_report(payload))
         atomic_write(report_root / "current.md", render_maintenance_report(payload))
 
-    def plan(self) -> MaintenanceResult:
-        paths = self._iter_documents()
-        snapshot = capture_snapshot(self._settings.vault_root, paths)
-        type_plan_result = type_plan.build_plan(
-            self._settings.vault_root, self._settings.document_types
-        )
-        metadata_plan = frontmatter_plan.build_plan(
-            self._settings.vault_root,
-            self._settings.document_types,
-            self._settings.frontmatter_schema,
-        )
-        changed = snapshot_changes(self._settings.vault_root, snapshot)
-        if changed:
-            return self._concurrent_result(changed)
-        payload = {
-            "schema_version": 1,
-            "document_types": type_plan_result,
-            "frontmatter": metadata_plan,
-            "snapshot": snapshot,
-        }
-        target = self._settings.state_root / "maintenance" / "current-plan.json"
-        atomic_write(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
-        count = len(type_plan_result["items"]) + len(metadata_plan["items"])
-        return MaintenanceResult(status="planned", document_count=count, issue_count=0)
+    def plan(
+        self,
+        plan_id: str,
+        *,
+        scope: str | None = None,
+        spec_path: Path | None = None,
+    ) -> MaintenanceResult:
+        return self._plans.plan(plan_id, scope=scope, spec_path=spec_path)
 
-    def apply(self, confirm: bool) -> MaintenanceResult:
-        plan_path = self._settings.state_root / "maintenance" / "current-plan.json"
-        if not plan_path.is_file():
-            return MaintenanceResult(
-                status="blocked",
-                document_count=0,
-                issue_count=1,
-                issues=[
-                    Issue.model_validate(
-                        enrich_issue({"code": "maintenance-plan-missing", "path": str(plan_path)})
-                    )
-                ],
-            )
-        payload = json.loads(plan_path.read_text(encoding="utf-8"))
-        type_ops, type_issues = type_apply.preflight(
-            self._settings.vault_root,
-            payload["document_types"],
-            self._settings.document_types,
-        )
-        metadata_ops, metadata_issues = frontmatter_apply.preflight(
-            self._settings.vault_root,
-            payload["frontmatter"],
-            self._settings.document_types,
-            self._settings.frontmatter_schema,
-        )
-        issues = [*type_issues, *metadata_issues]
-        if issues or not confirm:
-            return MaintenanceResult(
-                status="blocked" if issues else "ready",
-                document_count=len(type_ops) + len(metadata_ops),
-                issue_count=len(issues),
-                issues=[Issue.model_validate(enrich_issue(item)) for item in issues],
-            )
-        with workspace_write_lock(self._settings.state_root):
-            changed = snapshot_changes(self._settings.vault_root, payload.get("snapshot", {}))
-            if changed:
-                return self._concurrent_result(changed)
-            type_result = type_apply.apply_plan(self._settings.vault_root, type_ops)
-            changed_metadata = frontmatter_apply.apply(metadata_ops)
-        return MaintenanceResult(
-            status="applied",
-            document_count=len(type_ops) + len(metadata_ops),
-            issue_count=0,
-            changed_document_count=type_result["applied_count"] + changed_metadata,
-        )
+    def show_plan(self, plan_id: str) -> MaintenanceResult:
+        return self._plans.show(plan_id)
+
+    def apply(self, plan_id: str, confirm: bool) -> MaintenanceResult:
+        return self._plans.apply(plan_id, confirm)
+
+    def verify(self, plan_id: str) -> MaintenanceResult:
+        return self._plans.verify(plan_id)
 
     def sync(self, dry_run: bool = False, scope: str | None = None) -> MaintenanceResult:
         domains, issues = DomainService(

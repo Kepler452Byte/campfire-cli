@@ -47,6 +47,12 @@ def check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
     invoke(lambda: service(ctx).check(path))
 
 
+@document_cli.command("inspect")
+def inspect(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
+    """返回 Agent 治理单篇文档所需的类型、Profile、领域和问题上下文。"""
+    invoke(lambda: service(ctx).inspect(path))
+
+
 @document_cli.command("format")
 def format_document(
     ctx: typer.Context,

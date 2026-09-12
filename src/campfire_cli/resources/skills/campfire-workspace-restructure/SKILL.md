@@ -19,6 +19,8 @@ description: "按审批计划重构 Campfire Workspace 的已有物理结构；�
 
 ## 安全边界
 
+- 纯移动必须保持文档内容不变；只有 Spec 明确提供 Frontmatter Patch 时才改写内容。
+- `restructure verify` 只验证 source/target 迁移事实；文档 Profile 与 Formatter 合规交给 Maintenance。
 - 不用 Restructure 处理普通增量维护，也不绕过批次计划直接移动受管文档。
 - 写入返回 `concurrent-change`、`source-hash-changed` 或 `restructure-config-changed` 时停止，重新 inventory 和 plan。
 - 一篇文档只有一个主目标位置；跨领域关系使用链接和自动索引表达。

@@ -2,7 +2,7 @@
 
 本模块承载面向用户和 Agent 的文档业务能力，包括单篇检查与格式化、类型契约、Profile 契约、命名和 Frontmatter 治理。
 
-Document App 负责文档自身及其规则；Maintenance App 负责跨文档批量扫描、计划和派生内容同步；Workspace Restructure 用例负责存量结构重构。纯解析、序列化和路径安全等无业务状态的原子能力保留在 `common/documents/`。
+Document App 负责文档自身及其规则；Maintenance App 负责跨文档统一计划、执行、验收和派生内容同步；Workspace Restructure 用例负责存量结构重构。纯解析、序列化和路径安全等无业务状态的原子能力保留在 `common/documents/`。
 
 ## 当前能力
 
@@ -33,6 +33,7 @@ document/
 - `type`：检查、规划和执行单选类型与文件命名治理。
 - `frontmatter`：检查、规划、执行和格式化文档属性。
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。
+- `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile 和具体问题。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。
 
 Document Service 可以被 Maintenance 和 Workspace Restructure 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
@@ -45,4 +46,4 @@ Profile 只允许一层 `base` 继承。Service 将声明配置编译为完整 `
 
 `document profile sync` 与 `document type sync` 默认只预览，必须使用 `--confirm` 才更新用户级契约。标准契约升级时保留 Workspace 自定义类型和自定义 Profile，同步不修改任何 Workspace 文档。
 
-`document format --path <文档>` 默认只预览字段顺序变化，追加 `--confirm` 后才写入；它不新增、删除或修改属性值。
+Document Rule 必须把属性顺序错误作为正式 Issue 暴露；顺序取自同一个 Effective Profile。`document format --path <文档>` 默认只预览字段顺序变化，追加 `--confirm` 后才写入；它不新增、删除或修改属性值。

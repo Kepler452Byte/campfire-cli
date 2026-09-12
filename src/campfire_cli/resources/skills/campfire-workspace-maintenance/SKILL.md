@@ -13,10 +13,35 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
 2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。默认先预览，用户确认后追加 `--confirm`。顶级 Space、根 Domain 和有歧义的父子关系必须由用户确认。
-3. 单篇文档使用 `campfire document profile resolve/check/format`；字段、顺序与枚举以 CLI 解析的有效 Profile 为准，不在 Skill 中复制。
-4. 日常批量维护使用 `campfire maintenance plan`，审查后使用 `maintenance apply --confirm`。
-5. 使用 `maintenance sync --dry-run` 预览 MOC、关系页与治理视图变更，再执行 `maintenance sync`；日常完整流程使用 `maintenance run`。
-6. 报告原始笔记变化、自动生成物和仍需用户确认的事项。涉及跨领域移动、批量改名、领域拆分或合并时停止，改用 `campfire-workspace-restructure`。
+3. 单篇文档先运行 `campfire document inspect --path <file>`；字段、顺序与枚举以返回的有效 Profile 为准，不在 Skill 中复制。
+4. 确定性问题可以生成普通 Plan；缺标题、摘要、类型等语义时，Agent 必须阅读正文和领域上下文，生成 YAML/JSON Spec，再运行 `campfire maintenance plan --id <id> --scope <path> --spec <file>`。Spec 中每项默认不审批；只有用户已明确授权或逐项审查通过才写 `approved: true`。
+5. 依次运行 `maintenance show --plan <id>`、`maintenance apply --plan <id>` 预检、`maintenance apply --plan <id> --confirm` 执行和 `maintenance verify --plan <id>` 局部验收。出现 `concurrent-change` 或配置变化时废弃旧计划并重新生成。
+6. 使用 `maintenance sync --scope <path> --dry-run` 预览当前范围的 MOC、关系页与治理视图变更，审查后去掉 `--dry-run`。日常完整流程使用 `maintenance run --scope <path>`。
+7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。涉及跨领域移动、领域拆分或合并时停止，改用 `campfire-workspace-restructure`。
+
+## 路由
+
+```text
+发现对象
+   |
+   +-- 已在 Domain，字段、类型、同目录命名或 Formatter 不合规
+   |      -> inspect/check -> Agent 语义判断 -> plan --spec
+   |      -> show -> apply 预检 -> apply --confirm -> verify -> sync --scope
+   |
+   +-- 已有目录但没有声明
+   |      -> space/domain adopt
+   |
+   +-- 需要新 Space 或 Domain
+   |      -> space/domain create
+   |
+   +-- 需要改变主 Domain、拆分或合并领域
+   |      -> campfire-workspace-restructure
+   |
+   `-- 归属或语义不能唯一确定
+          -> _收件箱/待用户确认
+```
+
+Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校验、计划、哈希保护、执行、引用更新和审计；用户负责确认歧义与高风险归属。不要由 Agent 手工执行本可进入 Maintenance Plan 的批量修改。
 
 ## 不变量
 
@@ -24,7 +49,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 - `_空间.md` 声明 Space，`_领域.md` 声明可多级嵌套的 Domain；保留目录不是 Space 或 Domain。
 - 一篇文档只有一个主物理 Domain，可以出现在多个自动索引中。
 - MOC 自动区域、相关文档、反向链接、关系和统计由 CLI 生成，不手工维护。
-- Maintenance 不改变文档主物理归属，不进行跨领域移动、批量改名、领域合并或拆分。
+- Maintenance 只允许在原 Domain 内按 type 修正文件名，不改变文档主物理归属，不进行跨领域移动、领域合并或拆分。
 - 写入返回 `concurrent-change` 时停止并重新检查，不覆盖其他会话的新内容。
 - Markdown 是内容事实来源，用户级配置是治理契约；SQLite 只保存索引与工作流状态。
 

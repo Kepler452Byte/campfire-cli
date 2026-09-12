@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 
@@ -28,15 +29,36 @@ def check(
 
 
 @maintenance_cli.command("plan")
-def plan(ctx: typer.Context) -> None:
-    """生成默认未审批的当前维护计划。"""
-    emit(ctx.obj.maintenance.plan())
+def plan(
+    ctx: typer.Context,
+    plan_id: str = typer.Option(..., "--id", help="稳定的维护计划 ID"),
+    scope: str | None = typer.Option(None, "--scope", help="只规划指定 Vault 相对路径"),
+    spec: Path | None = typer.Option(None, "--spec", help="Agent 或人类提供的语义治理 YAML/JSON"),
+) -> None:
+    """生成带稳定 ID、默认未审批的维护计划。"""
+    emit(ctx.obj.maintenance.plan(plan_id, scope=scope, spec_path=spec))
+
+
+@maintenance_cli.command("show")
+def show(ctx: typer.Context, plan_id: str = typer.Option(..., "--plan")) -> None:
+    """查看一个稳定 ID 标识的维护计划。"""
+    emit(ctx.obj.maintenance.show_plan(plan_id))
 
 
 @maintenance_cli.command("apply")
-def apply(ctx: typer.Context, confirm: bool = typer.Option(False, "--confirm")) -> None:
-    """预检或执行已审批的当前维护计划。"""
-    emit(ctx.obj.maintenance.apply(confirm))
+def apply(
+    ctx: typer.Context,
+    plan_id: str = typer.Option(..., "--plan"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """预检或执行指定维护计划中的已审批项。"""
+    emit(ctx.obj.maintenance.apply(plan_id, confirm))
+
+
+@maintenance_cli.command("verify")
+def verify(ctx: typer.Context, plan_id: str = typer.Option(..., "--plan")) -> None:
+    """只验证指定维护计划涉及的文档。"""
+    emit(ctx.obj.maintenance.verify(plan_id))
 
 
 @maintenance_cli.command("sync")

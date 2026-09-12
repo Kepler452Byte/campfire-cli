@@ -40,7 +40,9 @@ class AppContainer:
         upgrade_database(database_path)
         engine = create_sqlite_engine(database_path)
         session = open_session(engine)
-        maintenance_repository = SqliteMaintenanceRepository(session, resolution.workspace_id)
+        maintenance_repository = SqliteMaintenanceRepository(
+            session, resolution.workspace_id, settings.state_root
+        )
         maintenance = MaintenanceService(settings, maintenance_repository)
         restructure_repository = SqliteRestructureRepository(
             session, settings.state_root, resolution.workspace_id

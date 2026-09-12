@@ -30,6 +30,35 @@ class DocumentService:
             "issues": issues,
         }
 
+    def inspect(self, relative_path: str) -> dict[str, Any]:
+        path = self._document_path(relative_path)
+        parsed = parse_document(path.read_text(encoding="utf-8"))
+        document_type = parsed.frontmatter.get("type")
+        profile = self._profiles.resolve(document_type, parsed.frontmatter, path)
+        domain_id: str | None = None
+        current = path.parent
+        while current == self._settings.vault_root or self._settings.vault_root in current.parents:
+            marker = current / "_领域.md"
+            if marker.is_file():
+                value = parse_document(marker.read_text(encoding="utf-8")).frontmatter.get(
+                    "domain_id"
+                )
+                domain_id = value if isinstance(value, str) else None
+                break
+            if current == self._settings.vault_root:
+                break
+            current = current.parent
+        issues = self._rules.check_document(self._settings.vault_root, path)
+        return {
+            "status": "ok" if not issues else "needs-review",
+            "workspace_id": self._settings.workspace_id,
+            "path": relative_path,
+            "domain_id": domain_id,
+            "type": document_type if isinstance(document_type, str) else None,
+            "profile": profile.model_dump(),
+            "issues": issues,
+        }
+
     def format(self, relative_path: str, confirm: bool = False) -> dict[str, Any]:
         path = self._document_path(relative_path)
         original = path.read_text(encoding="utf-8")
