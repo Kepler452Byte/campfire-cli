@@ -12,6 +12,7 @@ from campfire_cli.app.maintenance.cli.database_cli import database_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import archive_cli, maintenance_cli
 from campfire_cli.app.migration.cli.migration_cli import migration_cli
 from campfire_cli.app.skill.cli.skill_cli import skill_cli
+from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.workspace_cli import initialize, workspace_cli
 from campfire_cli.common.exceptions import AppError
 from campfire_cli.container import AppContainer
@@ -51,6 +52,7 @@ app.add_typer(database_cli, name="database")
 app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
 app.add_typer(workspace_cli, name="workspace")
+app.add_typer(project_cli, name="project")
 
 
 @app.callback()
@@ -59,7 +61,7 @@ def main(
     workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的 id 或路径"),
 ) -> None:
     """初始化目标 Workspace 的应用依赖。"""
-    if ctx.invoked_subcommand in {None, "version", "init", "workspace"}:
+    if ctx.invoked_subcommand in {None, "version", "init", "workspace", "project"}:
         return
     ctx.obj = LazyContainer(workspace)
 

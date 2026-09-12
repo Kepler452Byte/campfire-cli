@@ -16,17 +16,22 @@ from campfire_cli.common.filesystem import atomic_write
 
 
 class SqliteMigrationRepository:
-    def __init__(self, session: Session, state_root: Path) -> None:
+    def __init__(self, session: Session, state_root: Path, workspace_id: str) -> None:
         self._session = session
         self._state_root = state_root
+        self._workspace_id = workspace_id
 
     def save_batch(self, batch_uuid: str, batch: str, scope: str, config_hash: str) -> None:
         existing = self._session.scalar(
-            select(MigrationBatch).where(MigrationBatch.batch_name == batch)
+            select(MigrationBatch).where(
+                MigrationBatch.workspace_id == self._workspace_id,
+                MigrationBatch.batch_name == batch,
+            )
         )
         if existing is None:
             self._session.add(
                 MigrationBatch(
+                    workspace_id=self._workspace_id,
                     batch_uuid=batch_uuid,
                     batch_name=batch,
                     scope=scope,
@@ -47,7 +52,12 @@ class SqliteMigrationRepository:
         self._write(batch, "inventory.json", payload)
 
     def load_inventory(self, batch: str) -> tuple[str, str, list[InventoryItem]]:
-        row = self._session.scalar(select(MigrationBatch).where(MigrationBatch.batch_name == batch))
+        row = self._session.scalar(
+            select(MigrationBatch).where(
+                MigrationBatch.workspace_id == self._workspace_id,
+                MigrationBatch.batch_name == batch,
+            )
+        )
         if row is None:
             raise ValueError(f"批次不存在：{batch}")
         payload = self._read(batch, "inventory.json")

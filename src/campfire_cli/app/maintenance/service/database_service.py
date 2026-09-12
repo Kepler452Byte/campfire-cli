@@ -11,7 +11,7 @@ from campfire_cli.common.database.migrations import upgrade_database
 from campfire_cli.common.database.models import MigrationBatch
 from campfire_cli.common.filesystem import atomic_write
 from campfire_cli.common.hashing import text_sha256
-from campfire_cli.config.settings import WorkspaceSettings
+from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 
 class DatabaseService:
@@ -21,7 +21,7 @@ class DatabaseService:
         self._session = session
 
     def upgrade(self) -> dict[str, object]:
-        upgrade_database(self._settings.state_root / "db" / "campfire.db")
+        upgrade_database(campfire_home() / "campfire.db")
         return {"status": "ok", "revision": self._revision()}
 
     def backup(self) -> dict[str, object]:
@@ -40,7 +40,11 @@ class DatabaseService:
                 "status": row.status,
                 "config_hash": row.config_hash,
             }
-            for row in self._session.scalars(select(MigrationBatch)).all()
+            for row in self._session.scalars(
+                select(MigrationBatch).where(
+                    MigrationBatch.workspace_id == self._settings.workspace_id
+                )
+            ).all()
         ]
         payload = {
             "schema_version": 1,
@@ -81,12 +85,20 @@ class DatabaseService:
             }
         if not confirm:
             return {"status": "ready", "batch_count": len(payload["data"]["migration_batches"])}
-        existing_names = set(self._session.scalars(select(MigrationBatch.batch_name)).all())
+        existing_names = set(
+            self._session.scalars(
+                select(MigrationBatch.batch_name).where(
+                    MigrationBatch.workspace_id == self._settings.workspace_id
+                )
+            ).all()
+        )
         restored = 0
         for item in payload["data"]["migration_batches"]:
             if item["batch_name"] in existing_names:
                 continue
-            self._session.add(MigrationBatch(**item))
+            self._session.add(
+                MigrationBatch(workspace_id=self._settings.workspace_id, **item)
+            )
             restored += 1
         self._session.commit()
         return {"status": "restored", "restored_batch_count": restored}

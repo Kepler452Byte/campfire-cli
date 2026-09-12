@@ -12,7 +12,7 @@ uv run campfire workspace list
 uv run campfire --workspace personal maintenance check
 ```
 
-CLI 通过用户级 `~/.campfire/registry.json` 管理多个 Workspace。配置、SQLite、批次、报告和锁全部保存在 `~/.campfire/workspaces/<id>/`，不会向 Workspace 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
+CLI 通过唯一的用户级 `~/.campfire/campfire.db` 管理多个 Workspace、Project、文档索引和工作流状态。各 Workspace 的配置、批次和报告保存在 `~/.campfire/workspaces/<id>/`，不会向 Workspace 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
 
 ## 安装与调用
 
@@ -29,13 +29,21 @@ campfire version
 ```bash
 campfire workspace add --id personal --path /path/to/vault --default
 campfire workspace create --id new-vault --path /new/path --default
+campfire project add --id joyit-ai-gateway --workspace personal --name "JoyIT AI Gateway" --document-domain "mywork/【JoyIT AI Gateway】文档中心" --local-path /path/to/aigateway
+campfire project list --workspace personal
+campfire workspace export --output campfire-registry-backup.json
+campfire workspace import --input campfire-registry-backup.json
+campfire workspace import --input campfire-registry-backup.json --confirm
 campfire workspace resolve
 campfire --workspace personal maintenance check
 campfire --workspace personal maintenance check --summary
 campfire --workspace personal maintenance plan
 campfire --workspace personal maintenance apply --confirm
 campfire --workspace personal maintenance sync --dry-run
+campfire --workspace personal maintenance sync --scope "mywork/【项目】文档中心"
 ```
+
+`maintenance check` 统一负责文档 Schema 与枚举校验；`maintenance sync` 只因领域结构、MOC、路径或并发安全问题阻塞。单篇文档的元数据问题会继续出现在检查报告中，但不会阻止其他领域刷新生成视图。`sync` 和 `run` 可用 `--scope` 限定同步领域。
 
 跨目录迁移或显式修改 Frontmatter 时，先冻结范围，再传入 YAML/JSON 意图规格：
 
@@ -63,5 +71,5 @@ Migration、Maintenance、Archive 写入前会在治理锁内复核内容哈希�
 `concurrent-change` 或 `source-hash-changed`，不会覆盖新内容。文档、任务状态和 Skill 模板枚举由
 同一个治理规则引擎按照 `frontmatter-schema.json` 校验。
 
-配置契约位于 `~/.campfire/workspaces/<id>/config/`；SQLite 是当前运行状态的主索引，
+配置契约位于 `~/.campfire/workspaces/<id>/config/`；全局唯一 SQLite 是注册数据的事实源和当前运行状态的主索引，
 `backup/current.json` 是可移植快照，`backup/changes.jsonl` 只保留最近的有限变更记录。

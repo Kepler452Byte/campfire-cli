@@ -27,10 +27,17 @@ class GovernanceRuleEngine:
         document_type = frontmatter.get("type")
         types = self._type_config.get("types", {})
         if not isinstance(document_type, str) or not document_type:
-            issues.append({"code": "document-type-missing", "path": relative})
+            issues.append({"code": "document-type-missing", "path": relative, "field": "type"})
         elif document_type not in types:
             issues.append(
-                {"code": "document-type-invalid", "path": relative, "detail": str(document_type)}
+                {
+                    "code": "document-type-invalid",
+                    "path": relative,
+                    "detail": str(document_type),
+                    "field": "type",
+                    "actual": document_type,
+                    "allowed": sorted(types),
+                }
             )
         elif not path.name.startswith(types[document_type]["prefix"]):
             issues.append(
@@ -38,6 +45,9 @@ class GovernanceRuleEngine:
                     "code": "document-prefix-mismatch",
                     "path": relative,
                     "detail": types[document_type]["prefix"],
+                    "field": "filename",
+                    "actual": path.name,
+                    "allowed": [types[document_type]["prefix"]],
                 }
             )
         rules = self._rules(document_type, path, frontmatter)
@@ -45,18 +55,37 @@ class GovernanceRuleEngine:
             value = frontmatter.get(field)
             if field not in frontmatter or value is None or value == "":
                 issues.append(
-                    {"code": "frontmatter-field-missing", "path": relative, "detail": field}
+                    {
+                        "code": "frontmatter-field-missing",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                    }
                 )
         for field in rules["lists"]:
             if field in frontmatter and not isinstance(frontmatter[field], list):
                 issues.append(
-                    {"code": "frontmatter-list-invalid", "path": relative, "detail": field}
+                    {
+                        "code": "frontmatter-list-invalid",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": frontmatter[field],
+                        "allowed": ["list"],
+                    }
                 )
         for field in rules["dates"]:
             value = frontmatter.get(field)
             if value is not None and not DATE_RE.fullmatch(str(value)):
                 issues.append(
-                    {"code": "frontmatter-date-invalid", "path": relative, "detail": field}
+                    {
+                        "code": "frontmatter-date-invalid",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": value,
+                        "allowed": ["YYYY-MM-DD"],
+                    }
                 )
         for field, allowed in rules["enums"].items():
             value = frontmatter.get(field)
@@ -72,6 +101,40 @@ class GovernanceRuleEngine:
                     }
                 )
         issues.extend(self._state_invariants(relative, path, document_type, frontmatter))
+        return issues
+
+    def check_collection(self, root: Path, paths: list[Path]) -> list[dict[str, Any]]:
+        """Validate invariants that require seeing more than one document."""
+        current_documents: dict[tuple[str, str, str, str], list[str]] = {}
+        for path in paths:
+            frontmatter = parse_document(path.read_text(encoding="utf-8")).frontmatter
+            document_type = frontmatter.get("type")
+            if document_type not in {"moc", "product-spec"}:
+                continue
+            if frontmatter.get("status") != "current":
+                continue
+            project = frontmatter.get("project")
+            domain = frontmatter.get("domain")
+            if not project or not domain:
+                continue
+            physical_domain = path.parent.relative_to(root).as_posix()
+            key = (physical_domain, str(project), str(domain), str(document_type))
+            current_documents.setdefault(key, []).append(path.relative_to(root).as_posix())
+        issues: list[dict[str, Any]] = []
+        for (_physical, project, domain, document_type), matches in sorted(
+            current_documents.items()
+        ):
+            if len(matches) < 2:
+                continue
+            issues.append(
+                {
+                    "code": "project-doc-current-conflict",
+                    "path": matches[0],
+                    "detail": f"{project}/{domain}/{document_type}",
+                    "actual": sorted(matches),
+                    "allowed": ["one-current-document"],
+                }
+            )
         return issues
 
     def check_templates(self, root: Path, skills_root: Path) -> list[dict[str, Any]]:

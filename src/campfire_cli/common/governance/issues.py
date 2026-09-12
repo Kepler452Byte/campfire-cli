@@ -64,6 +64,18 @@ ISSUE_CATALOG: dict[str, tuple[str, str]] = {
         "领域声明引用的 MOC 文件不存在。",
         "创建声明的 MOC 文件后重新运行 sync；不要让 sync 猜测文件名。",
     ),
+    "scope-missing": (
+        "指定范围内没有可同步的正式领域。",
+        "检查 --scope 路径和领域声明后重试。",
+    ),
+    "scope-outside-workspace": (
+        "指定范围超出当前 Workspace。",
+        "使用当前 Workspace 内的相对路径。",
+    ),
+    "project-doc-current-conflict": (
+        "同一物理领域存在多个当前唯一文档。",
+        "审查 actual 中的文档，只保留一份 current，或调整其领域和生命周期。",
+    ),
 }
 
 ISSUE_CATEGORIES: dict[str, tuple[str, str]] = {

@@ -80,6 +80,10 @@ class MaintenanceService:
                 Issue.model_validate(enrich_issue(item))
                 for item in self._rules.check_document(self._settings.vault_root, path)
             )
+        issues.extend(
+            Issue.model_validate(enrich_issue(item))
+            for item in self._rules.check_collection(self._settings.vault_root, paths)
+        )
         issues.extend(Issue.model_validate(enrich_issue(item)) for item in self._check_inbox())
         for skills_root in self._settings.skill_targets():
             issues.extend(
@@ -202,21 +206,39 @@ class MaintenanceService:
             changed_document_count=type_result["applied_count"] + changed_metadata,
         )
 
-    def sync(self, dry_run: bool = False) -> MaintenanceResult:
-        snapshot = capture_snapshot(self._settings.vault_root, self._iter_documents())
+    def sync(self, dry_run: bool = False, scope: str | None = None) -> MaintenanceResult:
         domains, issues = governance_check.discover_domains(
-            self._settings.vault_root,
-            self._settings.governance,
-            self._settings.document_types,
-            self._settings.frontmatter_schema,
+            self._settings.vault_root, self._settings.governance
         )
+        if scope:
+            scope_path = (self._settings.vault_root / scope).resolve()
+            if not self._is_within_workspace(scope_path):
+                return self._sync_blocked("scope-outside-workspace", scope, scope)
+            domains = [
+                domain
+                for domain in domains
+                if domain.path == scope_path
+                or scope_path in domain.path.parents
+                or domain.path in scope_path.parents
+            ]
+            issues = [issue for issue in issues if self._path_matches_scope(issue["path"], scope)]
+            if not domains:
+                return self._sync_blocked("scope-missing", scope, scope)
         if issues:
             return MaintenanceResult(
                 status="blocked",
                 document_count=0,
                 issue_count=len(issues),
                 issues=[Issue.model_validate(enrich_issue(item)) for item in issues],
+                blocked_phase="preflight",
+                blocked_scope=scope or "workspace",
             )
+        scoped_documents = [
+            path
+            for path in self._iter_documents()
+            if any(domain.path == path.parent or domain.path in path.parents for domain in domains)
+        ]
+        snapshot = capture_snapshot(self._settings.vault_root, scoped_documents)
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
         profile = self._settings.document_types.get("profiles", {}).get("project-docs", [])
         type_mapping = {
@@ -293,6 +315,8 @@ class MaintenanceService:
                             )
                         )
                     ],
+                    blocked_phase="preflight",
+                    blocked_scope=scope or "workspace",
                 )
             current_moc = moc.read_text(encoding="utf-8")
             generated_snapshot[moc.relative_to(self._settings.vault_root).as_posix()] = text_sha256(
@@ -323,7 +347,29 @@ class MaintenanceService:
             document_count=note_count,
             issue_count=0,
             generated_file_count=len(changes),
+            write_performed=bool(changes and not dry_run),
             operations=operations,
+        )
+
+    def _sync_blocked(self, code: str, path: str, scope: str | None) -> MaintenanceResult:
+        return MaintenanceResult(
+            status="blocked",
+            document_count=0,
+            issue_count=1,
+            issues=[Issue.model_validate(enrich_issue({"code": code, "path": path}))],
+            blocked_phase="preflight",
+            blocked_scope=scope or "workspace",
+        )
+
+    def _is_within_workspace(self, path: Path) -> bool:
+        return path == self._settings.vault_root or self._settings.vault_root in path.parents
+
+    @staticmethod
+    def _path_matches_scope(path: str, scope: str) -> bool:
+        normalized_path = path.strip("/")
+        normalized_scope = scope.strip("/")
+        return normalized_path == normalized_scope or normalized_path.startswith(
+            normalized_scope + "/"
         )
 
     def archive(self, confirm: bool = False) -> MaintenanceResult:

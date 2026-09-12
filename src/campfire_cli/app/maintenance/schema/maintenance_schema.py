@@ -34,6 +34,9 @@ class MaintenanceResult(BaseModel):
     issues: list[Issue] = Field(default_factory=list)
     changed_document_count: int = 0
     generated_file_count: int = 0
+    write_performed: bool = False
+    blocked_phase: str | None = None
+    blocked_scope: str | None = None
     issue_counts: dict[str, int] = Field(default_factory=dict)
     operations: list[dict[str, Any]] = Field(default_factory=list)
 

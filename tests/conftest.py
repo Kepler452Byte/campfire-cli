@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceEntry, WorkspaceRegistry
+
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -16,15 +19,11 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "mynote").mkdir()
     (tmp_path / "mywork").mkdir()
     (tmp_path / "_收件箱").mkdir()
-    (campfire_home / "registry.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "default_workspace": "test",
-                "workspaces": {"test": {"path": str(tmp_path)}},
-            }
-        ),
-        encoding="utf-8",
+    SqliteWorkspaceRepository(campfire_home).save_registry(
+        WorkspaceRegistry(
+            default_workspace="test",
+            workspaces={"test": WorkspaceEntry(path=str(tmp_path))},
+        )
     )
     (config / "governance.json").write_text(
         json.dumps(

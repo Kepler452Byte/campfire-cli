@@ -13,6 +13,7 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 ## 2. 核心业务对象
 
 - **Workspace**：人和 Agent 共享的上下文边界；一个 Workspace 可对应一个 Markdown Vault。
+- **Project**：Workspace 连接的工作资源，关联代码仓库、本地路径和项目文档领域。
 - **Participant**：参与协作的人类或 Agent。
 - **Document**：知识、项目、决策、计划、问题、记录等持久内容。
 - **Task Channel**：围绕一项任务持续记录负责人、状态、进展、阻塞、交接、结果和验收的异步协作通道。
@@ -60,7 +61,7 @@ Task Channel 借鉴 Go 的原则：**Do not communicate by sharing memory; inste
       ┌───────────┴───────────┐
  Markdown Workspace Adapter   用户级状态
  文档事实、任务、知识、项目    ~/.campfire/
-                              registry/config/db/
+                              campfire.db + config/
                               batches/reports/locks
 ```
 
@@ -72,11 +73,11 @@ Task Channel 借鉴 Go 的原则：**Do not communicate by sharing memory; inste
 | --- | --- | --- |
 | 正文、知识、项目、任务 | Workspace 中的 Markdown | SQLite 索引、MOC、Base、报告 |
 | 治理规则 | `~/.campfire/workspaces/<id>/config/` | 校验结果与执行计划 |
-| Workspace 注册关系 | `~/.campfire/registry.json` | 当前解析结果 |
+| Workspace、Project 注册关系 | `~/.campfire/campfire.db` | JSON 导入导出备份 |
 | Campfire Skills | Python 包内 `resources/skills/` | 全局 Agent Skill 目录 |
-| 迁移和维护状态 | 用户级批次与 SQLite | JSON 当前快照、有限变更日志 |
+| 文档索引、迁移和维护状态 | `~/.campfire/campfire.db`，按 `workspace_id` 隔离 | JSON 当前快照、有限变更日志 |
 
-SQLite 是可重建的运行索引，不是知识内容的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
+SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索引可以从 Markdown 重建；SQLite 不是知识内容的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
 
 ## 6. 稳定不变量
 
@@ -86,7 +87,7 @@ SQLite 是可重建的运行索引，不是知识内容的 SSOT。工具状态�
 4. MOC、Base、关系和报告能生成就不手工维护。
 5. 有歧义的分类和迁移进入待确认，不由 Agent 擅自决定。
 6. Markdown 内容可脱离 Campfire 阅读和迁移；SQLite 丢失后可以重建。
-7. Workspace 之间状态、锁和批次隔离，全局 registry 只负责定位。
+7. 只有一个用户级 SQLite；所有 Workspace 业务表必须携带 `workspace_id`，Repository 查询不得越界。
 
 ## 7. 演进方向
 

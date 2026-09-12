@@ -25,25 +25,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
-from campfire_cli.common.documents.document_types import profile_mapping
-
 START_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"
 END_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->"
 WIKILINK_RE = re.compile(r"!?\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]")
 MARKDOWN_LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 FENCED_CODE_RE = re.compile(r"\x60\x60\x60.*?\x60\x60\x60|~~~.*?~~~", re.DOTALL)
 INLINE_CODE_RE = re.compile(r"\x60[^\x60\n]*\x60")
-
-PROJECT_DOC_TYPES = {
-    "moc": "MOC-",
-    "product-spec": "产品-",
-    "tech-spec": "技术-",
-    "decision": "决策-",
-    "plan": "计划-",
-    "issue": "问题-",
-    "record": "记录-",
-}
-PROJECT_CURRENT_UNIQUE_TYPES = {"moc", "product-spec"}
 
 
 @dataclass(frozen=True)
@@ -83,8 +70,6 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
 def discover_domains(
     vault_root: Path,
     config: dict[str, Any],
-    type_config: dict[str, Any] | None = None,
-    schema: dict[str, Any] | None = None,
 ) -> tuple[list[Domain], list[dict[str, str]]]:
     marker_name = config.get("domain_marker", "_领域.md")
     ignored = set(config.get("ignored_directories", []))
@@ -192,8 +177,6 @@ def discover_domains(
                     "detail": domain.parent_domain,
                 }
             )
-        if domain.governance == "project-docs":
-            issues.extend(check_project_docs(domain, config, vault_root, type_config, schema))
     return domains, issues
 
 
@@ -309,104 +292,6 @@ def check_links(vault_root: Path, sources: list[Path]) -> list[dict[str, str]]:
 
 def project_reserved_directories(config: dict[str, Any]) -> set[str]:
     return set(config.get("project_reserved_directories", ["记录", "archive", "_总览", "a_skill"]))
-
-
-def check_project_docs(
-    domain: Domain,
-    config: dict[str, Any],
-    vault_root: Path | None = None,
-    type_config: dict[str, Any] | None = None,
-    schema: dict[str, Any] | None = None,
-) -> list[dict[str, str]]:
-    """校验 project-docs 领域内文档的 frontmatter 契约与命名前缀。"""
-    issues: list[dict[str, str]] = []
-    project_doc_types = PROJECT_DOC_TYPES
-    required_fields: set[str] = set()
-    enum_rules: dict[str, list[str]] = {}
-    if type_config is not None:
-        configured = profile_mapping(type_config, "project-docs")
-        if configured:
-            project_doc_types = configured
-    if schema is not None:
-        for rules in (
-            schema.get("base", {}),
-            schema.get("profiles", {}).get("project-docs", {}),
-        ):
-            required_fields.update(rules.get("required", []))
-            enum_rules.update(rules.get("enums", {}))
-    reserved = project_reserved_directories(config) | set(config.get("ignored_directories", []))
-    exempt = set()
-    if vault_root is not None:
-        for raw in config.get("project_doc_exempt_files", []):
-            exempt.add(str((vault_root / raw).resolve()))
-    docs = [
-        p
-        for p in domain.path.glob("*.md")
-        if p.name
-        not in {
-            config.get("domain_marker", "_领域.md"),
-            f"{domain.moc_name}.md",
-            "README.md",
-            "CLAUDE.md",
-        }
-    ]
-    current_keys: dict[tuple[str, str, str], list[str]] = {}
-    for doc in docs:
-        rel = str(doc.relative_to(domain.path))
-        if vault_root is not None and str(doc.resolve()) in exempt:
-            continue
-        meta = parse_frontmatter(doc)
-        if not meta:
-            issues.append({"code": "project-doc-frontmatter-missing", "path": rel})
-            continue
-        for field in required_fields:
-            if field not in meta:
-                issues.append({"code": "project-doc-field-missing", "path": rel, "detail": field})
-        doc_type = meta.get("type", "")
-        if doc_type and doc_type not in project_doc_types:
-            issues.append({"code": "project-doc-type-invalid", "path": rel, "detail": doc_type})
-        elif doc_type in project_doc_types and not doc.name.startswith(project_doc_types[doc_type]):
-            issues.append({"code": "project-doc-prefix-mismatch", "path": rel, "detail": doc_type})
-        status = meta.get("status", "")
-        if status and enum_rules.get("status") and status not in enum_rules["status"]:
-            issues.append({"code": "project-doc-status-invalid", "path": rel, "detail": status})
-        lifecycle = meta.get("lifecycle", "")
-        if lifecycle and enum_rules.get("lifecycle") and lifecycle not in enum_rules["lifecycle"]:
-            issues.append(
-                {"code": "project-doc-lifecycle-invalid", "path": rel, "detail": lifecycle}
-            )
-        if status == "archived" and lifecycle != "archived":
-            issues.append({"code": "project-doc-archived-lifecycle-invalid", "path": rel})
-        if (
-            doc_type in PROJECT_CURRENT_UNIQUE_TYPES
-            and status == "current"
-            and meta.get("project")
-            and meta.get("domain")
-        ):
-            key = (meta["project"], meta["domain"], doc_type)
-            current_keys.setdefault(key, []).append(rel)
-    for (project, doc_domain, doc_type), paths in sorted(current_keys.items()):
-        if len(paths) > 1:
-            issues.append(
-                {
-                    "code": "project-doc-current-conflict",
-                    "path": domain.path.name,
-                    "detail": f"{project}/{doc_domain}/{doc_type}: " + ", ".join(sorted(paths)),
-                }
-            )
-    for child in sorted(p for p in domain.path.iterdir() if p.is_dir()):
-        if child.name in reserved:
-            continue
-        if not (child / config.get("domain_marker", "_领域.md")).exists() and any(
-            child.glob("*.md")
-        ):
-            issues.append(
-                {
-                    "code": "undeclared-directory",
-                    "path": str(child.relative_to(domain.path.parent.parent)),
-                }
-            )
-    return issues
 
 
 def build_result(vault_root: Path, config: dict[str, Any]) -> dict[str, Any]:

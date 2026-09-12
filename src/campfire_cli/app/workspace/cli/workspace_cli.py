@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 from pydantic import BaseModel
 
-from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceCreateRequest
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
@@ -21,7 +21,7 @@ workspace_cli = typer.Typer(
 
 def service() -> WorkspaceService:
     root = campfire_home()
-    return WorkspaceService(root, FilesystemWorkspaceRepository(root))
+    return WorkspaceService(root, SqliteWorkspaceRepository(root))
 
 
 def emit(result: BaseModel) -> None:
@@ -91,3 +91,18 @@ def resolve(selector: str | None = typer.Option(None, "--workspace")) -> None:
 def set_default(workspace_id: str) -> None:
     """设置默认 Workspace。"""
     emit(invoke(lambda: service().set_default(workspace_id)))
+
+
+@workspace_cli.command("export")
+def export_registry(output: Path = typer.Option(..., "--output")) -> None:
+    """将 Workspace 与 Project 注册数据导出为 JSON 备份。"""
+    emit(invoke(lambda: service().export_registry(output)))
+
+
+@workspace_cli.command("import")
+def import_registry(
+    input_path: Path = typer.Option(..., "--input"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """校验注册数据备份；追加 --confirm 后替换当前注册数据。"""
+    emit(invoke(lambda: service().import_registry(input_path, confirm)))

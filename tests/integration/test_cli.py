@@ -23,6 +23,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["skill", "-h"],
         ["base", "-h"],
         ["workspace", "-h"],
+        ["project", "-h"],
+        ["project", "add", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -93,12 +95,104 @@ def test_workspace_create_builds_minimal_scaffold_and_database(tmp_path: Path, m
     for relative in payload["created_directories"]:
         assert (target / relative).is_dir()
     assert not (target / ".campfire").exists()
-    assert (campfire_home / "workspaces/new/db/campfire.db").is_file()
+    assert (campfire_home / "campfire.db").is_file()
+    assert not (campfire_home / "workspaces/new/db").exists()
     repeated = runner.invoke(
         app,
         ["workspace", "create", "--id", "new", "--path", str(target)],
     )
     assert repeated.exit_code != 0
+
+
+def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None:
+    campfire_home = tmp_path / "campfire-home"
+    workspace = tmp_path / "workspace"
+    domain = workspace / "mywork" / "【Example】文档中心"
+    repository = tmp_path / "repository"
+    domain.mkdir(parents=True)
+    repository.mkdir()
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
+    added_workspace = runner.invoke(
+        app, ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"]
+    )
+    assert added_workspace.exit_code == 0, added_workspace.output
+    added = runner.invoke(
+        app,
+        [
+            "project",
+            "add",
+            "--id",
+            "example",
+            "--workspace",
+            "personal",
+            "--name",
+            "Example",
+            "--document-domain",
+            "mywork/【Example】文档中心",
+            "--local-path",
+            str(repository),
+            "--git-remote-url",
+            "git@example.com:example/repository.git",
+            "--default-branch",
+            "main",
+        ],
+    )
+    assert added.exit_code == 0, added.output
+    payload = json.loads(added.output)
+    assert payload["operation"] == "created"
+    assert payload["local_path"] == str(repository)
+    listed = json.loads(runner.invoke(app, ["project", "list"]).output)
+    assert [item["id"] for item in listed["projects"]] == ["example"]
+    shown = json.loads(runner.invoke(app, ["project", "show", "example"]).output)
+    assert shown["document_domain"] == "mywork/【Example】文档中心"
+
+    backup = tmp_path / "registry.json"
+    exported = runner.invoke(app, ["workspace", "export", "--output", str(backup)])
+    assert json.loads(exported.output)["project_count"] == 1
+    preview = runner.invoke(app, ["workspace", "import", "--input", str(backup)])
+    assert json.loads(preview.output)["status"] == "planned"
+    applied = runner.invoke(
+        app, ["workspace", "import", "--input", str(backup), "--confirm"]
+    )
+    assert json.loads(applied.output)["status"] == "imported"
+    assert not (campfire_home / "registry.json").exists()
+
+
+def test_unified_database_isolates_document_state_by_workspace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    campfire_home = tmp_path / "campfire-home"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
+    for workspace_id in ("left", "right"):
+        root = tmp_path / workspace_id
+        root.mkdir()
+        added = runner.invoke(
+            app,
+            ["workspace", "add", "--id", workspace_id, "--path", str(root)],
+        )
+        assert added.exit_code == 0, added.output
+        note = root / "mynote" / "知识-相同路径.md"
+        note.parent.mkdir()
+        note.write_text(
+            "---\nname: 相同路径\ndescription: test\ntype: knowledge\n"
+            "status: current\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
+            encoding="utf-8",
+        )
+        checked = runner.invoke(
+            app, ["--workspace", workspace_id, "maintenance", "check"]
+        )
+        assert checked.exit_code == 0, checked.output
+
+    import sqlite3
+
+    with sqlite3.connect(campfire_home / "campfire.db") as connection:
+        rows = connection.execute(
+            "SELECT workspace_id, path FROM documents ORDER BY workspace_id"
+        ).fetchall()
+    assert rows == [
+        ("left", "mynote/知识-相同路径.md"),
+        ("right", "mynote/知识-相同路径.md"),
+    ]
 
 
 def test_base_sync_is_idempotent_and_preserves_unknown_base(workspace: Path) -> None:
@@ -184,7 +278,8 @@ def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["status"] == "ok"
     state = workspace / "_campfire/workspaces/test"
-    assert (state / "db/campfire.db").is_file()
+    assert (workspace / "_campfire/campfire.db").is_file()
+    assert not (state / "db").exists()
     assert (state / "reports/current.json").is_file()
     assert (state / "reports/current.md").is_file()
 
@@ -503,3 +598,73 @@ def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> No
     payload = json.loads(result.output)
     assert payload["issue_count"] == 1
     assert payload["issues"][0]["actual"] == "proposed"
+
+
+def _create_domain(workspace: Path, name: str, *, create_moc: bool = True) -> Path:
+    domain = workspace / "mywork" / name
+    domain.mkdir()
+    (domain / "_领域.md").write_text(
+        "---\n"
+        f"name: {name}\n"
+        f"domain_id: {name.lower()}\n"
+        "domain_type: project-domain\n"
+        "governance: project-docs\n"
+        f'moc: "[[MOC-{name}]]"\n'
+        "status: active\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    if create_moc:
+        (domain / f"MOC-{name}.md").write_text(
+            "# MOC\n\n"
+            "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
+            "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n",
+            encoding="utf-8",
+        )
+    return domain
+
+
+def test_sync_reports_bad_metadata_without_blocking_generated_views(workspace: Path) -> None:
+    config = workspace / "_campfire/workspaces/test/config/governance.json"
+    governance = json.loads(config.read_text(encoding="utf-8"))
+    governance["managed_roots"] = ["mywork/Project"]
+    config.write_text(json.dumps(governance), encoding="utf-8")
+    domain = _create_domain(workspace, "Project")
+    (domain / "需求-旧文档.md").write_text("# 缺少元数据\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "run"])
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0, result.output
+    assert payload["status"] == "needs-review"
+    assert payload["write_performed"] is False
+    assert "frontmatter-missing" in payload["issue_counts"]
+    assert "需求-旧文档" in (domain / "MOC-Project.md").read_text(encoding="utf-8")
+
+
+def test_scoped_sync_ignores_structural_issue_outside_scope(workspace: Path) -> None:
+    config = workspace / "_campfire/workspaces/test/config/governance.json"
+    governance = json.loads(config.read_text(encoding="utf-8"))
+    governance["managed_roots"] = ["mywork/Healthy", "mywork/Broken"]
+    config.write_text(json.dumps(governance), encoding="utf-8")
+    healthy = _create_domain(workspace, "Healthy")
+    _create_domain(workspace, "Broken", create_moc=False)
+    (healthy / "记录-进展.md").write_text("# 进展\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "maintenance",
+            "sync",
+            "--scope",
+            "mywork/Healthy",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0, result.output
+    assert payload["status"] == "synced"
+    assert payload["write_performed"] is True
+    assert "记录-进展" in (healthy / "MOC-Healthy.md").read_text(encoding="utf-8")

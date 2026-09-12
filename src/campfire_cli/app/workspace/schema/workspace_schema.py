@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 class WorkspaceEntry(BaseModel):
     path: str
+    status: str = "active"
+    default: bool = False
 
 
 class WorkspaceRegistry(BaseModel):
@@ -49,3 +51,48 @@ class WorkspaceCreateRequest(BaseModel):
     workspace_id: str
     path: Path
     make_default: bool = False
+
+
+class ProjectEntry(BaseModel):
+    id: str
+    workspace_id: str
+    name: str
+    document_domain: str
+    git_remote_url: str | None = None
+    local_path: str | None = None
+    default_branch: str | None = None
+    status: str = "active"
+
+
+class ProjectUpsertRequest(BaseModel):
+    project_id: str
+    workspace_id: str
+    name: str
+    document_domain: str
+    git_remote_url: str | None = None
+    local_path: Path | None = None
+    default_branch: str | None = None
+    status: str = "active"
+
+
+class ProjectResult(ProjectEntry):
+    operation: str = "saved"
+
+
+class ProjectListResult(BaseModel):
+    status: str = "ok"
+    projects: list[ProjectEntry] = Field(default_factory=list)
+
+
+class RegistryExport(BaseModel):
+    schema_version: int = 1
+    default_workspace: str | None = None
+    workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
+    projects: list[ProjectEntry] = Field(default_factory=list)
+
+
+class RegistryTransferResult(BaseModel):
+    status: str
+    path: str
+    workspace_count: int
+    project_count: int

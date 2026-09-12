@@ -21,7 +21,7 @@ from campfire_cli.common.documents.document_type_check import (
 from campfire_cli.common.documents.document_type_plan import (  # noqa: E402
     build_plan as build_type_plan,
 )
-from campfire_cli.common.documents.domains import Domain, check_links, check_project_docs
+from campfire_cli.common.documents.domains import check_links
 from campfire_cli.common.documents.frontmatter_apply import (
     apply as apply_frontmatter,
 )  # noqa: E402
@@ -38,6 +38,7 @@ from campfire_cli.common.documents.frontmatter_plan import (
 from campfire_cli.common.documents.moc import generate_relations  # noqa: E402
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
+from campfire_cli.common.governance.rules import GovernanceRuleEngine
 
 
 class WriteLockTests(unittest.TestCase):
@@ -59,70 +60,6 @@ class WriteLockTests(unittest.TestCase):
             lock.write_text(str(os.getpid()), encoding="utf-8")
             with self.assertRaises(GovernanceBlockedError), workspace_write_lock(state):
                 pass
-
-
-class ProjectDocsProfileTests(unittest.TestCase):
-    def make_domain(self, root: Path):
-        domain_dir = root / "【测试】文档中心"
-        domain_dir.mkdir()
-        (domain_dir / "_领域.md").write_text(
-            '---\nname: 测试项目\ndomain_id: test-project\ndomain_type: project-domain\ngovernance: project-docs\nmoc: "[[MOC-测试项目]]"\nstatus: active\n---\n',
-            encoding="utf-8",
-        )
-        return domain_dir
-
-    @staticmethod
-    def frontmatter(
-        project="test-project",
-        domain="core",
-        doc_type="tech-spec",
-        status="current",
-        lifecycle="maintained",
-    ) -> str:
-        return (
-            "---\n"
-            "name: 测试文档\n"
-            "description: 测试\n"
-            f"project: {project}\n"
-            f"domain: {domain}\n"
-            f"type: {doc_type}\n"
-            f"status: {status}\n"
-            f"lifecycle: {lifecycle}\n"
-            "created: 2026-01-01\n"
-            "updated: 2026-01-01\n"
-            "tags: []\n"
-            "related: []\n"
-            "superseded_by: []\n"
-            "---\n"
-        )
-
-    def test_flags_missing_frontmatter_prefix_mismatch_and_current_conflict(self) -> None:
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            domain_dir = self.make_domain(root)
-            (domain_dir / "产品-a.md").write_text(
-                self.frontmatter(doc_type="product-spec"), encoding="utf-8"
-            )
-            (domain_dir / "产品-b.md").write_text(
-                self.frontmatter(doc_type="product-spec"), encoding="utf-8"
-            )
-            (domain_dir / "产品-x.md").write_text("# 无 frontmatter\n", encoding="utf-8")
-            (domain_dir / "计划-y.md").write_text(
-                self.frontmatter(doc_type="product-spec"), encoding="utf-8"
-            )
-            (domain_dir / "记录").mkdir()
-            (domain_dir / "_总览").mkdir()
-            issues = check_project_docs(
-                Domain(domain_dir, "测试项目", "test-project", "", "MOC-测试项目", "project-docs"),
-                {},
-            )
-            codes = {issue["code"] for issue in issues}
-            self.assertIn("project-doc-frontmatter-missing", codes)
-            self.assertIn("project-doc-prefix-mismatch", codes)
-            self.assertIn("project-doc-current-conflict", codes)
-            self.assertNotIn("undeclared-directory", codes)
 
 
 class LinkCheckTests(unittest.TestCase):
@@ -463,6 +400,36 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             self.assertIn("frontmatter-field-missing", codes)
             self.assertIn("frontmatter-list-invalid", codes)
             self.assertIn("frontmatter-enum-invalid", codes)
+
+    def test_rule_engine_reports_actionable_fields_and_collection_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            first = root / "产品-a.md"
+            second = root / "产品-b.md"
+            content = (
+                "---\nname: 产品\ntype: product-spec\nstatus: current\n"
+                "project: p\ndomain: core\ncreated: invalid\ntags: text\n---\n"
+            )
+            first.write_text(content, encoding="utf-8")
+            second.write_text(content, encoding="utf-8")
+            types = {"types": {"product-spec": {"prefix": "产品-", "label": "产品"}}}
+            schema = {
+                "base": {
+                    "required": ["description"],
+                    "lists": ["tags"],
+                    "dates": ["created"],
+                },
+                "profiles": {},
+            }
+            engine = GovernanceRuleEngine(types, schema)
+
+            document_issues = engine.check_document(root, first)
+            by_code = {item["code"]: item for item in document_issues}
+            self.assertEqual("description", by_code["frontmatter-field-missing"]["field"])
+            self.assertEqual("text", by_code["frontmatter-list-invalid"]["actual"])
+            self.assertEqual(["YYYY-MM-DD"], by_code["frontmatter-date-invalid"]["allowed"])
+            collection_issues = engine.check_collection(root, [first, second])
+            self.assertEqual("project-doc-current-conflict", collection_issues[0]["code"])
 
     def test_plan_only_suggests_deterministic_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

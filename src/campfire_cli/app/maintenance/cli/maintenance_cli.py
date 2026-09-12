@@ -39,19 +39,26 @@ def apply(ctx: typer.Context, confirm: bool = typer.Option(False, "--confirm")) 
 
 
 @maintenance_cli.command("sync")
-def sync(ctx: typer.Context, dry_run: bool = typer.Option(False, "--dry-run")) -> None:
+def sync(
+    ctx: typer.Context,
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    scope: str | None = typer.Option(None, "--scope", help="只同步指定领域或治理根目录"),
+) -> None:
     """同步 MOC 等确定性派生内容。"""
-    emit(ctx.obj.maintenance.sync(dry_run))
+    emit(ctx.obj.maintenance.sync(dry_run, scope))
 
 
 @maintenance_cli.command("run")
-def run(ctx: typer.Context) -> None:
+def run(
+    ctx: typer.Context,
+    scope: str | None = typer.Option(None, "--scope", help="只同步并显示指定范围"),
+) -> None:
     """执行同步和最终只读检查。"""
-    sync_result = ctx.obj.maintenance.sync(False)
+    sync_result = ctx.obj.maintenance.sync(False, scope)
     if sync_result.issue_count:
         emit(sync_result)
         raise typer.Exit(3)
-    emit(ctx.obj.maintenance.check())
+    emit(ctx.obj.maintenance.check(scope=scope))
 
 
 @archive_cli.command("check")

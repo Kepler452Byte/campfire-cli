@@ -25,11 +25,20 @@ from typing import Any
 
 from campfire_cli.common.documents.domains import (
     END_MARKER,
-    PROJECT_DOC_TYPES,
     START_MARKER,
     Domain,
     parse_frontmatter,
 )
+
+PROJECT_DOC_TYPES = {
+    "moc": "MOC-",
+    "product-spec": "产品-",
+    "tech-spec": "技术-",
+    "decision": "决策-",
+    "plan": "计划-",
+    "issue": "问题-",
+    "record": "记录-",
+}
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]")
 LATIN_RE = re.compile(r"[A-Za-z][A-Za-z0-9.+#_-]{1,}")

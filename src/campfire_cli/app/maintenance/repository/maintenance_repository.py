@@ -12,15 +12,21 @@ from campfire_cli.common.database.models import Document, GovernanceIssue, Maint
 
 
 class SqliteMaintenanceRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, workspace_id: str) -> None:
         self._session = session
+        self._workspace_id = workspace_id
 
     def replace_current_state(self, documents: list[DocumentState], issues: list[Issue]) -> None:
-        self._session.execute(delete(Document))
-        self._session.execute(delete(GovernanceIssue))
+        self._session.execute(delete(Document).where(Document.workspace_id == self._workspace_id))
+        self._session.execute(
+            delete(GovernanceIssue).where(
+                GovernanceIssue.workspace_id == self._workspace_id
+            )
+        )
         self._session.add_all(
             [
                 Document(
+                    workspace_id=self._workspace_id,
                     path=item.path,
                     content_hash=item.content_hash,
                     document_type=item.document_type,
@@ -33,6 +39,7 @@ class SqliteMaintenanceRepository:
         self._session.add_all(
             [
                 GovernanceIssue(
+                    workspace_id=self._workspace_id,
                     path=item.path,
                     code=item.code,
                     detail=item.detail,
@@ -46,6 +53,7 @@ class SqliteMaintenanceRepository:
     def save_run(self, run: MaintenanceRunRecord) -> None:
         self._session.add(
             MaintenanceRun(
+                workspace_id=self._workspace_id,
                 run_id=run.run_id,
                 status=run.status,
                 scanned_count=run.scanned_count,

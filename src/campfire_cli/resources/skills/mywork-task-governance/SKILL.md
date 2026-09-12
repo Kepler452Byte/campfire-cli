@@ -5,7 +5,7 @@ description: "创建和维护 mywork 通用任务文档；适用于个人任务�
 
 # mywork 通用任务治理
 
-任务文档跟踪承诺和执行，正式产品、技术和决策文档沉淀最终事实。处理项目前先读取 `campfire-workspace-governance`；项目内任务同时读取 `mywork-project-docs-governance`。新建任务使用[任务模板](references/任务模板.md)。
+任务文档跟踪承诺和执行，正式产品、技术和决策文档沉淀最终事实。新建任务使用[任务模板](references/任务模板.md)。只有需要在项目文档中心定位、迁移或归档任务时才读取 `mywork-project-docs-governance`；只有执行批量治理、MOC、链接或 Schema 检查时才读取 `campfire-workspace-governance`。
 
 ## 归属
 
@@ -16,7 +16,7 @@ description: "创建和维护 mywork 通用任务文档；适用于个人任务�
 
 ## 生命周期
 
-`todo → in-progress → blocked/review → completed → archived`；取消使用 `cancelled`。任务是否成立应在收件箱分流时确认，正式任务从 `todo` 开始。`status` 表示文档是否有效，不能代替任务生命周期。
+本 Skill 是任务生命周期语义的唯一 Skill 来源。合法值以 Campfire Schema 为机器权威：`todo → in-progress → blocked/review → completed → archived`；取消使用 `cancelled`。尚未确认的内容是对话中的任务建议或收件箱确认事项，不创建 `lifecycle: draft` 的正式任务。`status` 表示文档是否有效，不能代替任务生命周期。
 
 Agent可以在有证据时更新 `in-progress`、`blocked`、`review`、阻塞原因、结果摘要和验收证据。`review → completed`、取消和归档默认需要人确认；低风险且验收完全自动化时可按明确授权完成。
 
