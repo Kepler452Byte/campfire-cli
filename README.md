@@ -36,6 +36,8 @@ campfire workspace space create --id research --name "研究" --path myresearch 
 campfire workspace space create --id research --name "研究" --path myresearch --type research --confirm
 campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs
 campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs --confirm
+campfire workspace domain adopt --id meetings --name "会议记录" --path "mywork/会议记录" --space work --type work-domain --governance work-docs
+campfire workspace domain adopt --id meetings --name "会议记录" --path "mywork/会议记录" --space work --type work-domain --governance work-docs --confirm
 campfire workspace project add --id example --workspace personal --name "Example" --document-domain "work/example" --local-path /path/to/repository
 campfire workspace project list --workspace personal
 campfire --workspace personal document profile list

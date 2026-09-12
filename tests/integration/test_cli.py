@@ -30,6 +30,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "project", "check", "-h"],
         ["workspace", "space", "-h"],
         ["workspace", "domain", "-h"],
+        ["workspace", "domain", "adopt", "-h"],
         ["document", "-h"],
         ["document", "profile", "-h"],
         ["document", "profile", "show", "-h"],
@@ -190,6 +191,55 @@ def test_space_and_nested_domain_commands_use_marker_files(tmp_path: Path, monke
     checked = json.loads(runner.invoke(app, ["workspace", "domain", "check"]).output)
     assert checked["status"] == "ok"
     assert {item["id"] for item in checked["domains"]} == {"software", "python"}
+
+
+def test_domain_adopt_declares_existing_directory_without_moving_content(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "campfire-home"))
+    root = tmp_path / "workspace"
+    created = runner.invoke(
+        app, ["workspace", "create", "--id", "test", "--path", str(root), "--default"]
+    )
+    assert created.exit_code == 0, created.output
+    existing = root / "mywork" / "会议记录"
+    existing.mkdir()
+    note = existing / "会议-示例.md"
+    note.write_text("# 示例会议\n", encoding="utf-8")
+    args = [
+        "workspace",
+        "domain",
+        "adopt",
+        "--id",
+        "work-meetings",
+        "--name",
+        "会议记录",
+        "--path",
+        "mywork/会议记录",
+        "--space",
+        "work",
+        "--type",
+        "work-domain",
+        "--governance",
+        "work-docs",
+    ]
+    preview = runner.invoke(app, args)
+    assert preview.exit_code == 0, preview.output
+    payload = json.loads(preview.output)
+    assert payload["status"] == "planned"
+    assert not any(item["action"] == "create-directory" for item in payload["operations"])
+    assert note.is_file()
+    assert not (existing / "_领域.md").exists()
+
+    applied = runner.invoke(app, [*args, "--confirm"])
+    assert applied.exit_code == 0, applied.output
+    assert json.loads(applied.output)["status"] == "adopted"
+    assert note.read_text(encoding="utf-8") == "# 示例会议\n"
+    assert (existing / "_领域.md").is_file()
+    assert (existing / "_总览/MOC-会议记录总览.md").is_file()
+
+    repeated = runner.invoke(app, [*args, "--confirm"])
+    assert repeated.exit_code != 0
 
 
 def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None:

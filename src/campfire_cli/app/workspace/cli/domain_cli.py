@@ -69,3 +69,33 @@ def create(
             )
         )
     )
+
+
+@domain_cli.command("adopt")
+def adopt(
+    domain_id: str = typer.Option(..., "--id"),
+    name: str = typer.Option(..., "--name"),
+    path: str = typer.Option(..., "--path"),
+    space: str = typer.Option(..., "--space"),
+    domain_type: str = typer.Option(..., "--type"),
+    governance: str = typer.Option(..., "--governance"),
+    parent: str | None = typer.Option(None, "--parent"),
+    project: str | None = typer.Option(None, "--project"),
+    workspace: str | None = typer.Option(None, "--workspace"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    emit(
+        invoke(
+            lambda: service(workspace).adopt(
+                domain_id=domain_id,
+                name=name,
+                path=path,
+                space_id=space,
+                domain_type=domain_type,
+                governance=governance,
+                parent_domain=parent,
+                project_id=project,
+                confirm=confirm,
+            )
+        )
+    )

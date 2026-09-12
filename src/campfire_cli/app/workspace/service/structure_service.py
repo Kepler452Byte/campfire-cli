@@ -285,6 +285,60 @@ class DomainService:
         project_id: str | None = None,
         confirm: bool = False,
     ) -> DomainCreateResult:
+        return self._define(
+            domain_id=domain_id,
+            name=name,
+            path=path,
+            space_id=space_id,
+            domain_type=domain_type,
+            governance=governance,
+            parent_domain=parent_domain,
+            project_id=project_id,
+            confirm=confirm,
+            adopt=False,
+        )
+
+    def adopt(
+        self,
+        *,
+        domain_id: str,
+        name: str,
+        path: str,
+        space_id: str,
+        domain_type: str,
+        governance: str,
+        parent_domain: str | None = None,
+        project_id: str | None = None,
+        confirm: bool = False,
+    ) -> DomainCreateResult:
+        """Add a Domain declaration to an existing directory without moving its content."""
+        return self._define(
+            domain_id=domain_id,
+            name=name,
+            path=path,
+            space_id=space_id,
+            domain_type=domain_type,
+            governance=governance,
+            parent_domain=parent_domain,
+            project_id=project_id,
+            confirm=confirm,
+            adopt=True,
+        )
+
+    def _define(
+        self,
+        *,
+        domain_id: str,
+        name: str,
+        path: str,
+        space_id: str,
+        domain_type: str,
+        governance: str,
+        parent_domain: str | None,
+        project_id: str | None,
+        confirm: bool,
+        adopt: bool,
+    ) -> DomainCreateResult:
         if not ID_RE.fullmatch(domain_id):
             raise ConfigurationError("Domain id 只能使用小写字母、数字和连字符")
         space = self.spaces.show(space_id)
@@ -297,8 +351,15 @@ class DomainService:
         ):
             raise ConfigurationError("Domain path 必须位于指定 Space 下且不能使用保留目录")
         existing = self.discover()[0]
-        if target.exists() or any(item.id == domain_id for item in existing):
-            raise ConfigurationError("Domain id 或路径已存在")
+        if any(item.id == domain_id or item.path == target for item in existing):
+            raise ConfigurationError("Domain id 或已声明路径存在")
+        if adopt:
+            if not target.is_dir():
+                raise ConfigurationError("adopt 只接入已存在的目录")
+            if (target / DOMAIN_MARKER).exists():
+                raise ConfigurationError("目录已经包含领域声明")
+        elif target.exists():
+            raise ConfigurationError("Domain 目标路径已存在；请使用 domain adopt 接入")
         if parent_domain:
             parent = next((item for item in existing if item.id == parent_domain), None)
             if (
@@ -325,20 +386,26 @@ class DomainService:
             project_id=project_id,
         )
         relative_path = target.relative_to(self.root).as_posix()
-        operations = [
-            {"action": "create-directory", "path": relative_path},
-            {"action": "create", "path": f"{relative_path}/{DOMAIN_MARKER}"},
-            {"action": "create", "path": f"{relative_path}/{moc}.md"},
-        ]
+        operations = [] if adopt else [{"action": "create-directory", "path": relative_path}]
+        operations.extend(
+            [
+                {"action": "create", "path": f"{relative_path}/{DOMAIN_MARKER}"},
+                {"action": "create", "path": f"{relative_path}/{moc}.md"},
+            ]
+        )
         if confirm:
             with workspace_write_lock(self.lock_root):
-                if target.exists():
+                marker = target / DOMAIN_MARKER
+                moc_path = target / f"{moc}.md"
+                if adopt and (not target.is_dir() or marker.exists() or moc_path.exists()):
+                    raise ConfigurationError("接入目录在确认后发生变化，请重新预览")
+                if not adopt and target.exists():
                     raise ConfigurationError("Domain 路径在确认后发生变化，请重新预览")
-                (target / "_总览").mkdir(parents=True)
+                (target / "_总览").mkdir(parents=True, exist_ok=adopt)
                 atomic_write(target / DOMAIN_MARKER, self.render_marker(domain))
-                atomic_write(target / f"{moc}.md", self.render_moc(domain))
+                atomic_write(moc_path, self.render_moc(domain))
         return DomainCreateResult(
-            status="created" if confirm else "planned",
+            status=("adopted" if adopt else "created") if confirm else "planned",
             domain=self._external(domain),
             operations=operations,
             write_performed=confirm,
