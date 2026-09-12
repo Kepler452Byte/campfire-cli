@@ -271,7 +271,7 @@ def generate_project_domain_content(
         "moc": "导航",
         "未分类": "未分类",
     }
-    for doc_type in [
+    preferred_order = [
         "product-spec",
         "tech-spec",
         "decision",
@@ -279,12 +279,20 @@ def generate_project_domain_content(
         "issue",
         "record",
         "moc",
-        "未分类",
-    ]:
+    ]
+    configured_order = [
+        doc_type for doc_type in project_doc_types if doc_type not in preferred_order
+    ]
+    for doc_type in [*preferred_order, *configured_order, "未分类"]:
         entries = sorted(by_type.get(doc_type, []), key=lambda item: item[0].name.casefold())
         if not entries:
             continue
-        lines.extend([f"### {label[doc_type]}", ""])
+        heading = (
+            label[doc_type]
+            if doc_type in label
+            else project_doc_types[doc_type].rstrip("-")
+        )
+        lines.extend([f"### {heading}", ""])
         for note, status in entries:
             suffix = f" `{status}`" if status else ""
             lines.append(f"- [[{note.stem}]]{suffix}")

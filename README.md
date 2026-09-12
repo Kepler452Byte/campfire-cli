@@ -36,6 +36,9 @@ campfire --workspace personal document profile show task
 campfire --workspace personal document profile resolve --path "mywork/项目/任务-示例.md"
 campfire --workspace personal document profile sync
 campfire --workspace personal document profile sync --confirm
+campfire --workspace personal document type list
+campfire --workspace personal document type sync
+campfire --workspace personal document type sync --confirm
 campfire workspace export --output campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json --confirm

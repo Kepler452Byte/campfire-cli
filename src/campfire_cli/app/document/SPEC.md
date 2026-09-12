@@ -10,9 +10,11 @@ Document App 负责文档自身及其规则；Maintenance App 负责跨文档批
 document/
 ├── cli/
 │   ├── document_cli.py
-│   └── profile_cli.py
+│   ├── profile_cli.py
+│   └── type_cli.py
 ├── service/
 │   ├── document_profile_service.py
+│   ├── document_type_service.py
 │   ├── document_rule_service.py
 │   ├── profile_registry.py
 │   ├── type_check.py
@@ -23,7 +25,8 @@ document/
 │   ├── frontmatter_apply.py
 │   └── frontmatter_formatter.py
 └── repository/
-    └── document_profile_repository.py
+    ├── document_profile_repository.py
+    └── document_type_repository.py
 ```
 
 - `profile`：定义并解析不同文档的属性契约。

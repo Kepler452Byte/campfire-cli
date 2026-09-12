@@ -15,10 +15,16 @@ def default_configs() -> dict[str, dict[str, Any]]:
             "project_reserved_directories": ["任务", "记录", "archive", "_总览", "a_skill"],
         },
         "document-types.json": {
-            "version": 1,
+            "version": 2,
             "scope_roots": ["mynote", "mywork"],
-            "ignored_directories": ["assets", "archive", "generated"],
-            "exempt_basenames": ["_领域.md"],
+            "ignored_directories": ["assets", "generated", "a_skill"],
+            "exempt_basenames": [
+                "_领域.md",
+                "README.md",
+                "CLAUDE.md",
+                "AGENTS.md",
+                "COMMAND.md",
+            ],
             "profiles": {
                 "project-docs": [
                     "moc",
@@ -28,6 +34,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
                     "plan",
                     "issue",
                     "record",
+                    "board",
                 ]
             },
             "types": {
@@ -39,8 +46,14 @@ def default_configs() -> dict[str, dict[str, Any]]:
                 "task": {"prefix": "任务-", "label": "任务"},
                 "issue": {"prefix": "问题-", "label": "问题"},
                 "record": {"prefix": "记录-", "label": "记录"},
+                "board": {"prefix": "看板-", "label": "看板"},
+                "requirement-doc": {"prefix": "需求-", "label": "需求"},
                 "knowledge": {"prefix": "知识-", "label": "知识"},
                 "prompt": {"prefix": "提示词-", "label": "提示词"},
+                "meeting": {"prefix": "会议-", "label": "会议"},
+                "command": {"prefix": "命令-", "label": "命令"},
+                "weekly-report": {"prefix": "周报-", "label": "周报"},
+                "work-log": {"prefix": "日志-", "label": "日志"},
             },
         },
         "frontmatter-schema.json": {

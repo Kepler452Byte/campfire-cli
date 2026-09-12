@@ -27,6 +27,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["document", "-h"],
         ["document", "profile", "-h"],
         ["document", "profile", "show", "-h"],
+        ["document", "type", "-h"],
+        ["document", "type", "list", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -332,6 +334,31 @@ def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
     )
     assert json.loads(applied.output)["status"] == "synced"
     assert json.loads(path.read_text())["version"] == 2
+
+
+def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
+    path = workspace / "_campfire/workspaces/test/config/document-types.json"
+    contract = json.loads(path.read_text(encoding="utf-8"))
+    contract["types"].pop("board")
+    contract["profiles"]["project-docs"].remove("board")
+    contract["types"]["custom"] = {"prefix": "自定义-", "label": "自定义"}
+    path.write_text(json.dumps(contract), encoding="utf-8")
+
+    preview = runner.invoke(
+        app, ["--workspace", str(workspace), "document", "type", "sync"]
+    )
+    assert json.loads(preview.output)["status"] == "planned"
+    assert "board" not in json.loads(path.read_text())["types"]
+
+    applied = runner.invoke(
+        app,
+        ["--workspace", str(workspace), "document", "type", "sync", "--confirm"],
+    )
+    assert json.loads(applied.output)["status"] == "synced"
+    updated = json.loads(path.read_text())
+    assert updated["types"]["board"]["prefix"] == "看板-"
+    assert "board" in updated["profiles"]["project-docs"]
+    assert updated["types"]["custom"]["prefix"] == "自定义-"
 
 
 def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None:
