@@ -25,6 +25,9 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "-h"],
         ["workspace", "project", "-h"],
         ["workspace", "project", "add", "-h"],
+        ["workspace", "project", "create", "-h"],
+        ["workspace", "project", "resolve", "-h"],
+        ["workspace", "project", "check", "-h"],
         ["document", "-h"],
         ["document", "profile", "-h"],
         ["document", "profile", "show", "-h"],
@@ -172,6 +175,18 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     assert [item["id"] for item in listed["projects"]] == ["example"]
     shown = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
     assert shown["document_domain"] == "mywork/【Example】文档中心"
+    resolved = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "project", "resolve", "--path", str(repository)],
+        ).output
+    )
+    assert resolved["status"] == "matched"
+    assert resolved["matches"][0]["project"]["id"] == "example"
+    assert resolved["matches"][0]["match_basis"] == ["local-path"]
+    checked = json.loads(runner.invoke(app, ["workspace", "project", "check", "example"]).output)
+    assert checked["status"] == "ok"
+    assert checked["observed"]["document_domain_exists"] is True
 
     backup = tmp_path / "registry.json"
     exported = runner.invoke(app, ["workspace", "export", "--output", str(backup)])
@@ -181,6 +196,51 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     applied = runner.invoke(app, ["workspace", "import", "--input", str(backup), "--confirm"])
     assert json.loads(applied.output)["status"] == "imported"
     assert not (campfire_home / "registry.json").exists()
+
+
+def test_project_create_previews_then_initializes_document_domain(
+    tmp_path: Path, monkeypatch
+) -> None:
+    campfire_home = tmp_path / "campfire-home"
+    workspace = tmp_path / "workspace"
+    repository = tmp_path / "new-project"
+    workspace.mkdir()
+    repository.mkdir()
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
+    added = runner.invoke(
+        app,
+        ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"],
+    )
+    assert added.exit_code == 0, added.output
+    arguments = [
+        "workspace",
+        "project",
+        "create",
+        "--id",
+        "new-project",
+        "--workspace",
+        "personal",
+        "--name",
+        "New Project",
+        "--document-domain",
+        "mywork/【New Project】文档中心",
+        "--local-path",
+        str(repository),
+    ]
+    preview = runner.invoke(app, arguments)
+    payload = json.loads(preview.output)
+    assert payload["status"] == "planned"
+    domain = workspace / "mywork/【New Project】文档中心"
+    assert not domain.exists()
+    assert json.loads(runner.invoke(app, ["workspace", "project", "list"]).output)["projects"] == []
+
+    applied = runner.invoke(app, [*arguments, "--confirm"])
+    assert applied.exit_code == 0, applied.output
+    assert json.loads(applied.output)["status"] == "created"
+    assert (domain / "_领域.md").is_file()
+    assert (domain / "_总览/MOC-New Project总览.md").is_file()
+    checked = runner.invoke(app, ["workspace", "project", "check", "new-project"])
+    assert json.loads(checked.output)["status"] == "ok"
 
 
 def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, monkeypatch) -> None:
@@ -246,6 +306,7 @@ def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> Non
     applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
     assert applied.exit_code == 0, applied.output
     assert (workspace / "_global_skills/campfire-workspace-governance/SKILL.md").is_file()
+    assert (workspace / "_global_skills/campfire-context-bootstrap/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-conversation-router/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-document-capture/SKILL.md").is_file()
     repeated = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync", "--dry-run"])

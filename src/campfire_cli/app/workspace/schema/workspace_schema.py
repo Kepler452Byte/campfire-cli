@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -82,6 +83,34 @@ class ProjectResult(ProjectEntry):
 class ProjectListResult(BaseModel):
     status: str = "ok"
     projects: list[ProjectEntry] = Field(default_factory=list)
+
+
+class ProjectMatch(BaseModel):
+    project: ProjectEntry
+    match_basis: list[str] = Field(default_factory=list)
+
+
+class ProjectResolutionResult(BaseModel):
+    status: str
+    query_path: str
+    git_root: str | None = None
+    git_remote_url: str | None = None
+    matches: list[ProjectMatch] = Field(default_factory=list)
+
+
+class ProjectCheckResult(BaseModel):
+    status: str
+    project: ProjectEntry
+    observed: dict[str, Any] = Field(default_factory=dict)
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ProjectCreateResult(BaseModel):
+    status: str
+    project: ProjectEntry
+    document_domain_path: str
+    operations: list[dict[str, str]] = Field(default_factory=list)
+    write_performed: bool = False
 
 
 class RegistryExport(BaseModel):

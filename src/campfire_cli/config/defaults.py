@@ -212,6 +212,7 @@ def default_configs() -> dict[str, dict[str, Any]]:
             "targets": ["~/.claude/skills", "~/.agents/skills"],
             "managed_skills": [
                 "campfire-workspace-governance",
+                "campfire-context-bootstrap",
                 "campfire-conversation-router",
                 "campfire-document-capture",
                 "campfire-inbox-triage",

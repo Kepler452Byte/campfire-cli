@@ -76,6 +76,32 @@ project_cli.command("add", help="注册一个新 Project；提供本地 Git 路�
 project_cli.command("update", help="完整更新一个已注册 Project。")(project_options("update"))
 
 
+@project_cli.command("create")
+def create(
+    project_id: str = typer.Option(..., "--id"),
+    workspace_id: str = typer.Option(..., "--workspace"),
+    name: str = typer.Option(..., "--name"),
+    document_domain: str = typer.Option(..., "--document-domain"),
+    local_path: Path | None = typer.Option(None, "--local-path"),
+    git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
+    default_branch: str | None = typer.Option(None, "--default-branch"),
+    status: str = typer.Option("active", "--status"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """预览并初始化新 Project 文档中心；追加 --confirm 后创建并注册。"""
+    payload = request(
+        project_id,
+        workspace_id,
+        name,
+        document_domain,
+        local_path,
+        git_remote_url,
+        default_branch,
+        status,
+    )
+    emit(invoke(lambda: service().create(payload, confirm)))
+
+
 @project_cli.command("list")
 def list_projects(workspace_id: str | None = typer.Option(None, "--workspace")) -> None:
     """列出全部 Project，或按 Workspace 过滤。"""
@@ -86,3 +112,15 @@ def list_projects(workspace_id: str | None = typer.Option(None, "--workspace")) 
 def show(project_id: str) -> None:
     """显示一个 Project 的注册元数据。"""
     emit(invoke(lambda: service().show(project_id)))
+
+
+@project_cli.command("resolve")
+def resolve(path: Path | None = typer.Option(None, "--path")) -> None:
+    """按本地路径和 Git remote 解析已注册 Project，不修改注册数据。"""
+    emit(invoke(lambda: service().resolve(path or Path.cwd())))
+
+
+@project_cli.command("check")
+def check(project_id: str) -> None:
+    """检查 Project 的源码路径、Git 信息和文档领域是否仍然有效。"""
+    emit(invoke(lambda: service().check(project_id)))
