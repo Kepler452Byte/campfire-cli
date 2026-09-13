@@ -9,6 +9,7 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+from campfire_cli.common.package_version import InstallMethod
 from campfire_cli.main import app
 
 runner = CliRunner()
@@ -2138,7 +2139,7 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     assert payload["skills"]["status"] == "synced"
     assert payload["agent_hints"][0]["action"] == "created"
     assert [item["workspace_id"] for item in payload["workspaces"]] == ["test"]
-    assert payload["package_update_available"] is False
+    assert payload["package"]["action"] == "skipped-offline"
     assert payload["package"]["latest"] is None
     assert stale.is_file()
     stale.write_text("过时内容\n", encoding="utf-8")
@@ -2151,16 +2152,52 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     assert stale.read_text(encoding="utf-8") != "过时内容\n"
 
 
-def test_upgrade_hints_when_pypi_has_newer_version(workspace: Path, monkeypatch) -> None:
+def test_upgrade_skips_package_update_for_editable_install(workspace: Path, monkeypatch) -> None:
     monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: "9.9.9")
+    monkeypatch.setattr(
+        "campfire_cli.container.detect_install_method",
+        lambda _name: InstallMethod(manager="editable", update_command=None),
+    )
     claude_md = workspace / "CLAUDE.md"
     monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(claude_md))
     result = runner.invoke(app, ["upgrade"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["package_update_available"] is True
-    assert payload["package"]["latest"] == "9.9.9"
-    assert "uv tool upgrade campfire-cli" in payload["package"]["hint"]
+    assert payload["package"]["action"] == "skipped-editable"
+    assert payload["package"]["update_available"] is True
+    assert "editable" in payload["package"]["hint"]
+    assert payload["skills"]["status"] == "synced"
+
+
+def test_upgrade_spawns_detached_updater_for_managed_install(
+    workspace: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: "9.9.9")
+    monkeypatch.setattr(
+        "campfire_cli.container.detect_install_method",
+        lambda _name: InstallMethod(
+            manager="uv-tool", update_command=["uv", "tool", "upgrade", "campfire-cli"]
+        ),
+    )
+    monkeypatch.setattr(
+        "campfire_cli.container.default_align_command",
+        lambda: ["campfire", "upgrade", "--skip-package"],
+    )
+    spawned: list[tuple[list[str], list[str]]] = []
+    monkeypatch.setattr(
+        "campfire_cli.container.spawn_detached_updater",
+        lambda update, align: spawned.append((update, align)) or "updater-script",
+    )
+    result = runner.invoke(app, ["upgrade"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["package"]["action"] == "updater-spawned"
+    assert payload["package"]["update_command"] == ["uv", "tool", "upgrade", "campfire-cli"]
+    assert payload["resources"] == "deferred"
+    assert "skills" not in payload
+    assert spawned == [
+        (["uv", "tool", "upgrade", "campfire-cli"], ["campfire", "upgrade", "--skip-package"])
+    ]
 
 
 def test_setup_without_workspace_syncs_global_resources_and_prints_guidance(

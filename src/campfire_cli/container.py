@@ -32,7 +32,13 @@ from campfire_cli.app.workspace.service.workspace_service import WorkspaceServic
 from campfire_cli.common.agent_hints import default_hint_paths, inject_agent_hint
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.package_version import fetch_latest_version, is_newer_version
+from campfire_cli.common.package_version import (
+    default_align_command,
+    detect_install_method,
+    fetch_latest_version,
+    is_newer_version,
+    spawn_detached_updater,
+)
 from campfire_cli.config.defaults import effective_config
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
@@ -108,13 +114,27 @@ class AppContainer:
         }
 
     @classmethod
-    def upgrade(cls) -> dict:
-        """对齐本机治理资源与当前包版本：Schema 迁移、Skill、Base 与提示词路标。
+    def upgrade(cls, skip_package: bool = False) -> dict:
+        """一条幂等命令完成 campfire 升级：更新 Python 包本身，再对齐治理资源。
 
-        本命令不更新 Python 包本身；检测到 PyPI 有更新版本时在结果中提示安装方式。
+        包更新通过检测到的安装方式（uv tool / pipx）在独立进程中执行，
+        完成后由新版 CLI 自动执行资源对齐；离线、已是最新、editable 或
+        无法识别安装方式时跳过包更新，仅对齐本机资源。
         """
         home = campfire_home()
         upgrade_database(home / "campfire.db")
+        package = cls._plan_package_update(skip_package)
+        if package["action"] == "updater-spawned":
+            return {
+                "status": "ok",
+                "database": {"status": "up-to-date"},
+                "package": package,
+                "resources": "deferred",
+                "note": (
+                    "更新器已启动：等待本进程退出后更新 Python 包，"
+                    "并自动执行 campfire upgrade --skip-package 对齐治理资源"
+                ),
+            }
         workspaces = []
         for workspace_id in SqliteWorkspaceRepository(home).load_registry().workspaces:
             container = cls.build(workspace_id)
@@ -124,24 +144,42 @@ class AppContainer:
                     "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
                 }
             )
-        latest = fetch_latest_version(PACKAGE_NAME)
-        update_available = latest is not None and is_newer_version(latest, __version__)
-        package: dict[str, str | bool] = {"installed": __version__, "latest": latest}
-        if update_available:
-            package["update_available"] = True
-            package["hint"] = (
-                "Python 包本身有新版本；先运行 uv tool upgrade campfire-cli"
-                "（或 pipx upgrade campfire-cli）更新包，再执行 campfire upgrade 对齐治理资源"
-            )
         return {
             "status": "ok",
             "database": {"status": "up-to-date"},
-            "package_update_available": update_available,
             "package": package,
             "skills": cls.build_skill().sync(dry_run=False).model_dump(mode="json"),
             "agent_hints": cls._inject_hints(),
             "workspaces": workspaces,
         }
+
+    @staticmethod
+    def _plan_package_update(skip_package: bool) -> dict[str, object]:
+        installed = __version__
+        latest = fetch_latest_version(PACKAGE_NAME)
+        package: dict[str, object] = {
+            "installed": installed,
+            "latest": latest,
+            "update_available": latest is not None and is_newer_version(latest, installed),
+        }
+        if skip_package:
+            package["action"] = "skipped-by-flag"
+        elif latest is None:
+            package["action"] = "skipped-offline"
+        elif not package["update_available"]:
+            package["action"] = "up-to-date"
+        else:
+            install = detect_install_method(PACKAGE_NAME)
+            align = default_align_command()
+            if install.update_command is not None and align is not None:
+                spawn_detached_updater(install.update_command, align)
+                package["action"] = "updater-spawned"
+                package["update_command"] = install.update_command
+            else:
+                package["action"] = f"skipped-{install.manager}"
+                if install.hint:
+                    package["hint"] = install.hint
+        return package
 
     @staticmethod
     def _inject_hints() -> list[dict[str, str]]:

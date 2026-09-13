@@ -140,10 +140,14 @@ def setup(
 
 
 @app.command("upgrade")
-def upgrade() -> None:
-    """升级本机治理资源：SQLite Schema 迁移、全局 Skill、Base 与提示词路标。"""
+def upgrade(
+    skip_package: bool = typer.Option(
+        False, "--skip-package", help="跳过 Python 包自更新，仅对齐本机治理资源"
+    ),
+) -> None:
+    """一条幂等命令升级 campfire：更新包并对齐治理资源（Skill、Base、提示词、Schema）。"""
     try:
-        result = AppContainer.upgrade()
+        result = AppContainer.upgrade(skip_package=skip_package)
     except AppError as exc:
         typer.echo(
             json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False),
