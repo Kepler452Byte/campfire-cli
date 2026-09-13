@@ -2260,3 +2260,47 @@ def test_archive_check_lists_candidates_with_reason_and_related(
     ] == [item["source"] for item in candidates]
     assert candidates[0]["archive_reason"] == "completed"
     assert candidates[0]["related"] == ["[[看板-某清单]]"]
+
+
+def test_document_kanban_check_validates_renderability_contract(workspace: Path) -> None:
+    domain = workspace / "mywork" / "【看板测试】文档中心"
+    domain.mkdir(parents=True)
+    plain = domain / "看板-普通清单.md"
+    plain.write_text(
+        "---\nname: 普通清单\ndescription: 测试。\ntype: board\nstatus: current\n"
+        "lifecycle: proposed\ncreated: 2026-09-14\nupdated: 2026-09-14\ntags: []\n---\n"
+        "## 看板\n\n### 未排期\n\n- [ ] 事项\n",
+        encoding="utf-8",
+    )
+    rendered = domain / "看板-可渲染.md"
+    rendered.write_text(
+        "---\nname: 可渲染\ndescription: 测试。\ntype: board\nkanban-plugin: basic\n"
+        "status: current\nlifecycle: proposed\ncreated: 2026-09-14\nupdated: 2026-09-14\n"
+        "tags: []\n---\n## 未排期\n\n- [ ] 事项\n",
+        encoding="utf-8",
+    )
+    plain_result = runner.invoke(app, ["document", "kanban-check", "--path", str(plain)])
+    assert plain_result.exit_code == 0, plain_result.output
+    plain_payload = json.loads(plain_result.output)
+    assert plain_payload["renderable"] is False
+    assert "kanban-plugin-missing" in {item["code"] for item in plain_payload["issues"]}
+
+    rendered_result = runner.invoke(
+        app, ["document", "kanban-check", "--path", str(rendered)]
+    )
+    assert rendered_result.exit_code == 0, rendered_result.output
+    rendered_payload = json.loads(rendered_result.output)
+    assert rendered_payload["renderable"] is True
+    assert rendered_payload["issues"] == []
+
+
+def test_skill_sync_installs_kanban_board_skill(workspace: Path) -> None:
+    result = runner.invoke(app, ["skill", "sync"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    paths = [item["path"] for item in payload["operations"]]
+    assert paths
+    kanban_paths = [path for path in paths if "campfire-kanban-board" in path]
+    assert kanban_paths
+    for path in kanban_paths:
+        assert "kanban-plugin" in Path(path).read_text(encoding="utf-8")

@@ -47,6 +47,12 @@ def check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
     invoke(lambda: service(ctx).check(path))
 
 
+@document_cli.command("kanban-check")
+def kanban_check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
+    """检查文档是否满足 Obsidian Kanban 插件的渲染契约。"""
+    invoke(lambda: service(ctx).kanban_check(path))
+
+
 @document_cli.command("inspect")
 def inspect(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
     """返回 Agent 治理单篇文档所需的类型、Profile、领域和问题上下文。"""

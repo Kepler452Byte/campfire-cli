@@ -443,6 +443,7 @@ skills:
   - campfire-document-capture
   - campfire-inbox-triage
   - campfire-weekly-report-writing
+  - campfire-kanban-board
   unknown_skill_policy: ignore
   orphaned_skill_policy: report
 bases:

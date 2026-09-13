@@ -6,6 +6,10 @@ from typing import Any
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import exempt_document
 from campfire_cli.app.document.service.frontmatter_formatter import format_text
+from campfire_cli.app.document.service.kanban_service import (
+    check_kanban_renderability,
+    renderability_result,
+)
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
@@ -31,6 +35,16 @@ class DocumentService:
             "path": relative_path,
             "issue_count": len(issues),
             "issues": issues,
+        }
+
+    def kanban_check(self, relative_path: str) -> dict[str, Any]:
+        path = self._document_path(relative_path)
+        if self._is_exempt(path):
+            return self._not_applicable(relative_path, path)
+        issues = check_kanban_renderability(path.read_text(encoding="utf-8"))
+        return {
+            **renderability_result(relative_path, issues),
+            "workspace_id": self._settings.workspace_id,
         }
 
     def inspect(self, relative_path: str) -> dict[str, Any]:
