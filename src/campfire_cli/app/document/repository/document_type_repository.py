@@ -2,27 +2,16 @@
 
 from __future__ import annotations
 
-import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.common.filesystem import atomic_write
-from campfire_cli.config.defaults import default_configs
+from campfire_cli.config.defaults import effective_config
 
 
 class DocumentTypeRepository:
     def __init__(self, state_root: Path) -> None:
-        self._path = state_root / "config" / "document-types.json"
+        self._path = state_root.parents[1] / "config.yml"
 
     def load(self) -> dict[str, Any]:
-        return json.loads(self._path.read_text(encoding="utf-8"))
-
-    @staticmethod
-    def packaged() -> dict[str, Any]:
-        return default_configs()["document-types.json"]
-
-    def save(self, contract: dict[str, Any]) -> None:
-        atomic_write(
-            self._path,
-            json.dumps(contract, ensure_ascii=False, indent=2) + "\n",
-        )
+        return deepcopy(effective_config(self._path)["document_types"])

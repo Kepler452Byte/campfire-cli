@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "statuses": ["active", "paused", "archived"],
-  "default_space_type": "work"
-}

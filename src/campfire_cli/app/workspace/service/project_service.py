@@ -21,7 +21,7 @@ from campfire_cli.app.workspace.service.structure_service import DomainService, 
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import workspace_write_lock
-from campfire_cli.config.defaults import builtin_config
+from campfire_cli.config.defaults import config_section
 
 
 class ProjectService:
@@ -280,7 +280,7 @@ class ProjectService:
             local_path, "remote", "get-url", "origin"
         )
         branch = request.default_branch or self._detect_default_branch(local_path)
-        statuses = set(builtin_config("project-policy.json")["statuses"])
+        statuses = set(config_section("project")["statuses"])
         if request.status not in statuses:
             raise ConfigurationError(f"Project status 必须是：{', '.join(sorted(statuses))}")
         project = ProjectEntry(
@@ -307,7 +307,7 @@ class ProjectService:
         ]
         if len(matches) != 1:
             raise ConfigurationError("项目文档领域必须唯一位于一个已声明 Space 下")
-        expected = builtin_config("project-policy.json")["default_space_type"]
+        expected = config_section("project")["default_space_type"]
         if matches[0].type != expected:
             raise ConfigurationError(f"项目文档领域必须位于 {expected} 类型 Space")
         return matches[0].id

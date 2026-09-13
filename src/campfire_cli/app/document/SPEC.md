@@ -38,13 +38,13 @@ document/
 
 Document Service 可以被 Maintenance 和 Workspace Restructure 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
 
-包内默认 Profile 配置是新 Workspace 和显式同步的来源，用户级 `frontmatter-schema.json` 是该 Workspace 当前治理契约。
+包内 `config.yml` 的默认 Profile 与用户级 `~/.campfire/config.yml` 覆盖共同构成当前治理契约。
 
 Profile 只允许一层 `base` 继承。Service 将声明配置编译为完整 `EffectiveProfile`；Validator、Formatter 和 CLI 必须消费同一结果，不得复制字段与枚举。
 
 标准字段用于格式化、补全和校验。默认 `unknown_fields: preserve`：已有业务扩展字段不参与标准排序但必须原样保留，不因尚未建立专属 Profile 而制造全库噪声；确需封闭字段集合的 Profile 可显式设为 `report`。
 
-`document profile sync` 与 `document type sync` 默认只预览，必须使用 `--confirm` 才更新用户级契约。标准契约升级时保留 Workspace 自定义类型和自定义 Profile，同步不修改任何 Workspace 文档。
+Document 不维护配置副本，也不提供契约同步命令。升级 Python 包会更新默认契约；用户自定义类型和 Profile 只写入 `~/.campfire/config.yml`，并通过 `workspace config check` 验证。
 
 `_空间.md`、`_领域.md` 等声明文件由 Workspace App 按结构契约校验，不是普通 Document，不得套用 base Profile。Document 的单篇命令遇到豁免文件时返回 `not-applicable` 和对应的 Workspace 检查入口。
 

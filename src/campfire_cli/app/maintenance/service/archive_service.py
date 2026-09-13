@@ -28,7 +28,7 @@ from campfire_cli.app.workspace.service.structure_service import (
 from campfire_cli.app.workspace.service.structure_service import (
     parse_marker as parse_frontmatter,
 )
-from campfire_cli.config.defaults import builtin_config
+from campfire_cli.config.defaults import config_section
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,7 @@ def collect_items(
     vault_root: Path, config: dict[str, Any]
 ) -> tuple[list[ArchiveItem], list[dict[str, str]]]:
     domains = project_domains(vault_root, config)
-    policy = builtin_config("archive-policy.json")
+    policy = config_section("archive")
     archive_reasons = set(policy["reasons"])
     reasons_requiring_successor = set(policy["reasons_requiring_successor"])
     marker_name = config.get("domain_marker", "_领域.md")

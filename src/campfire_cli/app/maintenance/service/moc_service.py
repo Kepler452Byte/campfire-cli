@@ -25,7 +25,7 @@ from typing import Any
 
 from campfire_cli.app.workspace.schema.workspace_schema import Domain
 from campfire_cli.app.workspace.service.structure_service import parse_marker as parse_frontmatter
-from campfire_cli.config.defaults import builtin_config
+from campfire_cli.config.defaults import config_section
 
 START_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"
 END_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->"
@@ -235,7 +235,7 @@ def generate_project_domain_content(
     lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
     lines.extend(["", "## 文档索引", ""])
     if project_doc_types is None:
-        config = builtin_config("document-types.json")
+        config = config_section("document_types")
         project_doc_types = {
             name: config["types"][name] for name in config["profiles"]["project-docs"]
         }

@@ -17,7 +17,7 @@ from campfire_cli.common.exceptions import AppError
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 type_cli = typer.Typer(
-    help="查看和同步文档类型与文件名前缀契约",
+    help="查看文档类型与文件名前缀契约",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
@@ -31,7 +31,6 @@ def service(ctx: typer.Context) -> DocumentTypeService:
     settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
     return DocumentTypeService(
         settings.workspace_id,
-        settings.state_root,
         DocumentTypeRepository(settings.state_root),
     )
 
@@ -48,9 +47,3 @@ def invoke(operation: Callable[[], dict[str, Any]]) -> None:
 def list_types(ctx: typer.Context) -> None:
     """列出当前 Workspace 的单选文档类型和文件名前缀。"""
     invoke(lambda: service(ctx).list_types())
-
-
-@type_cli.command("sync")
-def sync(ctx: typer.Context, confirm: bool = typer.Option(False, "--confirm")) -> None:
-    """预览默认类型契约；追加 --confirm 后更新当前 Workspace。"""
-    invoke(lambda: service(ctx).sync(confirm))

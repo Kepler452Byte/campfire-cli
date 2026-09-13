@@ -8,7 +8,7 @@ from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.schema.skill_schema import SkillInfo, SkillResult
 from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.common.governance import enrich_issue
-from campfire_cli.config.defaults import default_configs
+from campfire_cli.config.defaults import config_section
 from campfire_cli.config.settings import WorkspaceSettings
 
 NAME_RE = re.compile(r"^name:\s*[\"']?([^\n\"']+)", re.MULTILINE)
@@ -154,5 +154,5 @@ class SkillService:
 
     def _managed_names(self) -> list[str]:
         configured = list(self._settings.skills.get("managed_skills", []))
-        packaged = default_configs()["skills.json"].get("managed_skills", [])
+        packaged = config_section("skills").get("managed_skills", [])
         return list(dict.fromkeys([*packaged, *configured]))

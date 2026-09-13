@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceConfigCheckResult
-from campfire_cli.config.defaults import builtin_config
+from campfire_cli.config.defaults import config_section
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -15,77 +15,75 @@ class WorkspaceConfigService:
 
     def check(self) -> WorkspaceConfigCheckResult:
         issues: list[dict[str, Any]] = []
-        checked = [
-            "workspace-template.json",
-            "project-policy.json",
-            "archive-policy.json",
-            "issue-policy.json",
-            "governance.json",
-            "document-types.json",
-            "frontmatter-schema.json",
-            "skills.json",
-            "bases.json",
-        ]
+        checked = ["config.yml"]
         self._check_workspace_template(issues)
         self._check_policy_lists(issues)
         self._check_document_types(issues)
         self._check_profiles(issues)
-        self._check_named_list("skills.json", self.settings.skills, "managed_skills", issues)
-        self._check_named_list("bases.json", self.settings.bases, "managed_bases", issues)
-        for field in ("inbox", "space_marker", "domain_marker"):
+        self._check_named_list("skills", self.settings.skills, "managed_skills", issues)
+        self._check_named_list("bases", self.settings.bases, "managed_bases", issues)
+        for field in (
+            "inbox",
+            "space_marker",
+            "domain_marker",
+            "related_limit",
+            "related_min_score",
+            "cross_domain_related_limit",
+            "cross_domain_min_score",
+        ):
             if not self.settings.governance.get(field):
-                self._issue(issues, "governance.json", field, "required-value-missing")
+                self._issue(issues, "governance", field, "required-value-missing")
         return WorkspaceConfigCheckResult(
             status="ok" if not issues else "issues-found", checked=checked, issues=issues
         )
 
     def _check_workspace_template(self, issues: list[dict[str, Any]]) -> None:
-        config = builtin_config("workspace-template.json")
+        config = config_section("workspace")
         directories = config.get("system_directories", [])
         spaces = config.get("spaces", [])
-        self._unique("workspace-template.json", "system_directories", directories, issues)
+        self._unique("workspace", "system_directories", directories, issues)
         ids = [item.get("id") for item in spaces if isinstance(item, dict)]
         paths = [item.get("path") for item in spaces if isinstance(item, dict)]
-        self._unique("workspace-template.json", "spaces.id", ids, issues)
-        self._unique("workspace-template.json", "spaces.path", paths, issues)
+        self._unique("workspace", "spaces.id", ids, issues)
+        self._unique("workspace", "spaces.path", paths, issues)
         system_roots = {str(item).split("/", 1)[0] for item in directories}
         for index, item in enumerate(spaces):
             if not isinstance(item, dict):
-                self._issue(issues, "workspace-template.json", f"spaces.{index}", "object-required")
+                self._issue(issues, "workspace", f"spaces.{index}", "object-required")
                 continue
             for field in ("id", "name", "path", "type"):
                 if not item.get(field):
                     self._issue(
                         issues,
-                        "workspace-template.json",
+                        "workspace",
                         f"spaces.{index}.{field}",
                         "required-value-missing",
                     )
             if item.get("path") in system_roots:
                 self._issue(
                     issues,
-                    "workspace-template.json",
+                    "workspace",
                     f"spaces.{index}.path",
                     "system-space-path-conflict",
                 )
 
     def _check_policy_lists(self, issues: list[dict[str, Any]]) -> None:
         for name, fields in (
-            ("project-policy.json", ("statuses",)),
-            ("archive-policy.json", ("reasons", "reasons_requiring_successor")),
-            ("issue-policy.json", ("warning_codes",)),
+            ("project", ("statuses",)),
+            ("archive", ("reasons", "reasons_requiring_successor")),
+            ("issues", ("warning_codes",)),
         ):
-            config = builtin_config(name)
+            config = config_section(name)
             for field in fields:
                 self._unique(name, field, config.get(field), issues)
-        archive = builtin_config("archive-policy.json")
+        archive = config_section("archive")
         unknown = set(archive.get("reasons_requiring_successor", [])) - set(
             archive.get("reasons", [])
         )
         for value in sorted(unknown):
             self._issue(
                 issues,
-                "archive-policy.json",
+                "archive",
                 "reasons_requiring_successor",
                 "unknown-reference",
                 value,
@@ -95,19 +93,19 @@ class WorkspaceConfigService:
         config = self.settings.document_types
         types = config.get("types")
         if not isinstance(types, dict) or not types:
-            self._issue(issues, "document-types.json", "types", "mapping-required")
+            self._issue(issues, "document_types", "types", "mapping-required")
             return
         prefixes = [item.get("prefix") for item in types.values() if isinstance(item, dict)]
-        self._unique("document-types.json", "types.prefix", prefixes, issues)
+        self._unique("document_types", "types.prefix", prefixes, issues)
         for name, item in types.items():
             if not isinstance(item, dict) or not item.get("prefix") or not item.get("label"):
-                self._issue(issues, "document-types.json", f"types.{name}", "invalid-type")
+                self._issue(issues, "document_types", f"types.{name}", "invalid-type")
         for profile, names in config.get("profiles", {}).items():
             for name in names:
                 if name not in types:
                     self._issue(
                         issues,
-                        "document-types.json",
+                        "document_types",
                         f"profiles.{profile}",
                         "unknown-reference",
                         name,
@@ -117,25 +115,25 @@ class WorkspaceConfigService:
         config = self.settings.frontmatter_schema
         profiles = config.get("profiles")
         if not isinstance(profiles, dict) or "base" not in profiles:
-            self._issue(issues, "frontmatter-schema.json", "profiles.base", "mapping-required")
+            self._issue(issues, "frontmatter_schema", "profiles.base", "mapping-required")
             return
         for name, profile in profiles.items():
             if not isinstance(profile, dict):
                 self._issue(
-                    issues, "frontmatter-schema.json", f"profiles.{name}", "invalid-profile"
+                    issues, "frontmatter_schema", f"profiles.{name}", "invalid-profile"
                 )
                 continue
             parent = profile.get("extends")
             if parent and (parent != "base" or name == "base"):
                 self._issue(
                     issues,
-                    "frontmatter-schema.json",
+                    "frontmatter_schema",
                     f"profiles.{name}.extends",
                     "invalid-profile-inheritance",
                     parent,
                 )
             self._unique(
-                "frontmatter-schema.json",
+                "frontmatter_schema",
                 f"profiles.{name}.field_order",
                 profile.get("field_order", []),
                 issues,
@@ -148,7 +146,7 @@ class WorkspaceConfigService:
             if name not in profiles:
                 self._issue(
                     issues,
-                    "frontmatter-schema.json",
+                    "frontmatter_schema",
                     "resolver",
                     "unknown-reference",
                     name,

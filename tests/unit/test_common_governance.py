@@ -34,7 +34,7 @@ from campfire_cli.app.maintenance.service.moc_service import generate_relations 
 from campfire_cli.app.workspace.service.restructure_verifier import after, before  # noqa: E402
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
-from campfire_cli.config.defaults import default_configs
+from campfire_cli.config.defaults import config_section
 
 
 class WriteLockTests(unittest.TestCase):
@@ -258,7 +258,7 @@ class DocumentTypeTests(unittest.TestCase):
                 "---\ntype:\n  - knowledge\n  - tech-spec\n---\n", encoding="utf-8"
             )
             issues = DocumentRuleService(
-                self.config(), default_configs()["frontmatter-schema.json"]
+                self.config(), config_section("frontmatter_schema")
             ).check_document(root, notes / "错误.md")
             codes = {item["code"] for item in issues}
             self.assertIn("document-type-multiple", codes)
@@ -285,7 +285,7 @@ class DocumentTypeTests(unittest.TestCase):
                 "notes/知识-Algorithm-cuDNN与CUDA深度学习加速原理.md", plan["items"][0]["target"]
             )
             checked = DocumentRuleService(
-                self.config(), default_configs()["frontmatter-schema.json"]
+                self.config(), config_section("frontmatter_schema")
             ).check_document(root, source)
             self.assertIn("document-name-bracket-category", {issue["code"] for issue in checked})
 
@@ -377,7 +377,7 @@ class FrontmatterGovernanceTests(unittest.TestCase):
 
     @staticmethod
     def schema() -> dict:
-        schema = default_configs()["frontmatter-schema.json"]
+        schema = config_section("frontmatter_schema")
         schema["profiles"]["knowledge"]["required"] = ["domain"]
         schema["profiles"]["knowledge"]["field_order"].insert(3, "domain")
         return schema
@@ -429,9 +429,8 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             )
             first.write_text(content, encoding="utf-8")
             second.write_text(content, encoding="utf-8")
-            defaults = default_configs()
-            types = defaults["document-types.json"]
-            schema = defaults["frontmatter-schema.json"]
+            types = config_section("document_types")
+            schema = config_section("frontmatter_schema")
             engine = DocumentRuleService(types, schema)
 
             document_issues = engine.check_document(root, first)

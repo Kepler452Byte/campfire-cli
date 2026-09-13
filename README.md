@@ -48,11 +48,7 @@ campfire workspace project list --workspace personal
 campfire --workspace personal document profile list
 campfire --workspace personal document profile show task
 campfire --workspace personal document profile resolve --path "work/example/任务-示例.md"
-campfire --workspace personal document profile sync
-campfire --workspace personal document profile sync --confirm
 campfire --workspace personal document type list
-campfire --workspace personal document type sync
-campfire --workspace personal document type sync --confirm
 campfire --workspace personal document check --path "knowledge/example/知识-示例.md"
 campfire --workspace personal document format --path "knowledge/example/知识-示例.md"
 campfire --workspace personal document format --path "knowledge/example/知识-示例.md" --confirm
@@ -114,6 +110,6 @@ campfire --workspace /path/to/vault workspace restructure verify --batch move-00
 
 Workspace Restructure、Maintenance、Archive 写入前会在治理锁内复核内容哈希；检测到其他会话修改时返回
 `concurrent-change` 或 `source-hash-changed`，不会覆盖新内容。文档、任务状态和 Skill 模板枚举由
-同一个治理规则引擎按照 `frontmatter-schema.json` 校验。
+同一个治理规则引擎按照有效 `config.yml` 中的 `frontmatter_schema` 校验。
 
-配置契约位于 `~/.campfire/workspaces/<id>/config/`。`.campfire.yaml` 是便携元数据 SSOT；本机 SQLite 是设备路径、Decision、索引和运行状态的 SSOT。`workspace export/import` 只用于本机注册库备份，不承担跨设备同步。
+产品默认契约位于包内 `resources/defaults/config.yml`，用户只在 `~/.campfire/config.yml` 写需要覆盖的配置。首次初始化会创建最小用户配置；修改后运行 `campfire workspace config check` 验证完整有效配置。`.campfire.yaml` 是便携元数据 SSOT；本机 SQLite 是设备路径、Decision、索引和运行状态的 SSOT。`workspace export/import` 只用于本机注册库备份，不承担跨设备同步。

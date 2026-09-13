@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "reasons": ["superseded", "completed", "cancelled", "obsolete", "merged", "project-closed"],
-  "reasons_requiring_successor": ["superseded", "merged"]
-}

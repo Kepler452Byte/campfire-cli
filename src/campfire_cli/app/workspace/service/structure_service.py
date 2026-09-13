@@ -17,7 +17,7 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
 )
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
-from campfire_cli.config.defaults import builtin_config
+from campfire_cli.config.defaults import config_section
 
 SPACE_MARKER = "_空间.md"
 DOMAIN_MARKER = "_领域.md"
@@ -25,7 +25,7 @@ ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 
 
 def reserved_directories() -> set[str]:
-    return set(builtin_config("workspace-template.json")["reserved_directories"])
+    return set(config_section("workspace")["reserved_directories"])
 
 
 def parse_marker(path: Path) -> dict[str, str]:

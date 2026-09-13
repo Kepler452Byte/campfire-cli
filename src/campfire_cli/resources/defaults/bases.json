@@ -1,7 +1,0 @@
-{
-  "version": 1,
-  "target": "治理视图",
-  "managed_bases": ["项目文档.base", "待归档文档.base", "任务工作台.base", "Agent执行工作台.base", "决策工作台.base"],
-  "unknown_base_policy": "ignore",
-  "orphaned_base_policy": "report"
-}

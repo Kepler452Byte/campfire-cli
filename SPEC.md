@@ -17,10 +17,10 @@ SQLite / Filesystem Implementation
 - `app/` 放业务模块与 CLI 适配器。
 - `common/` 放两个 App 共同使用的文档治理原子能力和技术机制。
 - `config/` 放随 Workspace 或运行环境变化的配置。
-- `resources/defaults/` 是产品默认规则的 JSON SSOT；Service 不得重复声明可演进的目录、类型、状态、归档或 Issue 规则。
+- `resources/defaults/config.yml` 是产品默认规则的唯一 SSOT；Service 不得重复声明可演进的目录、类型、状态、归档或 Issue 规则。
 - CLI 通过用户级 registry 管理多个 Workspace，不依赖任何 Workspace 内的工具目录。
-- Markdown 是内容事实来源；`~/.campfire/workspaces/<id>/config/` 是治理契约来源；`~/.campfire/campfire.db` 是唯一数据库，保存 Workspace/Project 注册数据、按 Workspace 隔离的可重建索引和工作流状态。
-- JSON 仅承载配置、关键状态备份和有限的最近变更。
+- Markdown 是内容事实来源；包内 `config.yml` 与可选的 `~/.campfire/config.yml` 覆盖共同形成有效治理契约；`~/.campfire/campfire.db` 是唯一数据库，保存 Workspace/Project 注册数据、按 Workspace 隔离的可重建索引和工作流状态。
+- YAML 只承载人类可维护的配置和可移植 Manifest；JSON 只用于报告、计划交换和有限的最近变更。
 - Workspace Restructure 与 Maintenance 不共享含义模糊的业务入口。
 - CLI 不直接实现业务规则；Service 不依赖 Typer。
 - 字段、枚举和跨字段不变量统一由 DocumentRuleService 解释；Maintenance 与 Workspace Restructure 不得复制规则值。

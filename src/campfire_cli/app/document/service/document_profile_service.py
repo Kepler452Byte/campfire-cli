@@ -9,7 +9,6 @@ from campfire_cli.app.document.repository.document_profile_repository import (
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import workspace_write_lock
 
 
 class DocumentProfileService:
@@ -17,31 +16,13 @@ class DocumentProfileService:
         self,
         workspace_id: str,
         vault_root: Path,
-        state_root: Path,
         type_config: dict[str, Any],
         repository: DocumentProfileRepository,
     ) -> None:
         self._workspace_id = workspace_id
         self._vault_root = vault_root
-        self._state_root = state_root
         self._type_config = type_config
         self._repository = repository
-
-    def sync(self, confirm: bool = False) -> dict[str, Any]:
-        current = self._repository.load()
-        target = self._merge_contract(current, self._repository.packaged())
-        changed = current != target
-        if changed and confirm:
-            with workspace_write_lock(self._state_root.parents[1]):
-                self._repository.save(target)
-        return {
-            "status": "synced" if changed and confirm else "planned" if changed else "current",
-            "workspace_id": self._workspace_id,
-            "current_version": current.get("version"),
-            "target_version": target.get("version"),
-            "write_performed": changed and confirm,
-            "operations": ["merge packaged document profiles"] if changed else [],
-        }
 
     def list_profiles(self) -> dict[str, Any]:
         profiles = self._profiles()
@@ -83,27 +64,3 @@ class DocumentProfileService:
 
     def _profiles(self) -> ProfileRegistry:
         return ProfileRegistry(self._type_config, self._repository.load())
-
-    @staticmethod
-    def _merge_contract(current: dict[str, Any], packaged: dict[str, Any]) -> dict[str, Any]:
-        """Upgrade standard Profiles while preserving named Workspace extensions."""
-        packaged_profiles = packaged.get("profiles", {})
-        custom_profiles = {
-            name: profile
-            for name, profile in current.get("profiles", {}).items()
-            if name not in packaged_profiles
-        }
-        current_resolver = current.get("resolver", {})
-        packaged_resolver = packaged.get("resolver", {})
-        resolver = {**current_resolver, **packaged_resolver}
-        for mapping_name in ("profile_by_type", "profile_by_governance"):
-            resolver[mapping_name] = {
-                **current_resolver.get(mapping_name, {}),
-                **packaged_resolver.get(mapping_name, {}),
-            }
-        return {
-            **current,
-            **packaged,
-            "resolver": resolver,
-            "profiles": {**packaged_profiles, **custom_profiles},
-        }

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.config.defaults import effective_config
 
 
 def campfire_home() -> Path:
@@ -34,23 +34,17 @@ class WorkspaceSettings:
         if not root.is_dir():
             raise ConfigurationError(f"已注册 Workspace 不存在：{root}")
         state_root = campfire_home() / "workspaces" / workspace_id
-        config_root = state_root / "config"
-        required = {
-            "governance": config_root / "governance.json",
-            "document_types": config_root / "document-types.json",
-            "frontmatter_schema": config_root / "frontmatter-schema.json",
-            "skills": config_root / "skills.json",
-            "bases": config_root / "bases.json",
-        }
-        missing = [str(path) for path in required.values() if not path.is_file()]
-        if missing:
-            raise ConfigurationError("缺少 Campfire 配置：" + ", ".join(missing))
+        try:
+            config = effective_config(campfire_home() / "config.yml")
+        except (OSError, ValueError) as exc:
+            raise ConfigurationError(f"无法加载 Campfire config.yml：{exc}") from exc
         return cls(
             workspace_id=workspace_id,
             vault_root=root,
             state_root=state_root,
-            **{
-                name: json.loads(path.read_text(encoding="utf-8"))
-                for name, path in required.items()
-            },
+            governance=config["governance"],
+            document_types=config["document_types"],
+            frontmatter_schema=config["frontmatter_schema"],
+            skills=config["skills"],
+            bases=config["bases"],
         )

@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "inbox": "_收件箱",
-  "collaboration_root": "_协作",
-  "space_marker": "_空间.md",
-  "domain_marker": "_领域.md",
-  "ignored_directories": ["assets", "archive", "generated"],
-  "project_reserved_directories": ["任务", "记录", "archive", "_总览", "a_skill"]
-}

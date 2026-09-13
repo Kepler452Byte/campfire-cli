@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "system_directories": ["_收件箱/用户输入", "_收件箱/待接管", "_协作/decisions/pending", "_协作/decisions/answered", "_协作/decisions/closed", "_协作/decisions/cancelled", "治理视图"],
-  "spaces": [
-    {"id": "knowledge", "name": "知识", "path": "mynote", "type": "knowledge"},
-    {"id": "work", "name": "工作", "path": "mywork", "type": "work"}
-  ],
-  "reserved_directories": ["_收件箱", "_协作", "治理视图", "assets", "archive", "generated", "_总览", "记录", "任务", "a_skill"]
-}

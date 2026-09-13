@@ -19,7 +19,7 @@ from campfire_cli.common.exceptions import AppError
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 profile_cli = typer.Typer(
-    help="查看、解析和同步文档 Profile 契约",
+    help="查看和解析文档 Profile 契约",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
@@ -34,7 +34,6 @@ def service(ctx: typer.Context) -> DocumentProfileService:
     return DocumentProfileService(
         settings.workspace_id,
         settings.vault_root,
-        settings.state_root,
         settings.document_types,
         DocumentProfileRepository(settings.state_root),
     )
@@ -46,12 +45,6 @@ def invoke(operation: Callable[[], dict[str, Any]]) -> None:
     except AppError as exc:
         typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
         raise typer.Exit(exc.exit_code) from exc
-
-
-@profile_cli.command("sync")
-def sync(ctx: typer.Context, confirm: bool = typer.Option(False, "--confirm")) -> None:
-    """预览默认 Profile 契约；追加 --confirm 后更新当前 Workspace。"""
-    invoke(lambda: service(ctx).sync(confirm))
 
 
 @profile_cli.command("list")

@@ -3,13 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from campfire_cli.config.defaults import builtin_config
+from campfire_cli.config.defaults import config_section
 
 
 def enrich_issue(issue: dict[str, Any]) -> dict[str, Any]:
     result = dict(issue)
     code = str(result.get("code"))
-    policy = builtin_config("issue-policy.json")
+    policy = config_section("issues")
     fallback = next(
         (content for prefix, content in policy["categories"].items() if code.startswith(prefix)),
         (policy["default"]["message"], policy["default"]["suggestion"]),

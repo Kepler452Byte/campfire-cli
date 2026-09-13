@@ -12,6 +12,13 @@ from campfire_cli.main import app
 runner = CliRunner()
 
 
+def write_user_config(workspace: Path, payload: dict) -> Path:
+    path = workspace / "_campfire/config.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_short_help_is_available_at_every_command_level() -> None:
     commands = [
         ["-h"],
@@ -84,14 +91,14 @@ def test_project_is_not_exposed_as_a_top_level_command() -> None:
     assert result.exit_code != 0
 
 
-def test_setup_creates_manifest_without_overwriting_existing_config(
+def test_setup_creates_manifest_without_overwriting_user_config(
     tmp_path: Path, monkeypatch
 ) -> None:
     campfire_home = tmp_path / "campfire-home"
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
-    existing = campfire_home / "workspaces" / "new-workspace" / "config" / "governance.json"
+    existing = campfire_home / "config.yml"
     existing.parent.mkdir(parents=True)
-    existing.write_text('{"custom": true}\n', encoding="utf-8")
+    existing.write_text("version: 1\ngovernance:\n  custom: true\n", encoding="utf-8")
     registered = runner.invoke(
         app,
         ["workspace", "add", "--id", "new-workspace", "--path", str(tmp_path), "--default"],
@@ -101,18 +108,8 @@ def test_setup_creates_manifest_without_overwriting_existing_config(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["status"] == "initialized"
-    assert json.loads(existing.read_text(encoding="utf-8")) == {"custom": True}
-    assert (existing.parent / "document-types.json").is_file()
-    assert (existing.parent / "frontmatter-schema.json").is_file()
-    assert (existing.parent / "skills.json").is_file()
-    assert (existing.parent / "bases.json").is_file()
-    schema = json.loads((existing.parent / "frontmatter-schema.json").read_text(encoding="utf-8"))
-    assert schema["profiles"]["project-doc"]["enums"]["lifecycle"] == [
-        "maintained",
-        "proposed",
-        "completed",
-        "archived",
-    ]
+    assert yaml.safe_load(existing.read_text(encoding="utf-8"))["governance"]["custom"] is True
+    assert not (campfire_home / "workspaces/new-workspace/config").exists()
     assert not (tmp_path / ".campfire").exists()
     assert (tmp_path / ".campfire.yaml").is_file()
     resolved = runner.invoke(app, ["workspace", "resolve", "--workspace", "new-workspace"])
@@ -391,10 +388,11 @@ def test_workspace_config_check_validates_effective_contracts(tmp_path: Path, mo
     checked_payload = json.loads(checked.output)
     assert checked_payload["status"] == "ok"
 
-    path = home / "workspaces/test/config/document-types.json"
-    config = json.loads(path.read_text(encoding="utf-8"))
-    config["types"]["record"]["prefix"] = config["types"]["issue"]["prefix"]
-    path.write_text(json.dumps(config), encoding="utf-8")
+    path = home / "config.yml"
+    path.write_text(
+        "version: 1\ndocument_types:\n  types:\n    record:\n      prefix: 问题-\n",
+        encoding="utf-8",
+    )
     invalid = runner.invoke(app, ["workspace", "config", "check"])
     assert invalid.exit_code == 0, invalid.output
     payload = json.loads(invalid.output)
@@ -690,57 +688,40 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
     assert json.loads(resolved.output)["profile"]["name"] == "knowledge"
 
 
-def test_document_profile_sync_requires_confirmation(workspace: Path) -> None:
-    path = workspace / "_campfire/workspaces/test/config/frontmatter-schema.json"
-    path.write_text(
-        '{"version": 1, "profiles": {"custom": {"field_order": [], '
-        '"required": [], "optional": []}}}\n',
-        encoding="utf-8",
+def test_document_profile_list_reads_effective_user_config(workspace: Path) -> None:
+    path = write_user_config(
+        workspace,
+        {
+            "version": 1,
+            "frontmatter_schema": {
+                "profiles": {
+                    "custom": {"field_order": [], "required": [], "optional": []}
+                }
+            },
+        },
     )
-    preview = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "sync"])
-    assert json.loads(preview.output)["status"] == "planned"
-    assert json.loads(path.read_text())["version"] == 1
-    applied = runner.invoke(
-        app,
-        [
-            "--workspace",
-            str(workspace),
-            "document",
-            "profile",
-            "sync",
-            "--confirm",
-        ],
+    result = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "list"])
+    assert result.exit_code == 0, result.output
+    assert "custom" in {item["name"] for item in json.loads(result.output)["profiles"]}
+    assert "custom" in yaml.safe_load(path.read_text())["frontmatter_schema"]["profiles"]
+
+
+def test_document_type_list_reads_effective_user_config(workspace: Path) -> None:
+    path = write_user_config(
+        workspace,
+        {
+            "version": 1,
+            "document_types": {
+                "types": {"custom": {"prefix": "自定义-", "label": "自定义"}}
+            },
+        },
     )
-    assert json.loads(applied.output)["status"] == "synced"
-    assert json.loads(path.read_text())["version"] == 2
-    assert "custom" in json.loads(path.read_text())["profiles"]
 
-
-def test_document_type_sync_requires_confirmation(workspace: Path) -> None:
-    path = workspace / "_campfire/workspaces/test/config/document-types.json"
-    contract = json.loads(path.read_text(encoding="utf-8"))
-    contract["types"].pop("board")
-    contract["types"].pop("human-request")
-    contract["profiles"]["project-docs"].remove("board")
-    contract["types"]["custom"] = {"prefix": "自定义-", "label": "自定义"}
-    path.write_text(json.dumps(contract), encoding="utf-8")
-
-    preview = runner.invoke(app, ["--workspace", str(workspace), "document", "type", "sync"])
-    assert json.loads(preview.output)["status"] == "planned"
-    assert "board" not in json.loads(path.read_text())["types"]
-
-    applied = runner.invoke(
-        app,
-        ["--workspace", str(workspace), "document", "type", "sync", "--confirm"],
-    )
-    assert json.loads(applied.output)["status"] == "synced"
-    updated = json.loads(path.read_text())
-    assert updated["types"]["board"]["prefix"] == "看板-"
-    assert updated["types"]["human-request"]["prefix"] == "待确认-"
-    assert updated["space_marker"] == "_空间.md"
-    assert updated["scope_roots"] == []
-    assert "board" in updated["profiles"]["project-docs"]
-    assert updated["types"]["custom"]["prefix"] == "自定义-"
+    result = runner.invoke(app, ["--workspace", str(workspace), "document", "type", "list"])
+    assert result.exit_code == 0, result.output
+    assert "custom" in {item["name"] for item in json.loads(result.output)["types"]}
+    configured = yaml.safe_load(path.read_text())["document_types"]["types"]
+    assert "custom" in configured
 
 
 def test_single_document_check_and_format_require_confirmation(workspace: Path) -> None:
@@ -858,13 +839,17 @@ def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None
 
 
 def test_maintenance_check_validates_task_business_rules(workspace: Path) -> None:
-    config_path = workspace / "_campfire/workspaces/test/config"
-    types = json.loads((config_path / "document-types.json").read_text())
-    types["types"]["task"] = {"prefix": "任务-", "label": "任务"}
-    (config_path / "document-types.json").write_text(json.dumps(types), encoding="utf-8")
-    schema = json.loads((config_path / "frontmatter-schema.json").read_text())
-    schema["profiles"]["task"]["enums"]["lifecycle"] = ["blocked", "completed"]
-    (config_path / "frontmatter-schema.json").write_text(json.dumps(schema), encoding="utf-8")
+    write_user_config(
+        workspace,
+        {
+            "version": 1,
+            "frontmatter_schema": {
+                "profiles": {
+                    "task": {"enums": {"lifecycle": ["blocked", "completed"]}}
+                }
+            },
+        },
+    )
     note = workspace / "mywork/任务-跟进事项.md"
     note.write_text(
         "---\nname: 跟进事项\ndescription: test\ntype: task\ntask_id: task-test-001\n"
@@ -1507,13 +1492,15 @@ def test_maintenance_semantic_spec_applies_and_verifies_one_plan(workspace: Path
 
 
 def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> None:
-    config = workspace / "_campfire/workspaces/test/config"
-    types = json.loads((config / "document-types.json").read_text(encoding="utf-8"))
-    types["types"]["task"] = {"prefix": "任务-", "label": "任务"}
-    (config / "document-types.json").write_text(json.dumps(types), encoding="utf-8")
-    schema = json.loads((config / "frontmatter-schema.json").read_text(encoding="utf-8"))
-    schema["profiles"]["task"]["enums"]["lifecycle"] = ["todo", "completed"]
-    (config / "frontmatter-schema.json").write_text(json.dumps(schema), encoding="utf-8")
+    write_user_config(
+        workspace,
+        {
+            "version": 1,
+            "frontmatter_schema": {
+                "profiles": {"task": {"enums": {"lifecycle": ["todo", "completed"]}}}
+            },
+        },
+    )
     template = workspace / "_global_skills" / "task" / "references" / "任务模板.md"
     template.parent.mkdir(parents=True)
     template.write_text("---\ntype: task\nlifecycle: proposed\n---\n", encoding="utf-8")

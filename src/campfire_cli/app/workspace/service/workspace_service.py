@@ -26,7 +26,7 @@ from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
-from campfire_cli.config.defaults import builtin_config, default_configs
+from campfire_cli.config.defaults import config_section
 
 
 class WorkspaceService:
@@ -61,7 +61,7 @@ class WorkspaceService:
             raise ConfigurationError(
                 f"目标路径已存在；接入现有 Workspace 请使用 workspace add：{root}"
             )
-        template = builtin_config("workspace-template.json")
+        template = config_section("workspace")
         spaces = tuple(Space.model_validate(item) for item in template["spaces"])
         scaffold = (*template["system_directories"], *(space.path for space in spaces))
         directories = self._repository.create_scaffold(root, scaffold)
@@ -200,6 +200,14 @@ class WorkspaceService:
     def _initialize(self, workspace_id: str, root: Path, make_default: bool) -> WorkspaceResult:
         self._validate_id(workspace_id)
         with workspace_write_lock(self._root):
+            config_path = self._root / "config.yml"
+            config_created = False
+            if not config_path.exists():
+                atomic_write(
+                    config_path,
+                    "version: 1\n# 只写需要覆盖的 Campfire 默认配置。\n",
+                )
+                config_created = True
             registry = self._repository.load_registry()
             existing = registry.workspaces.get(workspace_id)
             if existing and Path(existing.path).expanduser().resolve() != root:
@@ -217,9 +225,6 @@ class WorkspaceService:
             registry.workspaces[workspace_id] = WorkspaceEntry(path=str(root))
             if make_default or not registry.default_workspace:
                 registry.default_workspace = workspace_id
-            created, preserved = self._repository.initialize_configs(
-                workspace_id, default_configs()
-            )
             self._repository.save_registry(registry)
         return WorkspaceResult(
             status="initialized",
@@ -227,8 +232,8 @@ class WorkspaceService:
             workspace=str(root),
             state_root=str(self._root / "workspaces" / workspace_id),
             default=registry.default_workspace == workspace_id,
-            created=created,
-            preserved=preserved,
+            created=[str(config_path)] if config_created else [],
+            preserved=[] if config_created else [str(config_path)],
         )
 
     def _resolve(self, selector: str | None, cwd: Path | None = None) -> tuple[str, Path]:

@@ -228,10 +228,10 @@ class MaintenanceService:
             all_notes,
             domain_by_note,
             self._settings.vault_root,
-            int(self._settings.governance.get("related_limit", 3)),
-            float(self._settings.governance.get("related_min_score", 0.08)),
-            int(self._settings.governance.get("cross_domain_related_limit", 2)),
-            float(self._settings.governance.get("cross_domain_min_score", 0.06)),
+            int(self._settings.governance["related_limit"]),
+            float(self._settings.governance["related_min_score"]),
+            int(self._settings.governance["cross_domain_related_limit"]),
+            float(self._settings.governance["cross_domain_min_score"]),
         )
         for domain in sorted(domains, key=lambda item: item.id):
             notes = notes_by_domain[domain.id]

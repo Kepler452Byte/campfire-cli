@@ -26,7 +26,6 @@ campfire workspace restructure domain move --domain <id> --target-path <path> [-
 campfire workspace restructure domain rekey --domain <id> --new-id <id> [--confirm]
 campfire workspace project resolve --path "$PWD"
 campfire document inspect --path <file>
-campfire document type sync --confirm
 campfire document type list
 campfire document profile list
 campfire decision create --key <key> --question <question> --source-type <source>

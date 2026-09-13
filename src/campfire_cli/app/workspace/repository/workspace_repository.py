@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -12,7 +11,6 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
 )
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
 from campfire_cli.common.database.models import Project, Workspace
-from campfire_cli.common.filesystem import atomic_write
 
 
 class SqliteWorkspaceRepository:
@@ -106,21 +104,6 @@ class SqliteWorkspaceRepository:
                         status=project.status,
                     )
                 )
-
-    def initialize_configs(
-        self, workspace_id: str, configs: dict[str, dict]
-    ) -> tuple[list[str], list[str]]:
-        config_root = self._root / "workspaces" / workspace_id / "config"
-        created: list[str] = []
-        preserved: list[str] = []
-        for name, payload in configs.items():
-            target = config_root / name
-            if target.exists():
-                preserved.append(str(target))
-                continue
-            atomic_write(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
-            created.append(str(target))
-        return created, preserved
 
     @staticmethod
     def create_scaffold(root: Path, directories: tuple[str, ...]) -> list[str]:

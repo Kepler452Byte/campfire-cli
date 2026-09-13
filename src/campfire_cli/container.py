@@ -10,16 +10,6 @@ from campfire_cli.app.decision.service.decision_projection_service import (
     DecisionProjectionService,
 )
 from campfire_cli.app.decision.service.decision_service import DecisionService
-from campfire_cli.app.document.repository.document_profile_repository import (
-    DocumentProfileRepository,
-)
-from campfire_cli.app.document.repository.document_type_repository import (
-    DocumentTypeRepository,
-)
-from campfire_cli.app.document.service.document_profile_service import (
-    DocumentProfileService,
-)
-from campfire_cli.app.document.service.document_type_service import DocumentTypeService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
@@ -32,6 +22,7 @@ from campfire_cli.app.workspace.repository.restructure_repository import (
 )
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.adoption_service import AdoptionService
+from campfire_cli.app.workspace.service.config_service import WorkspaceConfigService
 from campfire_cli.app.workspace.service.domain_restructure_service import (
     DomainRestructureService,
 )
@@ -61,23 +52,10 @@ class AppContainer:
         ).setup(workspace, make_default)
         container = cls.build(setup_result.workspace_id)
         settings = container.settings
-        document_types = DocumentTypeService(
-            settings.workspace_id,
-            settings.state_root,
-            DocumentTypeRepository(settings.state_root),
-        ).sync(confirm=True)
-        profiles = DocumentProfileService(
-            settings.workspace_id,
-            settings.vault_root,
-            settings.state_root,
-            settings.document_types,
-            DocumentProfileRepository(settings.state_root),
-        ).sync(confirm=True)
         return {
             **setup_result.model_dump(mode="json"),
             "resources": {
-                "document_types": document_types,
-                "document_profiles": profiles,
+                "config": WorkspaceConfigService(settings).check().model_dump(mode="json"),
                 "skills": container.skill.sync(dry_run=False).model_dump(mode="json"),
                 "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
             },
