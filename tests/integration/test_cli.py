@@ -2146,3 +2146,15 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     assert aliased["skills"]["status"] == "synced"
     assert aliased["agent_hints"][0]["action"] == "kept"
     assert stale.read_text(encoding="utf-8") != "过时内容\n"
+
+
+def test_setup_without_workspace_prints_guidance(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "home"))
+    result = runner.invoke(app, ["setup"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "needs-input"
+    commands = {item["command"] for item in payload["paths"]}
+    assert "campfire setup --workspace <vault路径> --default" in commands
+    assert any("workspace create" in command for command in commands)
+    assert any("upgrade" in command for command in commands)
