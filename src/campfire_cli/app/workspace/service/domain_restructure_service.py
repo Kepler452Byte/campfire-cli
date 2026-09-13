@@ -179,6 +179,7 @@ class DomainRestructureService:
                 self._workspaces.save_project(updated)
             self._sync_manifest()
         sync = self._maintenance.sync(scope=new_relative)
+        index = self._maintenance.check(summary=True)
         operations.extend(
             {str(key): str(value) for key, value in operation.items()}
             for operation in sync.operations
@@ -192,6 +193,7 @@ class DomainRestructureService:
             or issue.get("path") == new_relative
         ]
         issues.extend(issue.model_dump(mode="json") for issue in sync.issues)
+        issues.extend(issue.model_dump(mode="json") for issue in index.issues)
         result = self._result(domain, new_id, name, new_relative, operations, projects, True)
         if issues:
             result.status = "needs-review"

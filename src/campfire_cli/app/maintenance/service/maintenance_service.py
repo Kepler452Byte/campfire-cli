@@ -8,9 +8,11 @@ from campfire_cli.app.document.service.document_rule_service import DocumentRule
 from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
+    DomainState,
     Issue,
     MaintenanceResult,
     MaintenanceRunRecord,
+    SpaceState,
 )
 from campfire_cli.app.maintenance.service import archive_service as project_archive
 from campfire_cli.app.maintenance.service import moc_service as governance_sync
@@ -51,6 +53,10 @@ class MaintenanceService:
         severity: str | None = None,
         summary: bool = False,
     ) -> MaintenanceResult:
+        structure = DomainService(self._settings.vault_root, self._settings.state_root)
+        discovered_domains, _domain_issues = structure.discover()
+        discovered_spaces, _space_issues = structure.spaces.discover()
+        spaces, domains = self._topology_states(discovered_spaces, discovered_domains)
         documents: list[DocumentState] = []
         issues: list[Issue] = []
         paths = self._iter_documents()
@@ -90,6 +96,8 @@ class MaintenanceService:
             total_issue_count=len(issues),
             issues=issues,
             issue_counts=self._issue_counts(issues),
+            space_count=len(spaces),
+            domain_count=len(domains),
         )
         completed_at = datetime.now(UTC)
         run = MaintenanceRunRecord(
@@ -101,11 +109,13 @@ class MaintenanceService:
             finished_at=completed_at,
         )
         observed = {document.path: document.content_hash for document in documents}
+        observed.update({f"{item.path}/_空间.md": item.source_hash for item in spaces})
+        observed.update({f"{item.path}/_领域.md": item.source_hash for item in domains})
         with workspace_write_lock(self._settings.state_root):
             changed = snapshot_changes(self._settings.vault_root, observed)
             if changed:
                 return self._concurrent_result(changed)
-            self._repository.replace_current_state(documents, issues)
+            self._repository.replace_current_state(documents, issues, spaces, domains)
             self._repository.save_run(run)
             self._export_current_report(result, completed_at)
         selected = filter_issues(
@@ -126,6 +136,8 @@ class MaintenanceService:
             issue_counts=self._issue_counts(selected_issues),
             scope=scope,
             workspace_status=result.status,
+            space_count=len(spaces),
+            domain_count=len(domains),
         )
 
     def _export_current_report(self, result: MaintenanceResult, exported_at: datetime) -> None:
@@ -376,6 +388,48 @@ class MaintenanceService:
                 break
             current = current.parent
         return None
+
+    def _topology_states(self, spaces, domains) -> tuple[list[SpaceState], list[DomainState]]:
+        space_states: list[SpaceState] = []
+        seen_spaces: set[str] = set()
+        for space in spaces:
+            marker = self._settings.vault_root / space.path / "_空间.md"
+            if not space.id or space.id in seen_spaces or not marker.is_file():
+                continue
+            seen_spaces.add(space.id)
+            space_states.append(
+                SpaceState(
+                    space_id=space.id,
+                    name=space.name,
+                    path=space.path,
+                    space_type=space.type,
+                    status=space.status,
+                    source_hash=file_sha256(marker),
+                )
+            )
+        domain_states: list[DomainState] = []
+        seen_domains: set[str] = set()
+        for domain in domains:
+            marker = domain.path / "_领域.md"
+            if not domain.id or domain.id in seen_domains or not marker.is_file():
+                continue
+            seen_domains.add(domain.id)
+            domain_states.append(
+                DomainState(
+                    domain_id=domain.id,
+                    space_id=domain.space_id,
+                    parent_domain_id=domain.parent_domain,
+                    project_id=domain.project_id,
+                    name=domain.name,
+                    path=domain.path.relative_to(self._settings.vault_root).as_posix(),
+                    domain_type=domain.type,
+                    governance=domain.governance,
+                    moc=domain.moc,
+                    status=domain.status,
+                    source_hash=file_sha256(marker),
+                )
+            )
+        return space_states, domain_states
 
     def _check_inbox(self) -> list[Issue]:
         inbox = self._settings.vault_root / self._settings.governance.get("inbox", "_收件箱")

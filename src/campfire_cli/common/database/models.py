@@ -40,6 +40,43 @@ class Project(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
 
+class WorkspaceSpace(Base):
+    __tablename__ = "spaces"
+    __table_args__ = (UniqueConstraint("workspace_id", "space_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    space_id: Mapped[str] = mapped_column(String(128))
+    name: Mapped[str] = mapped_column(String(160))
+    path: Mapped[str] = mapped_column(Text)
+    space_type: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(24))
+    source_hash: Mapped[str] = mapped_column(String(64))
+    indexed_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class WorkspaceDomain(Base):
+    __tablename__ = "domains"
+    __table_args__ = (UniqueConstraint("workspace_id", "domain_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    domain_id: Mapped[str] = mapped_column(String(128))
+    space_id: Mapped[str] = mapped_column(String(128), index=True)
+    parent_domain_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(63), nullable=True)
+    name: Mapped[str] = mapped_column(String(160))
+    path: Mapped[str] = mapped_column(Text)
+    domain_type: Mapped[str] = mapped_column(String(64))
+    governance: Mapped[str] = mapped_column(String(64))
+    moc: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24))
+    source_hash: Mapped[str] = mapped_column(String(64))
+    indexed_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (UniqueConstraint("workspace_id", "path"),)

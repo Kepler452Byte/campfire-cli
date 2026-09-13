@@ -126,6 +126,8 @@ path       Workspace 内物理位置，通过 domain move 或显式目录重命�
 
 `domain rename`、`domain move` 和高风险的 `domain rekey` 是领域级事务，不应拆成大量逐文件迁移。路径变化必须联动 `_领域.md`、Project `document_domain`、`.campfire.yaml` 和路径引用；`rekey` 必须联动直接子领域的 `parent_domain`。所有命令默认预览，显式 `--confirm` 后执行。
 
+SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不是新的事实源。`setup`、`maintenance check` 和领域重构会自动从 `.campfire.yaml`、`_空间.md`、`_领域.md` 与内容文档刷新这些表；`workspace rebuild --confirm` 只提供低频的完整恢复入口。
+
 ## 6. 本地 Web 工作台
 
 Campfire 可以提供由 CLI 启动的单进程本地 HTTP 服务和浏览器工作台。CLI 与 HTTP 是同级交付适配器，必须复用同一个 Application Service、Repository、事务和审计逻辑；前端不得直接访问 SQLite，也不得复制 Decision 状态机。

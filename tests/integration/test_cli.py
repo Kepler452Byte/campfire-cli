@@ -38,6 +38,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "project", "create", "-h"],
         ["workspace", "project", "resolve", "-h"],
         ["workspace", "project", "check", "-h"],
+        ["workspace", "rebuild", "-h"],
         ["workspace", "space", "-h"],
         ["workspace", "space", "adopt", "-h"],
         ["workspace", "domain", "-h"],
@@ -133,27 +134,33 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
     )
 
     monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-a"))
-    assert runner.invoke(
-        app, ["workspace", "add", "--id", "personal", "--path", str(workspace)]
-    ).exit_code == 0
-    assert runner.invoke(
-        app,
-        [
-            "workspace",
-            "project",
-            "add",
-            "--id",
-            "example",
-            "--workspace",
-            "personal",
-            "--name",
-            "Example",
-            "--document-domain",
-            "mywork/【Example】文档中心",
-            "--local-path",
-            str(repository),
-        ],
-    ).exit_code == 0
+    assert (
+        runner.invoke(
+            app, ["workspace", "add", "--id", "personal", "--path", str(workspace)]
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            app,
+            [
+                "workspace",
+                "project",
+                "add",
+                "--id",
+                "example",
+                "--workspace",
+                "personal",
+                "--name",
+                "Example",
+                "--document-domain",
+                "mywork/【Example】文档中心",
+                "--local-path",
+                str(repository),
+            ],
+        ).exit_code
+        == 0
+    )
     manifest = yaml.safe_load((workspace / ".campfire.yaml").read_text(encoding="utf-8"))
     assert manifest["workspace"]["id"] == "personal"
     assert "local_path" not in manifest["projects"][0]
@@ -1737,3 +1744,32 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
 def parse_yaml_frontmatter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     return yaml.safe_load(text.split("---", 2)[1])
+
+
+def test_workspace_rebuild_indexes_spaces_and_domains_from_markers(workspace: Path) -> None:
+    import sqlite3
+
+    domain = _create_domain(workspace, "Indexed")
+    preview = runner.invoke(app, ["workspace", "rebuild"])
+    assert json.loads(preview.output)["status"] == "ready"
+
+    rebuilt = runner.invoke(app, ["workspace", "rebuild", "--confirm"])
+    assert rebuilt.exit_code == 0, rebuilt.output
+    payload = json.loads(rebuilt.output)
+    assert payload["space_count"] == 2
+    assert payload["domain_count"] == 1
+    database = workspace / "_campfire/campfire.db"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "select space_id from spaces where workspace_id = 'test' order by space_id"
+        ).fetchall() == [("knowledge",), ("work",)]
+        assert connection.execute(
+            "select domain_id, path from domains where workspace_id = 'test'"
+        ).fetchall() == [("indexed", "mywork/Indexed")]
+
+    (domain / "_领域.md").unlink()
+    runner.invoke(app, ["workspace", "rebuild", "--confirm"])
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "select count(*) from domains where workspace_id = 'test'"
+        ).fetchone() == (0,)

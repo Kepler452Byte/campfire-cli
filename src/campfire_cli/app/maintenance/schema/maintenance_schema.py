@@ -26,6 +26,29 @@ class DocumentState(BaseModel):
     status: str | None = None
 
 
+class SpaceState(BaseModel):
+    space_id: str
+    name: str
+    path: str
+    space_type: str
+    status: str
+    source_hash: str
+
+
+class DomainState(BaseModel):
+    domain_id: str
+    space_id: str
+    parent_domain_id: str | None = None
+    project_id: str | None = None
+    name: str
+    path: str
+    domain_type: str
+    governance: str
+    moc: str
+    status: str
+    source_hash: str
+
+
 class MaintenanceResult(BaseModel):
     status: str
     document_count: int
@@ -41,6 +64,8 @@ class MaintenanceResult(BaseModel):
     operations: list[dict[str, Any]] = Field(default_factory=list)
     scope: str | None = None
     workspace_status: str | None = None
+    space_count: int = 0
+    domain_count: int = 0
 
 
 class MaintenanceIntentItem(BaseModel):

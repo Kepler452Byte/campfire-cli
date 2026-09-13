@@ -5,6 +5,17 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 
 # Campfire Workspace Maintenance
 
+`.campfire.yaml`、`_空间.md`、`_领域.md` 和内容文档是跨设备 SSOT；SQLite 中的 Workspace 拓扑与文档数据只是本机可重建索引。首次接入使用 `campfire setup --workspace <vault>`，它会自动扫描并建立索引，不要求用户单独初始化数据库。
+
+日常运行 `campfire maintenance check` 时会同步刷新 Space、Domain 和 Document 索引。仅在 SQLite 被删除、怀疑索引漂移或 CLI 升级修复时使用低频恢复入口：
+
+```bash
+campfire workspace rebuild
+campfire workspace rebuild --confirm
+```
+
+`rebuild` 不修改 Vault 文档；它从 Manifest 和 Markdown SSOT 完整替换本机派生索引。不要直接修改 SQLite，也不要把数据库提交到 Git 或跨设备同步。
+
 目标是允许人类低成本记录，同时让 Agent 以可审阅、可重复执行的方式保持 Workspace 合规。
 
 先运行 `campfire workspace resolve` 获取目标 Workspace，再读取其 `AGENTS.md`。运行 `campfire workspace config check`、`workspace space/domain check` 和 `campfire maintenance check` 获取当前状态；检查不修改原始笔记，但可能刷新用户级索引和报告，不得直接编辑 `~/.campfire/`。

@@ -106,6 +106,30 @@ def set_default(workspace_id: str) -> None:
     emit(invoke(lambda: service().set_default(workspace_id)))
 
 
+@workspace_cli.command("rebuild")
+def rebuild(
+    workspace: str | None = typer.Option(None, "--workspace"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """从 Manifest 和 Markdown SSOT 重建本机派生索引。"""
+    if not confirm:
+        typer.echo(
+            json.dumps(
+                {
+                    "status": "ready",
+                    "operation": "replace-workspace-derived-indexes",
+                    "write_performed": False,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    from campfire_cli.container import AppContainer
+
+    emit(invoke(lambda: AppContainer.build(workspace).maintenance.check(summary=True)))
+
+
 @workspace_cli.command("export")
 def export_registry(output: Path = typer.Option(..., "--output")) -> None:
     """将 Workspace 与 Project 注册数据导出为 JSON 备份。"""

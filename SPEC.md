@@ -68,3 +68,10 @@ Campfire 使用语义化版本：
 - 领域路径变化必须同步 Project `document_domain`、`.campfire.yaml` 和路径引用。
 - `rekey` 必须同步直接子领域的 `parent_domain`。
 - 领域级写入默认只预览，只有显式 `--confirm` 才执行。
+
+## Workspace 索引
+
+- SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
+- `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
+- 领域重构完成后必须刷新受影响 MOC，并重建当前 Workspace 索引。
+- `workspace rebuild` 默认只预览；`--confirm` 后从 Manifest 和 Markdown 完整替换派生索引。

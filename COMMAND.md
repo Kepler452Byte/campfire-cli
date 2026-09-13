@@ -5,6 +5,8 @@
 ```bash
 campfire setup --workspace <vault-path> --default
 campfire workspace resolve
+campfire workspace rebuild
+campfire workspace rebuild --confirm
 campfire workspace attach --path <vault-path> --default
 campfire workspace project bind --id <project-id> --local-path <repository-path>
 campfire workspace space list

@@ -7,11 +7,19 @@ from sqlalchemy.orm import Session
 
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
+    DomainState,
     Issue,
     MaintenancePlan,
     MaintenanceRunRecord,
+    SpaceState,
 )
-from campfire_cli.common.database.models import Document, GovernanceIssue, MaintenanceRun
+from campfire_cli.common.database.models import (
+    Document,
+    GovernanceIssue,
+    MaintenanceRun,
+    WorkspaceDomain,
+    WorkspaceSpace,
+)
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write
 
@@ -22,10 +30,34 @@ class SqliteMaintenanceRepository:
         self._workspace_id = workspace_id
         self._state_root = state_root
 
-    def replace_current_state(self, documents: list[DocumentState], issues: list[Issue]) -> None:
+    def replace_current_state(
+        self,
+        documents: list[DocumentState],
+        issues: list[Issue],
+        spaces: list[SpaceState],
+        domains: list[DomainState],
+    ) -> None:
         self._session.execute(delete(Document).where(Document.workspace_id == self._workspace_id))
         self._session.execute(
             delete(GovernanceIssue).where(GovernanceIssue.workspace_id == self._workspace_id)
+        )
+        self._session.execute(
+            delete(WorkspaceDomain).where(WorkspaceDomain.workspace_id == self._workspace_id)
+        )
+        self._session.execute(
+            delete(WorkspaceSpace).where(WorkspaceSpace.workspace_id == self._workspace_id)
+        )
+        self._session.add_all(
+            [
+                WorkspaceSpace(workspace_id=self._workspace_id, **item.model_dump())
+                for item in spaces
+            ]
+        )
+        self._session.add_all(
+            [
+                WorkspaceDomain(workspace_id=self._workspace_id, **item.model_dump())
+                for item in domains
+            ]
         )
         self._session.add_all(
             [
