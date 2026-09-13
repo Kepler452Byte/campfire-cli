@@ -19,7 +19,9 @@ def atomic_write(path: Path, content: str) -> None:
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        # newline="\n" 阻止 Windows 文本模式把 \n 翻译为 \r\n；
+        # 生成文件的哈希校验（file_sha256）依赖写入与读取的换行口径一致。
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())

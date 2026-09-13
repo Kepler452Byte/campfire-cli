@@ -29,6 +29,8 @@ from campfire_cli.app.workspace.service.domain_restructure_service import (
 from campfire_cli.app.workspace.service.restructure_service import RestructureService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
+from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.config.defaults import effective_config
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 
@@ -61,6 +63,26 @@ class AppContainer:
             },
             "health": container.maintenance.check(summary=True).model_dump(mode="json"),
         }
+
+    @classmethod
+    def build_skill(cls) -> SkillService:
+        """Build the global Skill service without requiring a registered Workspace."""
+        home = campfire_home()
+        try:
+            config = effective_config(home / "config.yml")
+        except (OSError, ValueError) as exc:
+            raise ConfigurationError(f"无法加载 Campfire config.yml：{exc}") from exc
+        settings = WorkspaceSettings(
+            workspace_id="",
+            vault_root=home,
+            state_root=home,
+            governance=config["governance"],
+            document_types=config["document_types"],
+            frontmatter_schema=config["frontmatter_schema"],
+            skills=config["skills"],
+            bases=config["bases"],
+        )
+        return SkillService(settings, SkillRepository())
 
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:

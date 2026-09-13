@@ -23,6 +23,17 @@ uv tool install --editable /path/to/campfire-cli
 campfire version
 ```
 
+安装全局 Agent Skill（同步到 `~/.claude/skills` 与 `~/.agents/skills`）：
+
+```bash
+campfire skill list   # 查看包内 SSOT Skill 与全局同步状态
+campfire skill sync   # 确定性同步托管 Skill 到全局目录
+```
+
+`skill` 命令不依赖已注册 Workspace，可在 `setup` 之前使用；`campfire setup` 初始化
+Workspace 时也会自动执行一次同步。可用 `CAMPFIRE_SKILL_TARGETS`（路径分隔符分隔的
+列表）覆盖同步目标。
+
 人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Workspace 的 `AGENTS.md`，并使用 Workspace id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`campfire workspace restructure apply`、
 `maintenance apply` 和 `maintenance archive apply` 必须先审查计划，并使用命令要求的显式确认参数。
 

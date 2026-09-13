@@ -261,7 +261,9 @@ class WorkspaceService:
             entry = registry.workspaces[registry.default_workspace]
             return registry.default_workspace, Path(entry.path).expanduser().resolve()
         raise ConfigurationError(
-            "没有可用 Workspace；请运行 campfire workspace add --id <id> --path <path> --default"
+            "没有可用 Workspace；已有 Vault（含 .campfire.yaml）运行 "
+            "campfire setup --workspace <path> --default，"
+            "全新目录运行 campfire workspace add --id <id> --path <path> --default"
         )
 
     def _registered_id_for_path(self, root: Path) -> str:

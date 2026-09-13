@@ -30,7 +30,7 @@ from campfire_cli.common.governance import (
     filter_issues,
     snapshot_changes,
 )
-from campfire_cli.common.hashing import file_sha256, text_sha256
+from campfire_cli.common.hashing import file_sha256
 from campfire_cli.common.reports.json_report import render_json_report
 from campfire_cli.common.reports.markdown_report import render_maintenance_report
 from campfire_cli.config.settings import WorkspaceSettings
@@ -251,7 +251,7 @@ class MaintenanceService:
                     )
                     generated_snapshot[
                         relation_page.relative_to(self._settings.vault_root).as_posix()
-                    ] = text_sha256(existing) if relation_page.is_file() else None
+                    ] = file_sha256(relation_page) if relation_page.is_file() else None
                     if existing != relation_content:
                         changes.append((relation_page, relation_content))
                 generated = governance_sync.generate_domain_content(
@@ -277,8 +277,8 @@ class MaintenanceService:
                     blocked_scope=scope or "workspace",
                 )
             current_moc = moc.read_text(encoding="utf-8")
-            generated_snapshot[moc.relative_to(self._settings.vault_root).as_posix()] = text_sha256(
-                current_moc
+            generated_snapshot[moc.relative_to(self._settings.vault_root).as_posix()] = file_sha256(
+                moc
             )
             updated = governance_sync.replace_generated_region(current_moc, generated)
             if updated != current_moc:

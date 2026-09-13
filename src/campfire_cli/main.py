@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,7 @@ from campfire_cli.app.decision.cli.decision_cli import decision_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
 from campfire_cli.app.skill.cli.skill_cli import skill_cli
+from campfire_cli.app.skill.service.skill_service import SkillService
 from campfire_cli.app.workspace.cli.adoption_cli import adoption_cli
 from campfire_cli.app.workspace.cli.config_cli import config_cli
 from campfire_cli.app.workspace.cli.domain_cli import domain_cli
@@ -22,6 +25,13 @@ from campfire_cli.app.workspace.cli.workspace_cli import workspace_cli
 from campfire_cli.common.exceptions import AppError
 from campfire_cli.container import AppContainer
 
+# Windows 控制台默认 GBK 代码页会把中文输出编码成 GBK 导致乱码；
+# 统一以 UTF-8 输出（测试环境的替换流没有 reconfigure，直接跳过）。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        with suppress(OSError, ValueError):
+            _stream.reconfigure(encoding="utf-8")
+
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
@@ -31,8 +41,15 @@ class LazyContainer:
     def __init__(self, workspace: str | None) -> None:
         self._workspace = workspace
         self._container: AppContainer | None = None
+        self._skill: SkillService | None = None
 
     def __getattr__(self, name: str) -> Any:
+        # Skill 是全局资源（同步到 ~/.claude/skills 等），不依赖任何已注册
+        # Workspace；单独构建，避免首次安装时尚未注册 Workspace 就无法使用。
+        if name == "skill":
+            if self._skill is None:
+                self._skill = AppContainer.build_skill()
+            return self._skill
         if self._container is None:
             try:
                 self._container = AppContainer.build(self._workspace)

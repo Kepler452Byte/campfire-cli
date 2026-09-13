@@ -703,7 +703,9 @@ def test_document_profile_list_reads_effective_user_config(workspace: Path) -> N
     result = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "list"])
     assert result.exit_code == 0, result.output
     assert "custom" in {item["name"] for item in json.loads(result.output)["profiles"]}
-    assert "custom" in yaml.safe_load(path.read_text())["frontmatter_schema"]["profiles"]
+    assert "custom" in yaml.safe_load(path.read_text(encoding="utf-8"))["frontmatter_schema"][
+        "profiles"
+    ]
 
 
 def test_document_type_list_reads_effective_user_config(workspace: Path) -> None:
@@ -720,7 +722,7 @@ def test_document_type_list_reads_effective_user_config(workspace: Path) -> None
     result = runner.invoke(app, ["--workspace", str(workspace), "document", "type", "list"])
     assert result.exit_code == 0, result.output
     assert "custom" in {item["name"] for item in json.loads(result.output)["types"]}
-    configured = yaml.safe_load(path.read_text())["document_types"]["types"]
+    configured = yaml.safe_load(path.read_text(encoding="utf-8"))["document_types"]["types"]
     assert "custom" in configured
 
 
@@ -1938,3 +1940,61 @@ def test_adoption_blocks_symbolic_links(workspace: Path) -> None:
     payload = json.loads(result.output)
     assert payload["status"] == "blocked"
     assert payload["issues"][0]["code"] == "adoption-symlink"
+
+
+def test_sync_does_not_flag_crlf_generated_file_as_concurrent_change(
+    workspace: Path,
+) -> None:
+    domain = workspace / "mynote" / "知识领域"
+    domain.mkdir()
+    (domain / "_领域.md").write_text(
+        "---\n"
+        "name: 知识领域\n"
+        "domain_id: knowledge-domain\n"
+        "domain_type: knowledge-domain\n"
+        "governance: knowledge-docs\n"
+        'moc: "[[MOC-知识领域]]"\n'
+        "status: active\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (domain / "MOC-知识领域.md").write_text(
+        "# MOC\n\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n",
+        encoding="utf-8",
+    )
+    (domain / "知识-条目.md").write_text("# 条目\n", encoding="utf-8")
+
+    first = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "sync"])
+    assert first.exit_code == 0, first.output
+    assert json.loads(first.output)["status"] == "synced", first.output
+
+    relation_page = domain / "generated" / "相关文档-知识领域.md"
+    assert relation_page.is_file()
+    # 模拟旧版本在 Windows 上写出的 CRLF 生成文件
+    relation_page.write_bytes(
+        relation_page.read_text(encoding="utf-8").replace("\n", "\r\n").encode("utf-8")
+    )
+
+    second = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "sync"])
+    assert second.exit_code == 0, second.output
+    payload = json.loads(second.output)
+    assert payload["status"] == "synced", second.output
+    assert payload["issue_counts"].get("concurrent-change") is None
+
+
+def test_skill_commands_work_without_registered_workspace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "fresh-home"))
+    monkeypatch.setenv("CAMPFIRE_SKILL_TARGETS", str(tmp_path / "skills"))
+    listing = runner.invoke(app, ["skill", "list"])
+    assert listing.exit_code == 0, listing.output
+    payload = json.loads(listing.output)
+    assert payload["status"] == "ok"
+    assert payload["skills"]
+
+    preview = runner.invoke(app, ["skill", "sync", "--dry-run"])
+    assert preview.exit_code == 0, preview.output
+    assert json.loads(preview.output)["status"] == "dry-run"
