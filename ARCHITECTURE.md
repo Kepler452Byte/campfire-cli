@@ -114,6 +114,18 @@ Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器�
 
 新设备执行 `campfire setup --workspace <vault>`：读取 Manifest、注册本机路径、恢复 Project 逻辑元数据、同步类型/Profile/Skills/Bases 并执行健康检查。无法自动确定的项目源码路径显示为 `unbound_projects`，再用 `campfire workspace project bind` 完成本机绑定。整个流程可重复执行。
 
+### 领域结构重构
+
+Domain 的机器身份、显示名称和物理位置是三个独立维度：
+
+```text
+domain_id  稳定身份，普通重命名和移动不改变
+name       人类可读名称，通过 domain rename 修改
+path       Workspace 内物理位置，通过 domain move 或显式目录重命名修改
+```
+
+`domain rename`、`domain move` 和高风险的 `domain rekey` 是领域级事务，不应拆成大量逐文件迁移。路径变化必须联动 `_领域.md`、Project `document_domain`、`.campfire.yaml` 和路径引用；`rekey` 必须联动直接子领域的 `parent_domain`。所有命令默认预览，显式 `--confirm` 后执行。
+
 ## 6. 本地 Web 工作台
 
 Campfire 可以提供由 CLI 启动的单进程本地 HTTP 服务和浏览器工作台。CLI 与 HTTP 是同级交付适配器，必须复用同一个 Application Service、Repository、事务和审计逻辑；前端不得直接访问 SQLite，也不得复制 Decision 状态机。

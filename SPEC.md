@@ -59,3 +59,12 @@ Campfire 使用语义化版本：
 - Vault 根目录的 `.campfire.yaml` 是唯一可移植 Manifest；禁止在其他文件重复维护 Workspace/Project 便携元数据。
 - `.campfire.yaml` 禁止保存 Vault 或代码仓库的本机绝对路径。
 - `campfire setup` 必须幂等完成接入、契约/Skill/Base 同步和健康检查；未绑定项目必须显式报告，不得猜测路径。
+
+## Domain 重构不变量
+
+- `domain_id`、`name` 和 `path` 分别表示稳定身份、显示名称和物理位置，不得隐式绑定。
+- 普通 rename 和 move 不得改变 `domain_id`；只有显式 `domain rekey` 可以修改稳定身份。
+- 修改领域名称不得默认修改 Project 名称；必须由 `--project-name` 明确表达。
+- 领域路径变化必须同步 Project `document_domain`、`.campfire.yaml` 和路径引用。
+- `rekey` 必须同步直接子领域的 `parent_domain`。
+- 领域级写入默认只预览，只有显式 `--confirm` 才执行。

@@ -15,6 +15,9 @@ campfire workspace domain list
 campfire workspace domain check
 campfire workspace restructure inventory --scope <path> --batch <id>
 campfire workspace restructure plan --batch <id>
+campfire workspace restructure domain rename --domain <id> --name <name> [--rename-directory|--target-path <path>] [--project-name <name>] [--confirm]
+campfire workspace restructure domain move --domain <id> --target-path <path> [--parent-domain <id>] [--confirm]
+campfire workspace restructure domain rekey --domain <id> --new-id <id> [--confirm]
 campfire workspace project resolve --path "$PWD"
 campfire document inspect --path <file>
 campfire document type sync --confirm

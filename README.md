@@ -102,6 +102,8 @@ campfire --workspace /path/to/vault workspace restructure apply --batch move-001
 campfire --workspace /path/to/vault workspace restructure verify --batch move-001
 ```
 
+领域名称、路径和稳定身份分别使用 `domain rename`、`domain move` 和高风险的 `domain rekey`。领域级命令会联动领域声明、子领域关系、Project、`.campfire.yaml` 和路径引用，默认只预览，追加 `--confirm` 才执行。
+
 Workspace Restructure、Maintenance、Archive 写入前会在治理锁内复核内容哈希；检测到其他会话修改时返回
 `concurrent-change` 或 `source-hash-changed`，不会覆盖新内容。文档、任务状态和 Skill 模板枚举由
 同一个治理规则引擎按照 `frontmatter-schema.json` 校验。

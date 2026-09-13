@@ -51,3 +51,14 @@ class RestructureResult(BaseModel):
     item_count: int
     applied_count: int = 0
     issues: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class DomainRestructureResult(BaseModel):
+    status: str
+    domain_id: str
+    name: str
+    path: str
+    operations: list[dict[str, str]] = Field(default_factory=list)
+    affected_projects: list[str] = Field(default_factory=list)
+    write_performed: bool = False
+    issues: list[dict[str, Any]] = Field(default_factory=list)

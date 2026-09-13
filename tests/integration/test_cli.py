@@ -17,6 +17,10 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["-h"],
         ["tree", "-h"],
         ["workspace", "restructure", "-h"],
+        ["workspace", "restructure", "domain", "-h"],
+        ["workspace", "restructure", "domain", "rename", "-h"],
+        ["workspace", "restructure", "domain", "move", "-h"],
+        ["workspace", "restructure", "domain", "rekey", "-h"],
         ["workspace", "restructure", "inventory", "-h"],
         ["maintenance", "-h"],
         ["maintenance", "check", "-h"],
@@ -1617,3 +1621,119 @@ def test_archive_scope_does_not_apply_other_candidates(workspace: Path) -> None:
     archived_text = archived.read_text(encoding="utf-8")
     assert archived_text.index("archived_at:") < archived_text.index("created:")
     assert second_doc.is_file()
+
+
+def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
+    workspace: Path,
+) -> None:
+    root = workspace / "mywork/【Old】文档中心"
+    child = root / "Child"
+    child.mkdir(parents=True)
+    (root / "_领域.md").write_text(
+        "---\nname: Old\ndomain_id: project-old\ndomain_type: project-domain\n"
+        "governance: project-docs\nmoc: '[[MOC-Old]]'\nproject_id: example\n"
+        "status: active\n---\n\n# Old\n\n原有领域说明。\n",
+        encoding="utf-8",
+    )
+    moc_body = (
+        "# MOC\n\n<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n"
+    )
+    (root / "MOC-Old.md").write_text(moc_body, encoding="utf-8")
+    (child / "_领域.md").write_text(
+        "---\nname: Child\ndomain_id: project-old-child\n"
+        "domain_type: project-domain\ngovernance: project-docs\n"
+        "moc: '[[MOC-Child]]'\nparent_domain: project-old\nproject_id: example\n"
+        "status: active\n---\n\n# Child\n",
+        encoding="utf-8",
+    )
+    (child / "MOC-Child.md").write_text(moc_body, encoding="utf-8")
+    (workspace / ".campfire.yaml").write_text(
+        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "  governance_version: 1\nprojects: []\n",
+        encoding="utf-8",
+    )
+    added = runner.invoke(
+        app,
+        [
+            "workspace",
+            "project",
+            "add",
+            "--id",
+            "example",
+            "--workspace",
+            "test",
+            "--name",
+            "Old Project",
+            "--document-domain",
+            "mywork/【Old】文档中心",
+        ],
+    )
+    assert added.exit_code == 0, added.output
+
+    command = [
+        "workspace",
+        "restructure",
+        "domain",
+        "rename",
+        "--domain",
+        "project-old",
+        "--name",
+        "New",
+        "--rename-directory",
+        "--project-name",
+        "New Project",
+    ]
+    preview = runner.invoke(app, command)
+    assert json.loads(preview.output)["status"] == "planned"
+    assert root.is_dir()
+    applied = runner.invoke(app, [*command, "--confirm"])
+    assert applied.exit_code == 0, applied.output
+    renamed = workspace / "mywork/【New】文档中心"
+    assert renamed.is_dir() and not root.exists()
+    assert parse_yaml_frontmatter(renamed / "_领域.md")["domain_id"] == "project-old"
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["name"] == "New Project"
+    assert project["document_domain"] == "mywork/【New】文档中心"
+
+    rekeyed = runner.invoke(
+        app,
+        [
+            "workspace",
+            "restructure",
+            "domain",
+            "rekey",
+            "--domain",
+            "project-old",
+            "--new-id",
+            "project-new",
+            "--confirm",
+        ],
+    )
+    assert rekeyed.exit_code == 0, rekeyed.output
+    assert parse_yaml_frontmatter(renamed / "_领域.md")["domain_id"] == "project-new"
+    assert parse_yaml_frontmatter(renamed / "Child/_领域.md")["parent_domain"] == "project-new"
+
+    moved = runner.invoke(
+        app,
+        [
+            "workspace",
+            "restructure",
+            "domain",
+            "move",
+            "--domain",
+            "project-new",
+            "--target-path",
+            "mywork/Moved",
+            "--confirm",
+        ],
+    )
+    assert moved.exit_code == 0, moved.output
+    assert (workspace / "mywork/Moved/_领域.md").is_file()
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["document_domain"] == "mywork/Moved"
+
+
+def parse_yaml_frontmatter(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    return yaml.safe_load(text.split("---", 2)[1])
