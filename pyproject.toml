@@ -35,6 +35,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+  "perf: 性能回归测试，只断言确定性计数，不断言墙钟时间",
+]
 
 [tool.ruff]
 line-length = 100
