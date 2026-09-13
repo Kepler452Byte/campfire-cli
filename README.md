@@ -16,7 +16,16 @@ Vault 根目录的 `.campfire.yaml` 是可跨设备同步的 Workspace/Project �
 
 ## 安装与调用
 
-开发机安装：
+标准安装（已发布至 PyPI，无需源码仓库）：
+
+```bash
+uv tool install campfire-cli
+campfire version
+```
+
+升级使用 `uv tool upgrade campfire-cli`（或 `pipx upgrade campfire-cli`）。
+
+开发机安装（跟随本地源码）：
 
 ```bash
 uv tool install --editable /path/to/campfire-cli
