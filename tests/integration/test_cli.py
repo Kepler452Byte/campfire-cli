@@ -1998,3 +1998,22 @@ def test_skill_commands_work_without_registered_workspace(
     preview = runner.invoke(app, ["skill", "sync", "--dry-run"])
     assert preview.exit_code == 0, preview.output
     assert json.loads(preview.output)["status"] == "dry-run"
+
+
+def test_skill_sync_rewrites_crlf_target_without_concurrent_change(
+    workspace: Path,
+) -> None:
+    applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
+    assert applied.exit_code == 0, applied.output
+
+    target = next(
+        (workspace / "_global_skills").glob("campfire-document-capture/SKILL.md")
+    )
+    stale = target.read_text(encoding="utf-8") + "\n<!-- 旧版本残留 -->\n"
+    target.write_bytes(stale.replace("\n", "\r\n").encode("utf-8"))
+
+    result = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "synced", result.output
+    assert "旧版本残留" not in target.read_text(encoding="utf-8")

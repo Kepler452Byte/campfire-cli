@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 
@@ -8,6 +7,7 @@ from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.schema.skill_schema import SkillInfo, SkillResult
 from campfire_cli.common.filesystem import workspace_write_lock
 from campfire_cli.common.governance import enrich_issue
+from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.defaults import config_section
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -84,14 +84,12 @@ class SkillService:
                         {
                             "action": "update" if target.exists() else "create",
                             "path": str(target),
-                            "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                            "sha256": text_sha256(content),
                         }
                     )
-                    expected = (
-                        hashlib.sha256(current.encode()).hexdigest()
-                        if current is not None
-                        else None
-                    )
+                    # 期望哈希必须与复核端（_current_hash，原始字节）同口径，
+                    # 否则 CRLF 存量文件会被误判为其他会话修改。
+                    expected = file_sha256(target) if target.is_file() else None
                     writes.append((target, content, expected))
         if not dry_run and writes:
             with workspace_write_lock(self._settings.state_root):
@@ -148,9 +146,7 @@ class SkillService:
 
     @staticmethod
     def _current_hash(path: Path) -> str | None:
-        if not path.is_file():
-            return None
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return file_sha256(path) if path.is_file() else None
 
     def _managed_names(self) -> list[str]:
         configured = list(self._settings.skills.get("managed_skills", []))
