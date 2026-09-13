@@ -106,6 +106,30 @@ class RelationTests(unittest.TestCase):
             self.assertEqual("cross-domain-similarity", relations[left][0]["type"])
             self.assertEqual("Go MCP Server", relations[left][0]["target_name"])
 
+    def test_preserves_all_relation_types_and_reason_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            hub = root / "Hub.md"
+            linked = root / "Linked.md"
+            backlinked = root / "Backlinked.md"
+            similar = root / "Similar Note.md"
+            hub.write_text("# Hub\nalpha beta gamma\n[[Linked]]\n", encoding="utf-8")
+            linked.write_text("# Linked\n[[Hub]]\n", encoding="utf-8")
+            backlinked.write_text("# Backlinked\n[[Hub]] delta\n", encoding="utf-8")
+            similar.write_text("# Similar\nalpha beta gamma delta\n", encoding="utf-8")
+            domains = {note: "core" for note in (hub, linked, backlinked, similar)}
+            relations = generate_relations([hub, linked, backlinked, similar], domains, root, 3, 0.1, 2, 0.05)
+            by_type = {item["type"]: item for item in relations[hub]}
+            self.assertEqual({"direct-link", "backlink", "same-domain-similarity"}, set(by_type))
+            self.assertEqual(1.0, by_type["direct-link"]["score"])
+            self.assertEqual(["正文直接链接"], by_type["direct-link"]["reasons"])
+            self.assertEqual(["目标文档引用本文"], by_type["backlink"]["reasons"])
+            self.assertIn("alpha", by_type["same-domain-similarity"]["reasons"])
+            cross = generate_relations(
+                [hub, similar], {hub: "core", similar: "other"}, root, 3, 0.1, 2, 0.05
+            )
+            self.assertEqual([], cross[hub])
+
 
 class RestructureCheckTests(unittest.TestCase):
     def test_before_and_after_accept_unchanged_move(self) -> None:

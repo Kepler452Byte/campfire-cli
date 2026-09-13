@@ -35,18 +35,8 @@ LATIN_RE = re.compile(r"[A-Za-z][A-Za-z0-9.+#_-]{1,}")
 CHINESE_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
 
 
-def note_title(path: Path) -> str:
-    text = path.read_text(encoding="utf-8")
-    match = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
-    return match.group(1).strip() if match else path.stem
-
-
-def note_terms(path: Path) -> Counter[str]:
-    text = path.read_text(encoding="utf-8")
-    terms: list[str] = [token.lower() for token in LATIN_RE.findall(text)]
-    for block in CHINESE_RE.findall(text):
-        terms.extend(block[index : index + 2] for index in range(len(block) - 1))
-    ignored = {
+IGNORED_TERMS = frozenset(
+    {
         "text",
         "true",
         "false",
@@ -73,7 +63,31 @@ def note_terms(path: Path) -> Counter[str]:
         "因为",
         "所以",
     }
-    return Counter(term for term in terms if term not in ignored)
+)
+
+IGNORED_TITLE_KEYWORDS = frozenset(
+    {"go", "agent", "development", "document", "guide", "note", "over", "and", "with"}
+)
+
+
+def note_title(path: Path) -> str:
+    return title_from_text(path.read_text(encoding="utf-8"), path.stem)
+
+
+def title_from_text(text: str, fallback: str) -> str:
+    match = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+    return match.group(1).strip() if match else fallback
+
+
+def note_terms(path: Path) -> Counter[str]:
+    return terms_from_text(path.read_text(encoding="utf-8"))
+
+
+def terms_from_text(text: str) -> Counter[str]:
+    terms: list[str] = [token.lower() for token in LATIN_RE.findall(text)]
+    for block in CHINESE_RE.findall(text):
+        terms.extend(block[index : index + 2] for index in range(len(block) - 1))
+    return Counter(term for term in terms if term not in IGNORED_TERMS)
 
 
 def similarity(left: Counter[str], right: Counter[str]) -> tuple[float, list[str]]:
@@ -83,22 +97,25 @@ def similarity(left: Counter[str], right: Counter[str]) -> tuple[float, list[str
     if not union:
         return 0.0, []
     common = left_terms & right_terms
-    score = len(common) / len(union)
-    reasons = [
+    return len(common) / len(union), top_reasons(left, right, common)
+
+
+def top_reasons(left: Counter[str], right: Counter[str], common: set[str]) -> list[str]:
+    return [
         term
         for term, _ in sorted(
             ((term, left[term] + right[term]) for term in common),
             key=lambda item: (-item[1], item[0]),
         )[:5]
     ]
-    return score, reasons
 
 
 def title_keywords(path: Path) -> set[str]:
-    title = f"{path.stem} {note_title(path)}"
-    keywords = {token.lower() for token in LATIN_RE.findall(title)}
-    ignored = {"go", "agent", "development", "document", "guide", "note", "over", "and", "with"}
-    return keywords - ignored
+    return keywords_from_title(f"{path.stem} {note_title(path)}")
+
+
+def keywords_from_title(title: str) -> set[str]:
+    return {token.lower() for token in LATIN_RE.findall(title)} - IGNORED_TITLE_KEYWORDS
 
 
 def direct_notes(domain: Domain, marker_name: str) -> list[Path]:
@@ -118,8 +135,16 @@ def generate_relations(
     cross_limit: int,
     cross_minimum: float,
 ) -> dict[Path, list[dict[str, Any]]]:
-    vectors = {note: note_terms(note) for note in notes}
+    # 全库 O(n^2) 配对：每篇笔记只读一次文件，词表/标题关键词/显式链接全部预计算，
+    # 相似度得分只在候选保留时才展开 reasons，避免内层循环重复 I/O。
     texts = {note: note.read_text(encoding="utf-8") for note in notes}
+    vectors = {note: terms_from_text(texts[note]) for note in notes}
+    term_sets = {note: frozenset(vector) for note, vector in vectors.items()}
+    term_sizes = {note: len(terms) for note, terms in term_sets.items()}
+    title_keywords_by_note = {
+        note: keywords_from_title(f"{note.stem} {title_from_text(texts[note], note.stem)}")
+        for note in notes
+    }
     explicit_links = {
         note: {Path(value).stem for value in WIKILINK_RE.findall(texts[note])} for note in notes
     }
@@ -128,11 +153,14 @@ def generate_relations(
         strong: list[dict[str, Any]] = []
         same_domain_semantic: list[dict[str, Any]] = []
         cross_domain_semantic: list[dict[str, Any]] = []
+        source_terms = term_sets[source]
+        source_links = explicit_links[source]
+        source_domain = domain_by_note[source]
         for target in notes:
             if source == target:
                 continue
-            score, reasons = similarity(vectors[source], vectors[target])
-            if target.stem in explicit_links[source]:
+            reasons: list[str] = []
+            if target.stem in source_links:
                 relation_type = "direct-link"
                 score = 1.0
                 reasons = ["正文直接链接"]
@@ -141,19 +169,24 @@ def generate_relations(
                 score = 1.0
                 reasons = ["目标文档引用本文"]
             else:
-                same_domain = domain_by_note[source] == domain_by_note[target]
-                relation_type = (
-                    "same-domain-similarity" if same_domain else "cross-domain-similarity"
-                )
-                if not same_domain:
-                    common_title_keywords = sorted(title_keywords(source) & title_keywords(target))
+                if source_domain == domain_by_note[target]:
+                    relation_type = "same-domain-similarity"
+                else:
+                    common_title_keywords = sorted(
+                        title_keywords_by_note[source] & title_keywords_by_note[target]
+                    )
                     if not common_title_keywords:
                         continue
-                    reasons = [
-                        f"标题共同关键词:{value}" for value in common_title_keywords
-                    ] + reasons
+                    relation_type = "cross-domain-similarity"
+                    reasons = [f"标题共同关键词:{value}" for value in common_title_keywords]
+                target_terms = term_sets[target]
+                common = source_terms & target_terms
+                union_size = term_sizes[source] + term_sizes[target] - len(common)
+                score = len(common) / union_size if union_size else 0.0
             threshold = cross_minimum if relation_type == "cross-domain-similarity" else minimum
             if relation_type in {"direct-link", "backlink"} or score >= threshold:
+                if relation_type not in {"direct-link", "backlink"}:
+                    reasons = reasons + top_reasons(vectors[source], vectors[target], common)
                 item = {
                     "target": str(target.relative_to(vault_root).with_suffix("")),
                     "target_name": target.stem,
