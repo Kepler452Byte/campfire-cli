@@ -9,13 +9,22 @@ from campfire_cli.common.exceptions import GovernanceBlockedError
 
 
 @contextmanager
-def workspace_write_lock(state_root: Path) -> Iterator[None]:
-    lock = state_root / "locks" / "write.lock"
+def workspace_write_lock(scope_root: Path) -> Iterator[None]:
+    """对 scope_root 范围内的治理写入互斥。
+
+    锁的粒度由传入的根目录决定，锁文件位于 <scope_root>/locks/write.lock：
+
+    - Workspace 的 state_root（~/.campfire/workspaces/<id>/）：
+      互斥该 Workspace 的 Vault 写入与状态刷新；
+    - campfire_home（~/.campfire/）：互斥跨 Workspace 的全局资源，
+      包括注册库写入和全局 Skill 同步。
+    """
+    lock = scope_root / "locks" / "write.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     descriptor = _acquire(lock)
     try:
-        os.write(descriptor, str(os.getpid()).encode())
-        os.close(descriptor)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(str(os.getpid()))
         yield
     finally:
         lock.unlink(missing_ok=True)
