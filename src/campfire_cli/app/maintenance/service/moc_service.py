@@ -135,8 +135,7 @@ def generate_relations(
     cross_limit: int,
     cross_minimum: float,
 ) -> dict[Path, list[dict[str, Any]]]:
-    # 全库 O(n^2) 配对：每篇笔记只读一次文件，词表/标题关键词/显式链接全部预计算，
-    # 相似度得分只在候选保留时才展开 reasons，避免内层循环重复 I/O。
+    # reasons 与标题关键词在候选保留后才计算，保证 O(n^2) 内层循环只做集合运算。
     texts = {note: note.read_text(encoding="utf-8") for note in notes}
     vectors = {note: terms_from_text(texts[note]) for note in notes}
     term_sets = {note: frozenset(vector) for note, vector in vectors.items()}

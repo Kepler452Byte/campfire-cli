@@ -117,9 +117,9 @@ class AppContainer:
     def upgrade(cls, skip_package: bool = False) -> dict:
         """一条幂等命令完成 campfire 升级：更新 Python 包本身，再对齐治理资源。
 
-        包更新通过检测到的安装方式（uv tool / pipx）在独立进程中执行，
-        完成后由新版 CLI 自动执行资源对齐；离线、已是最新、editable 或
-        无法识别安装方式时跳过包更新，仅对齐本机资源。
+        包更新按检测到的安装方式在独立进程中执行，完成后由新版 CLI 自动执行
+        资源对齐。离线、已是最新、editable 或无法识别安装方式时跳过包更新，
+        仅对齐本机资源。
         """
         home = campfire_home()
         upgrade_database(home / "campfire.db")

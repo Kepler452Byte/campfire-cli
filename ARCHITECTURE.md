@@ -72,7 +72,7 @@ Markdown Workspace Adapter   用户级状态
 
 Decision 以 SQLite 当前快照和追加事件为 SSOT。全部状态在 `_协作/decisions/` 生成只读 Markdown 投影，并由统一的决策工作台按 pending、answered、closed、cancelled 展示。Notification 与未来 Task Channel 只通过稳定 Decision id 和事件联动，不反向拥有 Decision 状态。
 
-`app/` 按可独立理解的业务能力组织，CLI 只做参数和输出适配，Service 承担业务流程，Repository 负责外部读写。`common/` 只放跨业务复用、无独立业务流程的原子能力；不能为了“复用”把业务编排下沉到 common。
+`app/` 按可独立理解的业务能力组织，CLI 只做参数和输出适配，Service 承担业务流程，Repository 负责外部读写。跨 App 的用例编排由组合根 `AppContainer` 承担，`setup` 与 `upgrade` 是当前实例。`common/` 只放跨业务复用、无独立业务流程的原子能力；不能为了“复用”把业务编排下沉到 common。
 
 配置采用两层模型：包内 `resources/defaults/config.yml` 保存完整默认契约，用户级 `~/.campfire/config.yml` 只保存覆盖项。Mapping 递归合并，scalar 和 list 整体替换；配置不按 Workspace 复制，运行状态不写回 YAML。
 

@@ -4,6 +4,9 @@
 
 ```bash
 campfire setup --workspace <vault-path> --default
+campfire upgrade
+campfire skill sync
+campfire base sync
 campfire workspace resolve
 campfire workspace rebuild
 campfire workspace rebuild --confirm

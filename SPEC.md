@@ -7,6 +7,8 @@
 ```text
 CLI delivery adapter
         ↓
+AppContainer 组合根，承担跨 App 编排
+        ↓
 Workspace Restructure / Maintenance Service
         ↓
 消费方 Protocol
@@ -17,6 +19,8 @@ SQLite / Filesystem Implementation
 - `app/` 放业务模块与 CLI 适配器。
 - `common/` 放两个 App 共同使用的文档治理原子能力和技术机制。
 - `config/` 放随 Workspace 或运行环境变化的配置。
+- 跨 App 的用例编排放 `AppContainer` 组合根，`setup` 与 `upgrade` 是当前实例；CLI 不编排跨服务流程，单个 App Service 不直接调用其他 App 的 Service。
+- 纯技术机制放 `common/`，例如网络查询、版本比较与进程编排；不得包含治理业务语义，也不得反向依赖 `app/`。
 - `resources/defaults/config.yml` 是产品默认规则的唯一 SSOT；Service 不得重复声明可演进的目录、类型、状态、归档或 Issue 规则。
 - CLI 通过用户级 registry 管理多个 Workspace，不依赖任何 Workspace 内的工具目录。
 - Markdown 是内容事实来源；包内 `config.yml` 与可选的 `~/.campfire/config.yml` 覆盖共同形成有效治理契约；`~/.campfire/campfire.db` 是唯一数据库，保存 Workspace/Project 注册数据、按 Workspace 隔离的可重建索引和工作流状态。
@@ -29,6 +33,34 @@ SQLite / Filesystem Implementation
 - 写入用例必须在治理锁内复核生成计划时的内容哈希，发现外部变化时拒绝覆盖。
 
 代码风格参考 `templates/fastapi-template`，但不引入 HTTP、WebSocket、认证和异步数据库等无关能力。
+
+## CLI 输出契约
+
+- 正常输出 indent JSON；错误输出单行 JSON 并写 stderr，退出码非 0。
+- `status` 字段是 Agent 依赖的公共契约，只允许复用既有词汇，不得发明近义词。命令级词汇：ok、error、blocked、needs-input、needs-review、dry-run、synced、planned、ready、applied、issues-found、formatted、archived、up-to-date。文档、领域与 Decision 各有自己的字段词汇表。需要新状态先在本节登记。
+- 前置条件缺失时优先降级执行：能完成的部分照常完成，输出 `needs-input` 并以 `skipped` 字段显式列出被跳过的步骤，而非整体报错退出。
+
+## 升级语义
+
+- `campfire upgrade` 是唯一的幂等升级入口：先更新 Python 包本身，再对齐本机治理资源，覆盖 Schema 迁移、全局 Skill、Base 与提示词路标。
+- 包自更新按检测到的安装方式在独立进程中执行，当前支持 uv tool 与 pipx。更新脚本必须等待当前进程退出后再运行，因为 Windows 会锁定运行中的解释器与可执行文件，包管理器无法原地替换；成功后由新版代码完成资源对齐。
+- editable 源码安装、离线、无法识别安装方式时跳过包更新仅对齐资源，结果中以 `action` 与 `hint` 显式说明原因。
+- 自更新链使用的内部参数必须 `hidden=True`，`--skip-package` 是当前实例，不进入公共 CLI 契约。
+- 外部网络查询尽力而为，例如 PyPI 版本检测；失败或超时静默降级，不得让命令失败或明显变慢。
+
+## 开发纪律
+
+- 提交使用 conventional commits，类型限定为 feat、fix、perf、refactor、docs、chore，正文说明动机；纯重构独立成 commit，不与功能变更混排。
+- 行为保持型重构的验收等于两条同时满足：既有测试不改断言仍通过，真实数据上新旧输出全等对比。只过测试不足以证明行为未变。
+- Windows 不变量：进程探活用 `psutil.pid_exists`，不用 `os.kill(pid, 0)`，后者在 Windows 等价于发送 CTRL_C_EVENT；CLI 入口处对 stdout/stderr 执行 UTF-8 reconfigure。
+
+## 注释与文档字符串
+
+以 PEP 8 与 PEP 257 为基线，外加两条本项目的硬规则：
+
+- 注释只写代码本身表达不了的约束：为什么这样做、什么条件下不能改。不写下一行做什么，不写给评审者看的改动说明，不重复代码；只对本次改动有意义的内容进提交说明，不进代码。
+- Docstring 是 API 契约：摘要行一句话陈述行为，补充行写前置条件、返回语义与副作用，不描述实现步骤。
+- 注释是完整句子，与代码同语言；行内注释只用于取值域等代码无法自明的信息。
 
 ## 版本规范
 

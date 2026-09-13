@@ -15,7 +15,10 @@ REQUEST_TIMEOUT_SECONDS = 3.0
 
 
 def fetch_latest_version(package: str) -> str | None:
-    """查询 PyPI 最新发布版本；网络不可用或响应异常时返回 None（检测尽力而为，不阻塞升级）。"""
+    """返回包在 PyPI 的最新发布版本。
+
+    网络不可用或响应异常时返回 None；本查询尽力而为，绝不阻塞或失败上层命令。
+    """
     try:
         with urllib.request.urlopen(
             PYPI_INDEX_URL.format(package=package), timeout=REQUEST_TIMEOUT_SECONDS
@@ -28,7 +31,10 @@ def fetch_latest_version(package: str) -> str | None:
 
 
 def is_newer_version(candidate: str, current: str) -> bool:
-    """按点分段数值比较版本号；遇到不可数值化的段（如 dev 标记）退化为不等比较。"""
+    """按点分段数值比较版本号，candidate 大于 current 时返回 True。
+
+    段不可数值化时退化为字符串不等比较，例如本地装了 dev 版本。
+    """
 
     def segments(value: str) -> tuple[int | str, ...]:
         return tuple(int(part) if part.isdigit() else part for part in value.strip().split("."))
@@ -91,9 +97,9 @@ def detect_install_method(package: str) -> InstallMethod:
 
 
 def build_updater_script(update_command: list[str], align_command: list[str], pid: int) -> str:
-    """生成"等待当前进程退出 → 更新包 → 对齐治理资源"的幂等更新脚本。
+    """构造幂等更新脚本：等待指定进程退出，更新包，成功后对齐治理资源。
 
-    更新必须在宿主进程退出后执行：Windows 会锁定运行中的解释器与可执行文件，
+    更新必须等待宿主进程退出后执行：Windows 锁定运行中的解释器与可执行文件，
     包管理器无法原地替换正在运行的安装。
     """
     joined_update = " ".join(update_command)
