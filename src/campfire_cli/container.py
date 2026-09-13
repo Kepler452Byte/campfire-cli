@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from campfire_cli import __version__
 from campfire_cli.app.base.repository.base_repository import BaseRepository
 from campfire_cli.app.base.service.base_service import BaseService
 from campfire_cli.app.decision.repository.decision_repository import SqliteDecisionRepository
@@ -31,8 +32,11 @@ from campfire_cli.app.workspace.service.workspace_service import WorkspaceServic
 from campfire_cli.common.agent_hints import default_hint_paths, inject_agent_hint
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
 from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.common.package_version import fetch_latest_version, is_newer_version
 from campfire_cli.config.defaults import effective_config
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
+
+PACKAGE_NAME = "campfire-cli"
 
 
 @dataclass
@@ -105,7 +109,10 @@ class AppContainer:
 
     @classmethod
     def upgrade(cls) -> dict:
-        """对齐本机治理资源与当前包版本：Schema 迁移、Skill、Base 与提示词路标。"""
+        """对齐本机治理资源与当前包版本：Schema 迁移、Skill、Base 与提示词路标。
+
+        本命令不更新 Python 包本身；检测到 PyPI 有更新版本时在结果中提示安装方式。
+        """
         home = campfire_home()
         upgrade_database(home / "campfire.db")
         workspaces = []
@@ -117,9 +124,20 @@ class AppContainer:
                     "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
                 }
             )
+        latest = fetch_latest_version(PACKAGE_NAME)
+        update_available = latest is not None and is_newer_version(latest, __version__)
+        package: dict[str, str | bool] = {"installed": __version__, "latest": latest}
+        if update_available:
+            package["update_available"] = True
+            package["hint"] = (
+                "Python 包本身有新版本；先运行 uv tool upgrade campfire-cli"
+                "（或 pipx upgrade campfire-cli）更新包，再执行 campfire upgrade 对齐治理资源"
+            )
         return {
             "status": "ok",
             "database": {"status": "up-to-date"},
+            "package_update_available": update_available,
+            "package": package,
             "skills": cls.build_skill().sync(dry_run=False).model_dump(mode="json"),
             "agent_hints": cls._inject_hints(),
             "workspaces": workspaces,

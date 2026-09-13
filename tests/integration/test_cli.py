@@ -2126,6 +2126,7 @@ def test_setup_injects_agent_hints_idempotently(
 def test_upgrade_syncs_resources_and_accepts_update_alias(
     workspace: Path, monkeypatch
 ) -> None:
+    monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: None)
     claude_md = workspace / "CLAUDE.md"
     monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(claude_md))
     stale = workspace / "_global_skills" / "campfire-document-capture" / "SKILL.md"
@@ -2137,6 +2138,8 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     assert payload["skills"]["status"] == "synced"
     assert payload["agent_hints"][0]["action"] == "created"
     assert [item["workspace_id"] for item in payload["workspaces"]] == ["test"]
+    assert payload["package_update_available"] is False
+    assert payload["package"]["latest"] is None
     assert stale.is_file()
     stale.write_text("过时内容\n", encoding="utf-8")
 
@@ -2146,6 +2149,18 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     assert aliased["skills"]["status"] == "synced"
     assert aliased["agent_hints"][0]["action"] == "kept"
     assert stale.read_text(encoding="utf-8") != "过时内容\n"
+
+
+def test_upgrade_hints_when_pypi_has_newer_version(workspace: Path, monkeypatch) -> None:
+    monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: "9.9.9")
+    claude_md = workspace / "CLAUDE.md"
+    monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(claude_md))
+    result = runner.invoke(app, ["upgrade"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["package_update_available"] is True
+    assert payload["package"]["latest"] == "9.9.9"
+    assert "uv tool upgrade campfire-cli" in payload["package"]["hint"]
 
 
 def test_setup_without_workspace_syncs_global_resources_and_prints_guidance(
