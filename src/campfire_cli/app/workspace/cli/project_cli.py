@@ -124,3 +124,12 @@ def resolve(path: Path | None = typer.Option(None, "--path")) -> None:
 def check(project_id: str) -> None:
     """检查 Project 的源码路径、Git 信息和文档领域是否仍然有效。"""
     emit(invoke(lambda: service().check(project_id)))
+
+
+@project_cli.command("bind")
+def bind(
+    project_id: str = typer.Option(..., "--id"),
+    local_path: Path = typer.Option(..., "--local-path"),
+) -> None:
+    """在当前设备上绑定 Project 源码路径，不把绝对路径写入 Manifest。"""
+    emit(invoke(lambda: service().bind(project_id, local_path)))

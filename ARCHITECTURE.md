@@ -110,7 +110,9 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
 
 Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器绑定：同一个 Project 在不同电脑上可以位于不同目录，也可以在某台电脑上尚未克隆。新设备通过稳定 Project id 和 `git_remote_url` 识别代码仓库，自动探测失败时由用户或 Agent 在本机显式绑定路径。
 
-可移植元数据应由 Workspace 内的轻量声明承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。现有 `_空间.md` 与 `_领域.md` 继续分别承载 Space 和 Domain 事实，Workspace 与 Project 的轻量 Manifest 在首次接管能力中统一定义。Decision 当前保持本地，不属于该 Manifest。
+可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、文档领域、Git remote、默认分支和状态，明确禁止 `local_path`。现有 `_空间.md` 与 `_领域.md` 继续分别承载 Space 和 Domain 事实，避免在 Manifest 重复维护。Decision 当前保持本地，不属于该 Manifest。
+
+新设备执行 `campfire setup --workspace <vault>`：读取 Manifest、注册本机路径、恢复 Project 逻辑元数据、同步类型/Profile/Skills/Bases 并执行健康检查。无法自动确定的项目源码路径显示为 `unbound_projects`，再用 `campfire workspace project bind` 完成本机绑定。整个流程可重复执行。
 
 ## 6. 本地 Web 工作台
 

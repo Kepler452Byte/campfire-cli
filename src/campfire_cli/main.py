@@ -17,7 +17,7 @@ from campfire_cli.app.workspace.cli.domain_cli import domain_cli
 from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
-from campfire_cli.app.workspace.cli.workspace_cli import initialize, workspace_cli
+from campfire_cli.app.workspace.cli.workspace_cli import workspace_cli
 from campfire_cli.common.exceptions import AppError
 from campfire_cli.container import AppContainer
 
@@ -68,7 +68,7 @@ def main(
     workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的 id 或路径"),
 ) -> None:
     """初始化目标 Workspace 的应用依赖。"""
-    if ctx.invoked_subcommand in {None, "version", "init", "workspace", "document"}:
+    if ctx.invoked_subcommand in {None, "version", "setup", "workspace", "document"}:
         return
     ctx.obj = LazyContainer(workspace)
 
@@ -100,12 +100,15 @@ def tree(ctx: typer.Context) -> None:
     typer.echo("\n".join(render_command_tree(ctx.find_root().command, "campfire")))
 
 
-@app.command("init")
-def initialize_workspace(
+@app.command("setup")
+def setup(
     workspace: Path = typer.Option(..., "--workspace", help="要初始化的 Workspace 根目录"),
-    workspace_id: str = typer.Option(..., "--id", help="稳定的 Workspace id"),
     make_default: bool = typer.Option(False, "--default", help="设为默认 Workspace"),
 ) -> None:
-    """注册新 Workspace，并在用户级 CAMPFIRE_HOME 初始化配置和状态目录。"""
-    result = initialize(workspace_id, workspace, make_default)
-    typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
+    """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
+    try:
+        result = AppContainer.setup(workspace, make_default)
+    except AppError as exc:
+        typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
+        raise typer.Exit(exc.exit_code) from exc
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))

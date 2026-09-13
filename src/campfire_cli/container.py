@@ -10,6 +10,16 @@ from campfire_cli.app.decision.service.decision_projection_service import (
     DecisionProjectionService,
 )
 from campfire_cli.app.decision.service.decision_service import DecisionService
+from campfire_cli.app.document.repository.document_profile_repository import (
+    DocumentProfileRepository,
+)
+from campfire_cli.app.document.repository.document_type_repository import (
+    DocumentTypeRepository,
+)
+from campfire_cli.app.document.service.document_profile_service import (
+    DocumentProfileService,
+)
+from campfire_cli.app.document.service.document_type_service import DocumentTypeService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
@@ -34,6 +44,38 @@ class AppContainer:
     skill: SkillService
     base: BaseService
     decision: DecisionService
+
+    @classmethod
+    def setup(cls, workspace: Path, make_default: bool = False) -> dict:
+        """Bootstrap one device from the portable Workspace Manifest."""
+        governance_root = campfire_home()
+        setup_result = WorkspaceService(
+            governance_root, SqliteWorkspaceRepository(governance_root)
+        ).setup(workspace, make_default)
+        container = cls.build(setup_result.workspace_id)
+        settings = container.settings
+        document_types = DocumentTypeService(
+            settings.workspace_id,
+            settings.state_root,
+            DocumentTypeRepository(settings.state_root),
+        ).sync(confirm=True)
+        profiles = DocumentProfileService(
+            settings.workspace_id,
+            settings.vault_root,
+            settings.state_root,
+            settings.document_types,
+            DocumentProfileRepository(settings.state_root),
+        ).sync(confirm=True)
+        return {
+            **setup_result.model_dump(mode="json"),
+            "resources": {
+                "document_types": document_types,
+                "document_profiles": profiles,
+                "skills": container.skill.sync(dry_run=False).model_dump(mode="json"),
+                "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
+            },
+            "health": container.maintenance.check(summary=True).model_dump(mode="json"),
+        }
 
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:

@@ -74,7 +74,7 @@ def test_project_is_not_exposed_as_a_top_level_command() -> None:
     assert result.exit_code != 0
 
 
-def test_init_creates_defaults_without_overwriting_existing_file(
+def test_setup_creates_manifest_without_overwriting_existing_config(
     tmp_path: Path, monkeypatch
 ) -> None:
     campfire_home = tmp_path / "campfire-home"
@@ -82,9 +82,12 @@ def test_init_creates_defaults_without_overwriting_existing_file(
     existing = campfire_home / "workspaces" / "new-workspace" / "config" / "governance.json"
     existing.parent.mkdir(parents=True)
     existing.write_text('{"custom": true}\n', encoding="utf-8")
-    result = runner.invoke(
-        app, ["init", "--id", "new-workspace", "--workspace", str(tmp_path), "--default"]
+    registered = runner.invoke(
+        app,
+        ["workspace", "add", "--id", "new-workspace", "--path", str(tmp_path), "--default"],
     )
+    assert registered.exit_code == 0, registered.output
+    result = runner.invoke(app, ["setup", "--workspace", str(tmp_path), "--default"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["status"] == "initialized"
@@ -101,8 +104,70 @@ def test_init_creates_defaults_without_overwriting_existing_file(
         "archived",
     ]
     assert not (tmp_path / ".campfire").exists()
+    assert (tmp_path / ".campfire.yaml").is_file()
     resolved = runner.invoke(app, ["workspace", "resolve", "--workspace", "new-workspace"])
     assert json.loads(resolved.output)["workspace"] == str(tmp_path)
+
+
+def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "vault"
+    domain = workspace / "mywork" / "【Example】文档中心"
+    domain.mkdir(parents=True)
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(
+        ["git", "init", "--initial-branch", "main", str(repository)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-a"))
+    assert runner.invoke(
+        app, ["workspace", "add", "--id", "personal", "--path", str(workspace)]
+    ).exit_code == 0
+    assert runner.invoke(
+        app,
+        [
+            "workspace",
+            "project",
+            "add",
+            "--id",
+            "example",
+            "--workspace",
+            "personal",
+            "--name",
+            "Example",
+            "--document-domain",
+            "mywork/【Example】文档中心",
+            "--local-path",
+            str(repository),
+        ],
+    ).exit_code == 0
+    manifest = yaml.safe_load((workspace / ".campfire.yaml").read_text(encoding="utf-8"))
+    assert manifest["workspace"]["id"] == "personal"
+    assert "local_path" not in manifest["projects"][0]
+
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-b"))
+    setup = runner.invoke(app, ["setup", "--workspace", str(workspace), "--default"])
+    assert setup.exit_code == 0, setup.output
+    payload = json.loads(setup.output)
+    assert payload["imported_projects"] == ["example"]
+    assert payload["unbound_projects"] == ["example"]
+    bound = runner.invoke(
+        app,
+        ["workspace", "project", "bind", "--id", "example", "--local-path", str(repository)],
+    )
+    assert bound.exit_code == 0, bound.output
+    assert json.loads(bound.output)["project"]["local_path"] == str(repository)
+    manifest_after = yaml.safe_load((workspace / ".campfire.yaml").read_text(encoding="utf-8"))
+    assert "local_path" not in manifest_after["projects"][0]
 
 
 def test_multiple_registered_workspaces_can_be_selected(tmp_path: Path, monkeypatch) -> None:

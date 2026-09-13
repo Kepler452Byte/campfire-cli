@@ -3,7 +3,10 @@
 人类与 Agent 先用 `campfire tree` 发现命令，再用任意层级的 `-h` 渐进加载参数。
 
 ```bash
+campfire setup --workspace <vault-path> --default
 campfire workspace resolve
+campfire workspace attach --path <vault-path> --default
+campfire workspace project bind --id <project-id> --local-path <repository-path>
 campfire workspace space list
 campfire workspace space check
 campfire workspace space check --space <space-id>

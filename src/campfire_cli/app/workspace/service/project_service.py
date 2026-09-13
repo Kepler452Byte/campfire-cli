@@ -4,7 +4,10 @@ import re
 import subprocess
 from pathlib import Path, PurePosixPath
 
+from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
+    ManifestProject,
+    ProjectBindResult,
     ProjectCheckResult,
     ProjectCreateResult,
     ProjectEntry,
@@ -22,9 +25,15 @@ from campfire_cli.config.defaults import builtin_config
 
 
 class ProjectService:
-    def __init__(self, governance_root: Path, repository: WorkspaceRepositoryProtocol) -> None:
+    def __init__(
+        self,
+        governance_root: Path,
+        repository: WorkspaceRepositoryProtocol,
+        manifest_repository: WorkspaceManifestRepository | None = None,
+    ) -> None:
         self._root = governance_root
         self._repository = repository
+        self._manifests = manifest_repository or WorkspaceManifestRepository()
 
     def add(self, request: ProjectUpsertRequest) -> ProjectResult:
         if self._repository.get_project(request.project_id):
@@ -84,6 +93,7 @@ class ProjectService:
             if self._repository.get_project(request.project_id):
                 raise ConfigurationError("Project 在确认后已被注册")
             self._repository.save_project(project)
+            self._sync_manifest(project.workspace_id)
         return ProjectCreateResult(
             status="created",
             project=project,
@@ -155,6 +165,7 @@ class ProjectService:
         observed_remote = (
             self._git_command(local_path, "remote", "get-url", "origin") if local_exists else None
         )
+
         if (
             observed_remote
             and project.git_remote_url
@@ -197,11 +208,58 @@ class ProjectService:
             issues=issues,
         )
 
+    def bind(self, project_id: str, local_path: Path) -> ProjectBindResult:
+        project = self._repository.get_project(project_id)
+        if not project:
+            raise ConfigurationError(f"Project 未注册：{project_id}")
+        path = local_path.expanduser().resolve()
+        if not path.is_dir():
+            raise ConfigurationError(f"项目本地路径不存在：{path}")
+        observed_remote = self._git_value(path, "remote", "get-url", "origin")
+        if (
+            project.git_remote_url
+            and observed_remote
+            and self._normalize_remote(project.git_remote_url)
+            != self._normalize_remote(observed_remote)
+        ):
+            raise ConfigurationError("本地项目的 Git remote 与 Manifest 元数据不一致")
+        updated = project.model_copy(
+            update={
+                "local_path": str(path),
+                "git_remote_url": project.git_remote_url or observed_remote,
+                "default_branch": project.default_branch or self._detect_default_branch(path),
+            }
+        )
+        with workspace_write_lock(self._root):
+            self._repository.save_project(updated)
+            self._sync_manifest(updated.workspace_id)
+        return ProjectBindResult(project=updated)
+
     def _save(self, request: ProjectUpsertRequest) -> ProjectResult:
         project, _domain_path = self._prepare(request, require_domain=True)
         with workspace_write_lock(self._root):
             operation = self._repository.save_project(project)
+            self._sync_manifest(project.workspace_id)
         return ProjectResult(**project.model_dump(), operation=operation)
+
+    def _sync_manifest(self, workspace_id: str) -> None:
+        registry = self._repository.load_registry()
+        workspace = registry.workspaces.get(workspace_id)
+        if not workspace:
+            raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
+        root = Path(workspace.path).expanduser().resolve()
+        manifest = self._manifests.load(root)
+        if manifest is None:
+            raise ConfigurationError(
+                f"Workspace 缺少 .campfire.yaml；请先运行 campfire setup --workspace {root}"
+            )
+        manifest.projects = [
+            ManifestProject.model_validate(
+                project.model_dump(exclude={"workspace_id", "local_path"})
+            )
+            for project in self._repository.list_projects(workspace_id)
+        ]
+        self._manifests.save(root, manifest)
 
     def _prepare(
         self, request: ProjectUpsertRequest, *, require_domain: bool

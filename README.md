@@ -7,12 +7,12 @@
 ```bash
 uv sync
 uv run campfire --help
-uv run campfire init --id personal --workspace /path/to/vault --default
+uv run campfire setup --workspace /path/to/vault --default
 uv run campfire workspace list
 uv run campfire --workspace personal maintenance check
 ```
 
-CLI 通过唯一的用户级 `~/.campfire/campfire.db` 管理多个 Workspace、Project、文档索引和工作流状态。各 Workspace 的配置、批次和报告保存在 `~/.campfire/workspaces/<id>/`，不会向 Workspace 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
+Vault 根目录的 `.campfire.yaml` 是可跨设备同步的 Workspace/Project 元数据事实源；它不保存任何设备绝对路径。CLI 通过本机唯一的 `~/.campfire/campfire.db` 管理路径绑定、Decision、文档索引和运行状态。各 Workspace 的配置、批次和报告保存在 `~/.campfire/workspaces/<id>/`，不会向 Workspace 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
 
 ## 安装与调用
 
@@ -29,6 +29,9 @@ campfire version
 ```bash
 campfire workspace add --id personal --path /path/to/vault --default
 campfire workspace create --id new-vault --path /new/path --default
+campfire setup --workspace /path/to/existing-vault --default
+campfire workspace attach --path /path/to/existing-vault --default
+campfire workspace project bind --id example --local-path /path/to/repository
 campfire workspace space list --workspace personal
 campfire workspace domain list --workspace personal
 campfire workspace domain check --workspace personal
@@ -103,5 +106,4 @@ Workspace Restructure、Maintenance、Archive 写入前会在治理锁内复核�
 `concurrent-change` 或 `source-hash-changed`，不会覆盖新内容。文档、任务状态和 Skill 模板枚举由
 同一个治理规则引擎按照 `frontmatter-schema.json` 校验。
 
-配置契约位于 `~/.campfire/workspaces/<id>/config/`；全局唯一 SQLite 是注册数据的事实源和当前运行状态的主索引，
-`backup/current.json` 是可移植快照，`backup/changes.jsonl` 只保留最近的有限变更记录。
+配置契约位于 `~/.campfire/workspaces/<id>/config/`。`.campfire.yaml` 是便携元数据 SSOT；本机 SQLite 是设备路径、Decision、索引和运行状态的 SSOT。`workspace export/import` 只用于本机注册库备份，不承担跨设备同步。

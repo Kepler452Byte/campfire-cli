@@ -54,6 +54,34 @@ class WorkspaceCreateRequest(BaseModel):
     make_default: bool = False
 
 
+class ManifestWorkspace(BaseModel):
+    id: str
+    name: str
+    governance_version: int = 1
+
+
+class ManifestProject(BaseModel):
+    id: str
+    name: str
+    document_domain: str
+    git_remote_url: str | None = None
+    default_branch: str | None = None
+    status: str = "active"
+
+
+class WorkspaceManifest(BaseModel):
+    schema_version: int = 1
+    workspace: ManifestWorkspace
+    projects: list[ManifestProject] = Field(default_factory=list)
+
+
+class WorkspaceSetupResult(WorkspaceResult):
+    manifest: str
+    manifest_operation: str
+    imported_projects: list[str] = Field(default_factory=list)
+    unbound_projects: list[str] = Field(default_factory=list)
+
+
 class Space(BaseModel):
     id: str
     name: str
@@ -141,6 +169,11 @@ class ProjectUpsertRequest(BaseModel):
 
 class ProjectResult(ProjectEntry):
     operation: str = "saved"
+
+
+class ProjectBindResult(BaseModel):
+    status: str = "bound"
+    project: ProjectEntry
 
 
 class ProjectListResult(BaseModel):

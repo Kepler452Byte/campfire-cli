@@ -4,7 +4,11 @@ import json
 import re
 from pathlib import Path
 
+from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
+    ManifestProject,
+    ManifestWorkspace,
+    ProjectEntry,
     RegistryExport,
     RegistryTransferResult,
     Space,
@@ -12,9 +16,11 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     WorkspaceDefaultResult,
     WorkspaceEntry,
     WorkspaceListResult,
+    WorkspaceManifest,
     WorkspaceRegistry,
     WorkspaceResolution,
     WorkspaceResult,
+    WorkspaceSetupResult,
 )
 from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
@@ -24,15 +30,29 @@ from campfire_cli.config.defaults import builtin_config, default_configs
 
 
 class WorkspaceService:
-    def __init__(self, governance_root: Path, repository: WorkspaceRepositoryProtocol) -> None:
+    def __init__(
+        self,
+        governance_root: Path,
+        repository: WorkspaceRepositoryProtocol,
+        manifest_repository: WorkspaceManifestRepository | None = None,
+    ) -> None:
         self._root = governance_root
         self._repository = repository
+        self._manifests = manifest_repository or WorkspaceManifestRepository()
 
     def add(self, request: WorkspaceCreateRequest) -> WorkspaceResult:
         root = request.path.expanduser().resolve()
         if not root.is_dir():
             raise ConfigurationError(f"Workspace 不存在：{root}")
-        return self._initialize(request.workspace_id, root, request.make_default)
+        result = self._initialize(request.workspace_id, root, request.make_default)
+        if self._manifests.load(root) is None:
+            self._manifests.save(
+                root,
+                WorkspaceManifest(
+                    workspace=ManifestWorkspace(id=request.workspace_id, name=request.workspace_id)
+                ),
+            )
+        return result
 
     def create(self, request: WorkspaceCreateRequest) -> WorkspaceResult:
         root = request.path.expanduser().resolve()
@@ -52,7 +72,58 @@ class WorkspaceService:
             )
         result = self._initialize(request.workspace_id, root, request.make_default)
         result.created_directories = directories
+        self._manifests.save(
+            root,
+            WorkspaceManifest(
+                workspace=ManifestWorkspace(id=request.workspace_id, name=request.workspace_id)
+            ),
+        )
         return result
+
+    def setup(self, path: Path, make_default: bool = False) -> WorkspaceSetupResult:
+        """Attach an existing portable Workspace or create its first Manifest."""
+        root = path.expanduser().resolve()
+        if not root.is_dir():
+            raise ConfigurationError(f"Workspace 不存在：{root}")
+        manifest = self._manifests.load(root)
+        manifest_operation = "preserved"
+        if manifest is None:
+            workspace_id = self._registered_id_for_path(root)
+            projects = self._repository.list_projects(workspace_id)
+            manifest = WorkspaceManifest(
+                workspace=ManifestWorkspace(id=workspace_id, name=workspace_id),
+                projects=[
+                    ManifestProject.model_validate(
+                        project.model_dump(exclude={"workspace_id", "local_path"})
+                    )
+                    for project in projects
+                ],
+            )
+            self._manifests.save(root, manifest)
+            manifest_operation = "created"
+        result = self._initialize(manifest.workspace.id, root, make_default)
+        imported: list[str] = []
+        unbound: list[str] = []
+        for portable in manifest.projects:
+            existing = self._repository.get_project(portable.id)
+            if existing and existing.workspace_id != manifest.workspace.id:
+                raise ConfigurationError(f"Project id 已由其他 Workspace 使用：{portable.id}")
+            project = ProjectEntry(
+                **portable.model_dump(),
+                workspace_id=manifest.workspace.id,
+                local_path=existing.local_path if existing else None,
+            )
+            self._repository.save_project(project)
+            imported.append(project.id)
+            if not project.local_path:
+                unbound.append(project.id)
+        return WorkspaceSetupResult(
+            **result.model_dump(),
+            manifest=str(self._manifests.path(root)),
+            manifest_operation=manifest_operation,
+            imported_projects=imported,
+            unbound_projects=unbound,
+        )
 
     def list(self) -> WorkspaceListResult:
         registry = self._repository.load_registry()
@@ -187,6 +258,20 @@ class WorkspaceService:
         raise ConfigurationError(
             "没有可用 Workspace；请运行 campfire workspace add --id <id> --path <path> --default"
         )
+
+    def _registered_id_for_path(self, root: Path) -> str:
+        registry = self._repository.load_registry()
+        matches = [
+            workspace_id
+            for workspace_id, entry in registry.workspaces.items()
+            if Path(entry.path).expanduser().resolve() == root
+        ]
+        if len(matches) != 1:
+            raise ConfigurationError(
+                "Workspace 尚无 Manifest，且无法从本机注册表唯一推断 id；"
+                "请先运行 campfire workspace add --id <id> --path <path>"
+            )
+        return matches[0]
 
     @classmethod
     def _validate_import(cls, payload: RegistryExport) -> None:
