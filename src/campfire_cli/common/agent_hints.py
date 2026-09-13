@@ -13,7 +13,8 @@ HINT_BODY = """## Campfire 文档治理
 本机装有 campfire CLI（`campfire --help`），Obsidian Vault 已注册为文档工作区。
 当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时，先运行
 `campfire workspace resolve` 解析工作区，再按 campfire skill 流程处理；
-不要直接在代码仓库里创建笔记文件。"""
+不要直接在代码仓库里创建笔记文件。文档分类不确定时用"记录-"前缀兜底，
+字段规则以 `campfire document inspect` 返回的有效 Profile 为准。"""
 
 
 def default_hint_paths() -> list[Path]:
