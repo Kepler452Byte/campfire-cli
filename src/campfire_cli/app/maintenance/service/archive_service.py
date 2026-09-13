@@ -18,7 +18,8 @@ SPEC:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,8 @@ from campfire_cli.app.workspace.service.structure_service import (
 )
 from campfire_cli.config.defaults import config_section
 
+FieldOrderResolver = Callable[[dict[str, Any]], list[str]]
+
 
 @dataclass(frozen=True)
 class ArchiveItem:
@@ -37,6 +40,8 @@ class ArchiveItem:
     target: Path
     domain: Path
     in_archive: bool
+    reason: str = ""
+    related: list[str] = field(default_factory=list)
 
 
 def is_true(value: str) -> bool:
@@ -46,6 +51,28 @@ def is_true(value: str) -> bool:
 def list_has_values(value: str) -> bool:
     compact = value.strip()
     return bool(compact and compact not in {"[]", "null", "~"})
+
+
+def frontmatter_list_values(text: str, key: str) -> list[str]:
+    """提取 frontmatter 中 key 的列表项值；不存在或非列表时返回空。"""
+    if not text.startswith("---\n"):
+        return []
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        return []
+    lines = text[4:end].splitlines()
+    for index, line in enumerate(lines):
+        if not re.match(rf"^{re.escape(key)}:\s*$", line):
+            continue
+        values: list[str] = []
+        for following in lines[index + 1 :]:
+            if re.match(r"^[a-zA-Z_][a-zA-Z0-9_-]*:", following):
+                return values
+            match = re.match(r"^\s+-\s+(.+)$", following)
+            if match:
+                values.append(match.group(1).strip().strip("'\""))
+        return values
+    return []
 
 
 def frontmatter_list_has_values(text: str, key: str, parsed_value: str) -> bool:
@@ -118,14 +145,21 @@ def collect_items(
             if not requested and not in_archive:
                 continue
             target = doc if in_archive else domain / "archive" / doc.name
-            item = ArchiveItem(doc, target, domain, in_archive)
+            raw_text = doc.read_text(encoding="utf-8")
+            item = ArchiveItem(
+                doc,
+                target,
+                domain,
+                in_archive,
+                reason=meta.get("archive_reason", "") if meta else "",
+                related=frontmatter_list_values(raw_text, "related"),
+            )
             items.append(item)
             rel = str(doc.relative_to(vault_root))
 
             if not meta:
                 issues.append({"code": "archive-frontmatter-missing", "path": rel})
                 continue
-            raw_text = doc.read_text(encoding="utf-8")
             reason = meta.get("archive_reason", "")
             if not reason:
                 issues.append({"code": "archive-reason-missing", "path": rel})
@@ -155,7 +189,13 @@ def issue_paths(issues: list[dict[str, str]]) -> set[str]:
     return {item["path"] for item in issues}
 
 
-def replace_frontmatter_fields(text: str, values: dict[str, str]) -> str:
+def replace_frontmatter_fields(
+    text: str, values: dict[str, str], field_order: list[str] | None = None
+) -> str:
+    """就地替换 frontmatter 字段值；新增字段按 Profile 字段序插入。
+
+    只重写命中的行，不整体重渲染，保留未触及字段的原始格式。
+    """
     if not text.startswith("---\n"):
         raise ValueError("frontmatter missing")
     end = text.find("\n---\n", 4)
@@ -168,23 +208,49 @@ def replace_frontmatter_fields(text: str, values: dict[str, str]) -> str:
         match = re.match(r"^([a-zA-Z_][a-zA-Z0-9_-]*):", line)
         if match:
             positions[match.group(1)] = index
+
+    def insert_field(key: str, rendered: str) -> None:
+        insert_at = _insertion_index(key, positions, field_order, len(lines))
+        lines.insert(insert_at, rendered)
+        for existing in list(positions):
+            if positions[existing] >= insert_at:
+                positions[existing] += 1
+        positions[key] = insert_at
+
     for key, value in values.items():
         rendered = f"{key}: {value}"
         if key in positions:
             lines[positions[key]] = rendered
         else:
-            insert_at = positions.get("created", len(lines))
-            lines.insert(insert_at, rendered)
-            positions = {
-                field: index + 1 if index >= insert_at else index
-                for field, index in positions.items()
-            }
-            positions[key] = insert_at
+            insert_field(key, rendered)
     return "---\n" + "\n".join(lines) + text[end:]
 
 
+def _insertion_index(
+    key: str, positions: dict[str, int], field_order: list[str] | None, total: int
+) -> int:
+    """新字段的插入位置：字段序中位于其后的第一个已存在字段之前。
+
+    无字段序或后继字段都不存在时，退化为插在 created 之前或末尾，
+    与历史行为一致。
+    """
+    if field_order and key in field_order:
+        followers = [
+            positions[after]
+            for after in field_order[field_order.index(key) + 1 :]
+            if after in positions
+        ]
+        if followers:
+            return min(followers)
+    return positions.get("created", total)
+
+
 def apply_items(
-    vault_root: Path, items: list[ArchiveItem], issues: list[dict[str, str]], archived_at: str
+    vault_root: Path,
+    items: list[ArchiveItem],
+    issues: list[dict[str, str]],
+    archived_at: str,
+    field_order_for: FieldOrderResolver | None = None,
 ) -> list[dict[str, str]]:
     applied: list[dict[str, str]] = []
     for item in items:
@@ -204,6 +270,7 @@ def apply_items(
         ):
             continue
         effective_archived_at = current_meta.get("archived_at") or archived_at
+        field_order = field_order_for(current_meta) if field_order_for else None
         updated = replace_frontmatter_fields(
             item.source.read_text(encoding="utf-8"),
             {
@@ -212,6 +279,7 @@ def apply_items(
                 "archive_requested": "false",
                 "archived_at": effective_archived_at,
             },
+            field_order,
         )
         if item.in_archive:
             item.source.write_text(updated, encoding="utf-8")
@@ -231,25 +299,38 @@ def apply_items(
     return applied
 
 
+def candidate_entries(vault_root: Path, items: list[ArchiveItem]) -> list[dict[str, Any]]:
+    """归档候选的统一展示结构：路径、去向、原因与 related 出站引用。"""
+    return [
+        {
+            "source": str(item.source.relative_to(vault_root)),
+            "target": str(item.target.relative_to(vault_root)),
+            "already_in_archive": item.in_archive,
+            "archive_reason": item.reason,
+            "related": item.related,
+        }
+        for item in items
+    ]
+
+
 def build_result(
-    vault_root: Path, config: dict[str, Any], apply: bool, archived_at: str
+    vault_root: Path,
+    config: dict[str, Any],
+    apply: bool,
+    archived_at: str,
+    field_order_for: FieldOrderResolver | None = None,
 ) -> dict[str, Any]:
     vault_root = vault_root.resolve()
     items, issues = collect_items(vault_root, config)
-    applied = apply_items(vault_root, items, issues, archived_at) if apply else []
+    applied = (
+        apply_items(vault_root, items, issues, archived_at, field_order_for) if apply else []
+    )
     return {
         "status": "issues-found" if issues else ("applied" if apply else "ok"),
         "mode": "apply" if apply else "check",
         "candidate_count": len(items),
         "applied_count": len(applied),
-        "candidates": [
-            {
-                "source": str(item.source.relative_to(vault_root)),
-                "target": str(item.target.relative_to(vault_root)),
-                "already_in_archive": item.in_archive,
-            }
-            for item in items
-        ],
+        "candidates": candidate_entries(vault_root, items),
         "applied": applied,
         "issues": issues,
     }

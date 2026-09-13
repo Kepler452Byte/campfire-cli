@@ -233,6 +233,17 @@ class DocumentRuleService:
     def known_fields(self) -> set[str]:
         return self._profiles.known_fields()
 
+    def field_order_for(
+        self, frontmatter: dict[str, Any], path: Path | None = None
+    ) -> list[str]:
+        """返回文档在当前治理契约下的有效 Profile 字段序。
+
+        写入口修改 frontmatter 后必须按此序插入新增字段，否则文档立即产生
+        frontmatter-field-order-invalid。
+        """
+        profile = self._profiles.resolve(frontmatter.get("type"), frontmatter, path)
+        return list(profile.field_order)
+
     def validate_patch(
         self,
         root: Path,

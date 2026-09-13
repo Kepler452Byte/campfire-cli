@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -187,10 +188,12 @@ class ProjectArchiveTests(unittest.TestCase):
 
     @staticmethod
     def document(reason: str = "completed", successor: str = "[]") -> str:
+        # 字段序遵循 project-doc Profile，保持与有效契约一致。
         return (
-            "---\nname: 旧计划\ndescription: 测试\nproject: test-project\ndomain: core\n"
-            "type: plan\nstatus: current\nlifecycle: proposed\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
-            f"related: []\nsuperseded_by: {successor}\narchive_requested: true\narchive_reason: {reason}\n---\n# 旧计划\n"
+            "---\nname: 旧计划\ndescription: 测试\ntype: plan\nproject: test-project\ndomain: core\n"
+            "status: current\nlifecycle: proposed\n"
+            f"related: []\nsuperseded_by: {successor}\narchive_requested: true\narchive_reason: {reason}\n"
+            "created: 2026-01-01\nupdated: 2026-01-01\n---\n# 旧计划\n"
         )
 
     def test_check_is_read_only_and_apply_moves_to_flat_archive(self) -> None:
@@ -214,6 +217,74 @@ class ProjectArchiveTests(unittest.TestCase):
             repeated = build_archive_result(root, self.config(), True, "2026-09-08")
             self.assertEqual(0, repeated["applied_count"])
             self.assertIn("archived_at: 2026-09-07", target.read_text(encoding="utf-8"))
+
+    def test_check_lists_candidates_with_reason_and_related(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = self.make_vault(root)
+            source = domain / "计划-旧计划.md"
+            source.write_text(self.document(), encoding="utf-8")
+            checked = build_archive_result(root, self.config(), False, "2026-09-07")
+            candidates = checked["candidates"]
+            self.assertEqual(1, len(candidates))
+            self.assertEqual(
+                str((domain / "计划-旧计划.md").relative_to(root)), candidates[0]["source"]
+            )
+            self.assertEqual(
+                str((domain / "archive" / "计划-旧计划.md").relative_to(root)),
+                candidates[0]["target"],
+            )
+            self.assertFalse(candidates[0]["already_in_archive"])
+            self.assertEqual("completed", candidates[0]["archive_reason"])
+            self.assertEqual([], candidates[0]["related"])
+
+    def test_apply_inserts_new_fields_per_profile_field_order(self) -> None:
+        """归档写入 archived_at 后字段序必须直接合规，不需要事后 document format。"""
+        types = config_section("document_types")
+        schema = config_section("frontmatter_schema")
+        rules = DocumentRuleService(types, schema)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = self.make_vault(root)
+            source = domain / "计划-旧计划.md"
+            # 故意缺失 archived_at；其余字段顺序符合 project-doc Profile。
+            source.write_text(self.document(), encoding="utf-8")
+            build_archive_result(root, self.config(), True, "2026-09-07", rules.field_order_for)
+            target = domain / "archive" / source.name
+            text = target.read_text(encoding="utf-8")
+            order = [
+                line.split(":")[0]
+                for line in text[4 : text.find("\n---\n", 4)].splitlines()
+                if re.match(r"^[a-zA-Z_][a-zA-Z0-9_-]*:", line)
+            ]
+            expected = rules.field_order_for(
+                {"type": "plan", "project": "test-project"}
+            )
+            self.assertEqual(
+                [field for field in expected if field in order],
+                order,
+            )
+
+    def test_apply_reports_related_references(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = self.make_vault(root)
+            source = domain / "计划-旧计划.md"
+            source.write_text(
+                self.document(successor='\n  - "[[计划-新计划]]"'),
+                encoding="utf-8",
+            )
+            source.write_text(
+                self.document().replace(
+                    "related: []",
+                    'related:\n  - "[[看板-优化清单]]"\n  - "[[路线图]]"',
+                ),
+                encoding="utf-8",
+            )
+            checked = build_archive_result(root, self.config(), False, "2026-09-07")
+            self.assertEqual(
+                ["[[看板-优化清单]]", "[[路线图]]"], checked["candidates"][0]["related"]
+            )
 
     def test_missing_successor_blocks_superseded_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

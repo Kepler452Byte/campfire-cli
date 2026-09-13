@@ -62,6 +62,7 @@ class MaintenanceResult(BaseModel):
     blocked_scope: str | None = None
     issue_counts: dict[str, int] = Field(default_factory=dict)
     operations: list[dict[str, Any]] = Field(default_factory=list)
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
     scope: str | None = None
     workspace_status: str | None = None
     space_count: int = 0

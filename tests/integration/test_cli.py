@@ -2220,3 +2220,43 @@ def test_setup_without_workspace_syncs_global_resources_and_prints_guidance(
     assert "campfire:agent-hints:start" in hint_file.read_text(encoding="utf-8")
     assert "manifest" in payload["skipped"]
     assert "health-check" in payload["skipped"]
+
+
+def test_archive_check_lists_candidates_with_reason_and_related(
+    workspace: Path,
+) -> None:
+    domain = workspace / "mywork" / "【归档测试】文档中心"
+    domain.mkdir(parents=True)
+    (workspace / "mywork" / "_空间.md").exists()
+    (domain / "_领域.md").write_text(
+        "---\nname: 归档测试\ndomain_id: archive-test\ndomain_type: project-domain\n"
+        "governance: project-docs\nmoc: \"[[MOC-归档测试]]\"\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    (domain / "MOC-归档测试.md").write_text(
+        "---\nname: 归档测试总览\ndescription: 测试。\ntype: moc\nstatus: current\n"
+        "lifecycle: maintained\ncreated: 2026-09-14\nupdated: 2026-09-14\ntags: []\n---\n"
+        "# 归档测试总览\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
+        "占位\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n",
+        encoding="utf-8",
+    )
+    (domain / "计划-待归档.md").write_text(
+        "---\nname: 待归档\ndescription: 测试\ntype: plan\nproject: archive-test\n"
+        "domain: archive-test\n"
+        "status: current\nlifecycle: proposed\n"
+        "related:\n  - \"[[看板-某清单]]\"\n"
+        "superseded_by: []\narchive_requested: true\narchive_reason: completed\n"
+        "created: 2026-09-14\nupdated: 2026-09-14\n---\n# 待归档\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["maintenance", "archive", "check"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    candidates = payload["candidates"]
+    assert [
+        "mywork/【归档测试】文档中心/计划-待归档.md".replace("/", os.sep)
+    ] == [item["source"] for item in candidates]
+    assert candidates[0]["archive_reason"] == "completed"
+    assert candidates[0]["related"] == ["[[看板-某清单]]"]

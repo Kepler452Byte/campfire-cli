@@ -362,6 +362,7 @@ class MaintenanceService:
                     items,
                     raw_issues,
                     __import__("datetime").date.today().isoformat(),
+                    self._rules.field_order_for,
                 )
         issues = [Issue.model_validate(enrich_issue(item)) for item in raw_issues]
         return MaintenanceResult(
@@ -373,6 +374,7 @@ class MaintenanceService:
             changed_document_count=len(applied),
             write_performed=bool(applied),
             operations=applied,
+            candidates=project_archive.candidate_entries(self._settings.vault_root, items),
         )
 
     def _iter_documents(self) -> list[Path]:

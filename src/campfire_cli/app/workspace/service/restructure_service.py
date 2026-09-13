@@ -328,7 +328,9 @@ class RestructureService:
             updated = render_document(
                 frontmatter,
                 parsed.body,
-                self._settings.frontmatter_schema.get("field_order", []),
+                # 必须用目标文档有效 Profile 的字段序渲染；base 序缺少
+                # Profile 专属字段，会把新增字段甩到 frontmatter 末尾。
+                self._rules.field_order_for(frontmatter),
             )
         atomic_write(target, updated)
         if target != source:
