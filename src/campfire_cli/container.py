@@ -28,6 +28,7 @@ from campfire_cli.app.workspace.service.domain_restructure_service import (
 )
 from campfire_cli.app.workspace.service.restructure_service import RestructureService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
+from campfire_cli.common.agent_hints import default_hint_paths, inject_agent_hint
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.config.defaults import effective_config
@@ -60,9 +61,39 @@ class AppContainer:
                 "config": WorkspaceConfigService(settings).check().model_dump(mode="json"),
                 "skills": container.skill.sync(dry_run=False).model_dump(mode="json"),
                 "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
+                "agent_hints": cls._inject_hints(),
             },
             "health": container.maintenance.check(summary=True).model_dump(mode="json"),
         }
+
+    @classmethod
+    def upgrade(cls) -> dict:
+        """对齐本机治理资源与当前包版本：Schema 迁移、Skill、Base 与提示词路标。"""
+        home = campfire_home()
+        upgrade_database(home / "campfire.db")
+        workspaces = []
+        for workspace_id in SqliteWorkspaceRepository(home).load_registry().workspaces:
+            container = cls.build(workspace_id)
+            workspaces.append(
+                {
+                    "workspace_id": workspace_id,
+                    "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
+                }
+            )
+        return {
+            "status": "ok",
+            "database": {"status": "up-to-date"},
+            "skills": cls.build_skill().sync(dry_run=False).model_dump(mode="json"),
+            "agent_hints": cls._inject_hints(),
+            "workspaces": workspaces,
+        }
+
+    @staticmethod
+    def _inject_hints() -> list[dict[str, str]]:
+        return [
+            {"path": str(path), "action": inject_agent_hint(path)}
+            for path in default_hint_paths()
+        ]
 
     @classmethod
     def build_skill(cls) -> SkillService:

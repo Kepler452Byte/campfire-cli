@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -2097,3 +2098,51 @@ def test_project_resolve_does_not_match_by_shared_remote_alone(
     )
     assert within["status"] == "matched"
     assert within["matches"][0]["project"]["id"] == "registered-app"
+
+
+def test_setup_injects_agent_hints_idempotently(
+    workspace: Path, monkeypatch
+) -> None:
+    claude_md = workspace / "CLAUDE.md"
+    agents_md = workspace / "AGENTS.md"
+    monkeypatch.setenv(
+        "CAMPFIRE_AGENT_HINT_PATH", f"{claude_md}{os.pathsep}{agents_md}"
+    )
+    first = runner.invoke(app, ["setup", "--workspace", str(workspace)])
+    assert first.exit_code == 0, first.output
+    payload = json.loads(first.output)
+    actions = payload["resources"]["agent_hints"]
+    assert {item["action"] for item in actions} == {"created"}
+    for item in [claude_md, agents_md]:
+        assert "campfire:agent-hints:start" in item.read_text(encoding="utf-8")
+
+    second = runner.invoke(app, ["setup", "--workspace", str(workspace)])
+    assert second.exit_code == 0, second.output
+    assert {
+        item["action"] for item in json.loads(second.output)["resources"]["agent_hints"]
+    } == {"kept"}
+
+
+def test_upgrade_syncs_resources_and_accepts_update_alias(
+    workspace: Path, monkeypatch
+) -> None:
+    claude_md = workspace / "CLAUDE.md"
+    monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(claude_md))
+    stale = workspace / "_global_skills" / "campfire-document-capture" / "SKILL.md"
+    result = runner.invoke(app, ["upgrade"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "ok"
+    assert payload["database"]["status"] == "up-to-date"
+    assert payload["skills"]["status"] == "synced"
+    assert payload["agent_hints"][0]["action"] == "created"
+    assert [item["workspace_id"] for item in payload["workspaces"]] == ["test"]
+    assert stale.is_file()
+    stale.write_text("过时内容\n", encoding="utf-8")
+
+    alias = runner.invoke(app, ["update"])
+    assert alias.exit_code == 0, alias.output
+    aliased = json.loads(alias.output)
+    assert aliased["skills"]["status"] == "synced"
+    assert aliased["agent_hints"][0]["action"] == "kept"
+    assert stale.read_text(encoding="utf-8") != "过时内容\n"

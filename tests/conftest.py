@@ -8,6 +8,12 @@ from campfire_cli.app.workspace.repository.workspace_repository import SqliteWor
 from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceEntry, WorkspaceRegistry
 
 
+@pytest.fixture(autouse=True)
+def _isolate_agent_hints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """所有测试的提示词注入一律落在临时目录，绝不触碰用户真实全局文件。"""
+    monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(tmp_path / "agent-hints"))
+
+
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     campfire_home = tmp_path / "_campfire"

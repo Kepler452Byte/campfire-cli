@@ -23,7 +23,9 @@ uv tool install campfire-cli
 campfire version
 ```
 
-升级使用 `uv tool upgrade campfire-cli`（或 `pipx upgrade campfire-cli`）。
+升级使用 `uv tool upgrade campfire-cli`（或 `pipx upgrade campfire-cli`），随后运行 `campfire upgrade`（别名 `campfire update`）对齐本机治理资源：SQLite Schema 迁移、全局 Skill、Base 与全局提示词路标。
+
+`campfire setup` 初始化时会向 `~/.claude/CLAUDE.md` 与 `~/.agents/AGENTS.md` 注入 campfire 路标块（幂等、带注释标记、不触碰块外内容；可用 `CAMPFIRE_AGENT_HINT_PATH` 覆盖目标文件列表），让 Agent 冷启动时知道本机装有 campfire。
 
 开发机安装（跟随本地源码）：
 

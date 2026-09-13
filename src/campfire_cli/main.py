@@ -131,3 +131,23 @@ def setup(
         typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
         raise typer.Exit(exc.exit_code) from exc
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command("upgrade")
+def upgrade() -> None:
+    """升级本机治理资源：SQLite Schema 迁移、全局 Skill、Base 与提示词路标。"""
+    try:
+        result = AppContainer.upgrade()
+    except AppError as exc:
+        typer.echo(
+            json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False),
+            err=True,
+        )
+        raise typer.Exit(exc.exit_code) from exc
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command("update", hidden=True)
+def update() -> None:
+    """campfire upgrade 的等价别名。"""
+    upgrade()
