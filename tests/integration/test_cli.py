@@ -39,6 +39,11 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "project", "resolve", "-h"],
         ["workspace", "project", "check", "-h"],
         ["workspace", "rebuild", "-h"],
+        ["workspace", "adopt", "-h"],
+        ["workspace", "adopt", "inventory", "-h"],
+        ["workspace", "adopt", "plan", "-h"],
+        ["workspace", "adopt", "apply", "-h"],
+        ["workspace", "adopt", "verify", "-h"],
         ["workspace", "space", "-h"],
         ["workspace", "space", "adopt", "-h"],
         ["workspace", "domain", "-h"],
@@ -1773,3 +1778,176 @@ def test_workspace_rebuild_indexes_spaces_and_domains_from_markers(workspace: Pa
         assert connection.execute(
             "select count(*) from domains where workspace_id = 'test'"
         ).fetchone() == (0,)
+
+
+def test_external_folder_adoption_stages_applies_and_preserves_source(workspace: Path) -> None:
+    source = workspace.parent / "external-notes"
+    (source / "assets").mkdir(parents=True)
+    (source / "知识-并发.md").write_text("# Go 并发\n", encoding="utf-8")
+    (source / "assets/diagram.txt").write_text("diagram\n", encoding="utf-8")
+
+    preview = runner.invoke(
+        app,
+        [
+            "workspace",
+            "adopt",
+            "inventory",
+            "--source",
+            str(source),
+            "--batch",
+            "external-001",
+        ],
+    )
+    assert preview.exit_code == 0, preview.output
+    assert json.loads(preview.output)["status"] == "inventoried"
+    assert not (workspace / "_收件箱/待接管/external-001").exists()
+
+    staged = runner.invoke(
+        app,
+        [
+            "workspace",
+            "adopt",
+            "inventory",
+            "--source",
+            str(source),
+            "--batch",
+            "external-001",
+            "--confirm",
+        ],
+    )
+    assert staged.exit_code == 0, staged.output
+    assert json.loads(staged.output)["copied_count"] == 2
+    assert (workspace / "_收件箱/待接管/external-001/知识-并发.md").is_file()
+
+    planned = runner.invoke(
+        app,
+        [
+            "workspace",
+            "adopt",
+            "plan",
+            "--batch",
+            "external-001",
+            "--target-path",
+            "mynote/Go并发",
+            "--domain-id",
+            "knowledge-go-concurrency",
+            "--name",
+            "Go并发",
+            "--space",
+            "knowledge",
+            "--type",
+            "knowledge-domain",
+            "--governance",
+            "knowledge-docs",
+        ],
+    )
+    assert planned.exit_code == 0, planned.output
+    assert json.loads(planned.output)["status"] == "planned"
+    ready = runner.invoke(app, ["workspace", "adopt", "apply", "--batch", "external-001"])
+    assert json.loads(ready.output)["status"] == "ready"
+    applied = runner.invoke(
+        app,
+        ["workspace", "adopt", "apply", "--batch", "external-001", "--confirm"],
+    )
+    assert applied.exit_code == 0, applied.output
+    target = workspace / "mynote/Go并发"
+    assert (target / "_领域.md").is_file()
+    assert (target / "知识-并发.md").is_file()
+    assert source.is_dir() and (source / "知识-并发.md").is_file()
+    assert not (workspace / "_收件箱/待接管/external-001").exists()
+    verified = runner.invoke(
+        app, ["workspace", "adopt", "verify", "--batch", "external-001"]
+    )
+    assert verified.exit_code == 0, verified.output
+    assert json.loads(verified.output)["status"] == "ok"
+
+
+def test_internal_folder_adoption_is_applied_in_place(workspace: Path) -> None:
+    source = workspace / "mynote/LooseNotes"
+    source.mkdir(parents=True)
+    note = source / "知识-原地接管.md"
+    note.write_text("# 原地接管\n", encoding="utf-8")
+
+    inventoried = runner.invoke(
+        app,
+        [
+            "workspace",
+            "adopt",
+            "inventory",
+            "--source",
+            str(source),
+            "--batch",
+            "internal-001",
+        ],
+    )
+    assert inventoried.exit_code == 0, inventoried.output
+    inventory = json.loads(inventoried.output)
+    assert inventory["source_kind"] == "internal"
+    assert inventory["staging_path"] is None
+    assert note.is_file()
+
+    planned = runner.invoke(
+        app,
+        [
+            "workspace",
+            "adopt",
+            "plan",
+            "--batch",
+            "internal-001",
+            "--target-path",
+            "mynote/LooseNotes",
+            "--domain-id",
+            "knowledge-loose-notes",
+            "--name",
+            "零散笔记",
+            "--space",
+            "knowledge",
+            "--type",
+            "knowledge-domain",
+            "--governance",
+            "knowledge-docs",
+        ],
+    )
+    assert planned.exit_code == 0, planned.output
+    assert json.loads(planned.output)["status"] == "planned"
+
+    applied = runner.invoke(
+        app,
+        ["workspace", "adopt", "apply", "--batch", "internal-001", "--confirm"],
+    )
+    assert applied.exit_code == 0, applied.output
+    assert json.loads(applied.output)["status"] == "applied"
+    assert note.is_file()
+    assert (source / "_领域.md").is_file()
+    assert (source / "_总览/MOC-零散笔记总览.md").is_file()
+
+    verified = runner.invoke(
+        app, ["workspace", "adopt", "verify", "--batch", "internal-001"]
+    )
+    assert verified.exit_code == 0, verified.output
+    assert json.loads(verified.output)["status"] == "ok"
+
+
+def test_adoption_blocks_symbolic_links(workspace: Path) -> None:
+    source = workspace.parent / "linked-notes"
+    source.mkdir()
+    target = workspace.parent / "outside.md"
+    target.write_text("outside\n", encoding="utf-8")
+    (source / "linked.md").symlink_to(target)
+    result = runner.invoke(
+        app,
+        [
+            "workspace",
+            "adopt",
+            "inventory",
+            "--source",
+            str(source),
+            "--batch",
+            "links-001",
+            "--confirm",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "blocked"
+    assert payload["issues"][0]["code"] == "adoption-symlink"

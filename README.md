@@ -66,6 +66,11 @@ campfire workspace import --input campfire-registry-backup.json
 campfire workspace import --input campfire-registry-backup.json --confirm
 campfire workspace resolve
 campfire workspace rebuild --confirm
+campfire workspace adopt inventory --source /path/to/folder --batch notes-001
+campfire workspace adopt inventory --source /path/to/folder --batch notes-001 --confirm
+campfire workspace adopt plan --batch notes-001 --target-path "mynote/新领域" --domain-id knowledge-new --name "新领域" --space knowledge --type knowledge-domain --governance knowledge-docs
+campfire workspace adopt apply --batch notes-001 --confirm
+campfire workspace adopt verify --batch notes-001
 campfire tree
 campfire --workspace personal maintenance check
 campfire --workspace personal maintenance check --summary
@@ -76,6 +81,8 @@ campfire --workspace personal maintenance sync --scope "work/example"
 ```
 
 `maintenance check` 统一负责正式文档 Schema 与枚举校验，并从当前 `_空间.md`、`_领域.md` 刷新 SQLite 中可重建的 Space、Domain 和 Document 索引；结构声明本身由 `workspace space/domain check` 校验。`maintenance sync` 只因领域结构、MOC、路径或并发安全问题阻塞。单篇文档的元数据问题会继续出现在检查报告中，但不会阻止其他领域刷新生成视图。`sync` 和 `run` 可用 `--scope` 限定同步领域。索引损坏或被删除时使用 `workspace rebuild --confirm` 从 Manifest 和 Markdown SSOT 完整恢复。
+
+`workspace adopt` 负责首次接管已有文件夹。Vault 外来源先按哈希复制到 `_收件箱/待接管/<batch>`，原目录始终保留；Vault 内来源原地盘点。计划一次建立一个粗粒度 Domain，应用后自动生成声明与 MOC 并刷新索引。文档语义和子领域拆分仍由 Agent 通过 Maintenance/Restructure 的审批计划完成。
 
 所有受管内容文档都使用 `base` 或 `base → knowledge/project-doc/task` 的一层配置继承；`human-request` 等没有专属字段的类型直接使用 `base`。`_空间.md`、`_领域.md` 是 Workspace 声明，不是内容文档。`document profile show` 展示编译后的完整规则，`document profile resolve` 展示指定文档最终使用的 Profile。Formatter 只按有效 Profile 排序并保留值；不允许字段由 Validator 报告，不会被自动删除。
 

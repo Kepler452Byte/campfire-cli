@@ -128,6 +128,10 @@ path       Workspace 内物理位置，通过 domain move 或显式目录重命�
 
 SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不是新的事实源。`setup`、`maintenance check` 和领域重构会自动从 `.campfire.yaml`、`_空间.md`、`_领域.md` 与内容文档刷新这些表；`workspace rebuild --confirm` 只提供低频的完整恢复入口。
 
+### 存量文件夹接管
+
+Adoption 是首次接管边界，不属于日常 Maintenance。外部目录只读并复制到 `_收件箱/待接管/<batch>`，Vault 内目录原地冻结事实；两者随后通过同一份计划建立一个粗粒度 Domain。CLI 负责文件清单、哈希、软链接与冲突保护、声明、MOC、Project/Manifest 联动和索引；Agent 负责阅读正文、选择目标 Space/Domain，并在接管后继续生成格式治理或子领域重构计划。
+
 ## 6. 本地 Web 工作台
 
 Campfire 可以提供由 CLI 启动的单进程本地 HTTP 服务和浏览器工作台。CLI 与 HTTP 是同级交付适配器，必须复用同一个 Application Service、Repository、事务和审计逻辑；前端不得直接访问 SQLite，也不得复制 Decision 状态机。

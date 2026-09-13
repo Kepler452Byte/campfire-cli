@@ -75,3 +75,12 @@ Campfire 使用语义化版本：
 - `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
 - 领域重构完成后必须刷新受影响 MOC，并重建当前 Workspace 索引。
 - `workspace rebuild` 默认只预览；`--confirm` 后从 Manifest 和 Markdown 完整替换派生索引。
+
+## Workspace 接管
+
+- 外部来源必须只读，先复制到 `_收件箱/待接管/<batch>`；不得删除或修改原目录。
+- Vault 内来源原地盘点，不得重复复制。
+- 软链接、目标冲突、暂存冲突和源哈希变化必须 fail closed。
+- 接管计划一次建立一个粗粒度 Domain；CLI 不得自行推断文档语义或子领域。
+- `apply` 默认只预检，显式 `--confirm` 后才移动暂存内容并创建领域声明。
+- `verify` 必须核对接管文件、哈希和领域声明；接管后的格式与细分治理继续使用 Maintenance 和 Restructure。

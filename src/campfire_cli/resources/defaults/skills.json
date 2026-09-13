@@ -1,7 +1,7 @@
 {
   "version": 1,
   "targets": ["~/.claude/skills", "~/.agents/skills"],
-  "managed_skills": ["campfire-workspace-maintenance", "campfire-workspace-restructure", "campfire-context-bootstrap", "campfire-conversation-router", "campfire-document-capture", "campfire-inbox-triage", "campfire-weekly-report-writing"],
+  "managed_skills": ["campfire-workspace-adoption", "campfire-workspace-maintenance", "campfire-workspace-restructure", "campfire-context-bootstrap", "campfire-conversation-router", "campfire-document-capture", "campfire-inbox-triage", "campfire-weekly-report-writing"],
   "unknown_skill_policy": "ignore",
   "orphaned_skill_policy": "report"
 }

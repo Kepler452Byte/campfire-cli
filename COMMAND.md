@@ -7,6 +7,10 @@ campfire setup --workspace <vault-path> --default
 campfire workspace resolve
 campfire workspace rebuild
 campfire workspace rebuild --confirm
+campfire workspace adopt inventory --source <folder> --batch <id> [--confirm]
+campfire workspace adopt plan --batch <id> --target-path <path> --domain-id <id> --name <name> --space <id> --type <type> --governance <policy> [--parent-domain <id>] [--project <id>]
+campfire workspace adopt apply --batch <id> [--confirm]
+campfire workspace adopt verify --batch <id>
 campfire workspace attach --path <vault-path> --default
 campfire workspace project bind --id <project-id> --local-path <repository-path>
 campfire workspace space list

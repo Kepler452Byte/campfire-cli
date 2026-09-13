@@ -195,3 +195,21 @@ class RestructureItem(Base):
     confidence: Mapped[str] = mapped_column(String(16), default="low")
     approved: Mapped[bool] = mapped_column(Boolean, default=False)
     execution_status: Mapped[str] = mapped_column(String(24), default="pending")
+
+
+class AdoptionBatch(Base):
+    __tablename__ = "adoption_batches"
+    __table_args__ = (UniqueConstraint("workspace_id", "batch_name"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    batch_name: Mapped[str] = mapped_column(String(128))
+    source_path: Mapped[str] = mapped_column(Text)
+    source_kind: Mapped[str] = mapped_column(String(16))
+    staging_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(24))
+    inventory_json: Mapped[str] = mapped_column(Text)
+    plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)

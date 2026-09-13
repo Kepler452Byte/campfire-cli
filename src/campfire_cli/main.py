@@ -12,6 +12,7 @@ from campfire_cli.app.decision.cli.decision_cli import decision_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
 from campfire_cli.app.skill.cli.skill_cli import skill_cli
+from campfire_cli.app.workspace.cli.adoption_cli import adoption_cli
 from campfire_cli.app.workspace.cli.config_cli import config_cli
 from campfire_cli.app.workspace.cli.domain_cli import domain_cli
 from campfire_cli.app.workspace.cli.project_cli import project_cli
@@ -54,6 +55,7 @@ workspace_cli.add_typer(space_cli, name="space")
 workspace_cli.add_typer(domain_cli, name="domain")
 workspace_cli.add_typer(config_cli, name="config")
 workspace_cli.add_typer(restructure_cli, name="restructure")
+workspace_cli.add_typer(adoption_cli, name="adopt")
 app.add_typer(workspace_cli, name="workspace")
 app.add_typer(document_cli, name="document")
 app.add_typer(decision_cli, name="decision")

@@ -26,10 +26,12 @@ from campfire_cli.app.maintenance.repository.maintenance_repository import (
 from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
 from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.service.skill_service import SkillService
+from campfire_cli.app.workspace.repository.adoption_repository import SqliteAdoptionRepository
 from campfire_cli.app.workspace.repository.restructure_repository import (
     SqliteRestructureRepository,
 )
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.service.adoption_service import AdoptionService
 from campfire_cli.app.workspace.service.domain_restructure_service import (
     DomainRestructureService,
 )
@@ -45,6 +47,7 @@ class AppContainer:
     maintenance: MaintenanceService
     restructure: RestructureService
     domain_restructure: DomainRestructureService
+    adoption: AdoptionService
     skill: SkillService
     base: BaseService
     decision: DecisionService
@@ -103,6 +106,12 @@ class AppContainer:
         domain_restructure = DomainRestructureService(
             settings, SqliteWorkspaceRepository(governance_root), maintenance
         )
+        adoption = AdoptionService(
+            settings,
+            SqliteAdoptionRepository(session, resolution.workspace_id),
+            SqliteWorkspaceRepository(governance_root),
+            maintenance,
+        )
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())
         decision = DecisionService(
@@ -114,6 +123,7 @@ class AppContainer:
             maintenance=maintenance,
             restructure=restructure,
             domain_restructure=domain_restructure,
+            adoption=adoption,
             skill=skill,
             base=base,
             decision=decision,
