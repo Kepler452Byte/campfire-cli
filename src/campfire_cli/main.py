@@ -122,41 +122,17 @@ def tree(ctx: typer.Context) -> None:
 @app.command("setup")
 def setup(
     workspace: Path | None = typer.Option(
-        None, "--workspace", help="要初始化的 Workspace 根目录；缺省时输出接入引导"
+        None, "--workspace", help="要初始化的 Workspace 根目录；缺省时仅同步全局资源并输出接入引导"
     ),
     make_default: bool = typer.Option(False, "--default", help="设为默认 Workspace"),
 ) -> None:
     """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
-    if workspace is None:
-        typer.echo(
-            json.dumps(
-                {
-                    "status": "needs-input",
-                    "message": "需要指定 Vault 根目录；按场景选择以下入口之一",
-                    "paths": [
-                        {
-                            "scenario": "接入已有 Vault（目录已存在，含或不含 .campfire.yaml）",
-                            "command": "campfire setup --workspace <vault路径> --default",
-                        },
-                        {
-                            "scenario": "从零创建新 Workspace（初始化目录结构并注册）",
-                            "command": (
-                                "campfire workspace create --id <id> --path <路径> --default"
-                            ),
-                        },
-                        {
-                            "scenario": "暂不接入 Vault，仅安装全局资源（Skill 与提示词路标）",
-                            "command": "campfire upgrade",
-                        },
-                    ],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-        return
     try:
-        result = AppContainer.setup(workspace, make_default)
+        result = (
+            AppContainer.setup_global_resources()
+            if workspace is None
+            else AppContainer.setup(workspace, make_default)
+        )
     except AppError as exc:
         typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
         raise typer.Exit(exc.exit_code) from exc

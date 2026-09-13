@@ -67,6 +67,43 @@ class AppContainer:
         }
 
     @classmethod
+    def setup_global_resources(cls) -> dict:
+        """无 Workspace 时的降级 setup：同步不依赖 Manifest 的全局资源，跳过其余步骤。"""
+        return {
+            "status": "needs-input",
+            "message": (
+                "未指定 Workspace：已同步全局治理资源；接入 Workspace 后可执行完整 setup。"
+                "按场景选择以下入口之一"
+            ),
+            "paths": [
+                {
+                    "scenario": "接入已有 Vault（目录已存在，含或不含 .campfire.yaml）",
+                    "command": "campfire setup --workspace <vault路径> --default",
+                },
+                {
+                    "scenario": "从零创建新 Workspace（初始化目录结构并注册）",
+                    "command": "campfire workspace create --id <id> --path <路径> --default",
+                },
+                {
+                    "scenario": "已注册 Workspace 的本机资源全量对齐",
+                    "command": "campfire upgrade",
+                },
+            ],
+            "resources": {
+                "skills": cls.build_skill().sync(dry_run=False).model_dump(mode="json"),
+                "agent_hints": cls._inject_hints(),
+            },
+            "skipped": [
+                "workspace-registration",
+                "manifest",
+                "config-check",
+                "bases",
+                "document-index",
+                "health-check",
+            ],
+        }
+
+    @classmethod
     def upgrade(cls) -> dict:
         """对齐本机治理资源与当前包版本：Schema 迁移、Skill、Base 与提示词路标。"""
         home = campfire_home()

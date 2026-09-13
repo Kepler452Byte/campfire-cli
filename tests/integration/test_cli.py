@@ -2148,8 +2148,13 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     assert stale.read_text(encoding="utf-8") != "过时内容\n"
 
 
-def test_setup_without_workspace_prints_guidance(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "home"))
+def test_setup_without_workspace_syncs_global_resources_and_prints_guidance(
+    tmp_path: Path, monkeypatch
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(home))
+    hint_file = tmp_path / "CLAUDE.md"
+    monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(hint_file))
     result = runner.invoke(app, ["setup"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -2158,3 +2163,8 @@ def test_setup_without_workspace_prints_guidance(tmp_path: Path, monkeypatch) ->
     assert "campfire setup --workspace <vault路径> --default" in commands
     assert any("workspace create" in command for command in commands)
     assert any("upgrade" in command for command in commands)
+    assert payload["resources"]["skills"]["status"] == "synced"
+    assert {item["action"] for item in payload["resources"]["agent_hints"]} == {"created"}
+    assert "campfire:agent-hints:start" in hint_file.read_text(encoding="utf-8")
+    assert "manifest" in payload["skipped"]
+    assert "health-check" in payload["skipped"]
