@@ -1,20 +1,15 @@
 # Campfire
 
-`campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕持久共享上下文协作，并把一次性 Workspace 结构重构与后续增量维护分开。
+`campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕同一份持久共享上下文协作：把口头要求、临时笔记、任务进度、项目资料和长期知识沉淀进可检索、可交接、可审计的 Workspace。
 
-产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。Markdown/Obsidian Vault 是当前首个存储适配器，Workspace 才是面向用户的顶层概念。
+- **人类和 Agent 同一条链路**：同一套 CLI 契约 + 全局 Agent Skill，没有两套规则。
+- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；SQLite 只是可重建的本机索引与运行状态。
+- **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，多会话并发不会互相覆盖。
+- **本地优先**：不绑定云服务、不内置账号；Obsidian Vault 是当前首个存储适配器，Workspace 才是顶层概念。
 
-```bash
-uv sync
-uv run campfire --help
-uv run campfire setup --workspace /path/to/vault --default
-uv run campfire workspace list
-uv run campfire --workspace personal maintenance check
-```
+产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，命令全景用 `campfire tree` 渐进发现。
 
-Vault 根目录的 `.campfire.yaml` 是可跨设备同步的 Workspace/Project 元数据事实源；它不保存任何设备绝对路径。CLI 通过本机唯一的 `~/.campfire/campfire.db` 管理路径绑定、Decision、文档索引和运行状态。各 Workspace 的配置、批次和报告保存在 `~/.campfire/workspaces/<id>/`，不会向 Workspace 写入工具状态目录。可用 `CAMPFIRE_HOME` 覆盖用户级根目录。
-
-## 安装与调用
+## 安装
 
 标准安装（已发布至 PyPI，无需源码仓库）：
 
@@ -23,115 +18,118 @@ uv tool install campfire-cli
 campfire version
 ```
 
-升级使用 `uv tool upgrade campfire-cli`（或 `pipx upgrade campfire-cli`），随后运行 `campfire upgrade`（别名 `campfire update`）对齐本机治理资源：SQLite Schema 迁移、全局 Skill、Base 与全局提示词路标。
-
-`campfire setup` 初始化时会向 `~/.claude/CLAUDE.md` 与 `~/.agents/AGENTS.md` 注入 campfire 路标块（幂等、带注释标记、不触碰块外内容；可用 `CAMPFIRE_AGENT_HINT_PATH` 覆盖目标文件列表），让 Agent 冷启动时知道本机装有 campfire。
+升级：`uv tool upgrade campfire-cli`（或 `pipx upgrade campfire-cli`）更新包本身，随后运行 `campfire upgrade` 对齐本机治理资源（SQLite Schema 迁移、全局 Skill、Base、提示词路标）。注意 `campfire upgrade` 不更新 Python 包本身，只把本机资源对齐到当前已安装版本。
 
 开发机安装（跟随本地源码）：
 
 ```bash
+git clone https://github.com/Kepler452Byte/campfire-cli
 uv tool install --editable /path/to/campfire-cli
-campfire version
 ```
 
-安装全局 Agent Skill（同步到 `~/.claude/skills` 与 `~/.agents/skills`）：
+源码开发使用 `uv sync` 后直接 `uv run campfire --help`。
+
+## 快速上手
 
 ```bash
-campfire skill list   # 查看包内 SSOT Skill 与全局同步状态
-campfire skill sync   # 确定性同步托管 Skill 到全局目录
+# 1. 接入已有 Vault（目录已存在，含或不含 .campfire.yaml）
+campfire setup --workspace /path/to/vault --default
+
+# 2. 或者从零创建新 Workspace（初始化目录结构并注册）
+campfire workspace create --id personal --path /path/to/vault --default
+
+# 3. 日常：检查治理状态、刷新生成视图
+campfire maintenance check --summary
+campfire maintenance sync --dry-run
 ```
 
-`skill` 命令不依赖已注册 Workspace，可在 `setup` 之前使用；`campfire setup` 初始化
-Workspace 时也会自动执行一次同步。可用 `CAMPFIRE_SKILL_TARGETS`（路径分隔符分隔的
-列表）覆盖同步目标。
+不指定 `--workspace` 运行 `campfire setup` 是降级执行而不是报错：仍会同步全局 Skill 与提示词路标，输出接入引导，并显式列出被跳过的 Manifest 相关步骤。
 
-人类和 Agent 使用同一条链路：全局 Skill 先调用 `campfire workspace resolve`，再读取目标 Workspace 的 `AGENTS.md`，并使用 Workspace id 调用 `campfire`。不修改原始笔记的检查可以直接执行（会刷新 SQLite 当前状态和 current 报告）；`campfire workspace restructure apply`、
-`maintenance apply` 和 `maintenance archive apply` 必须先审查计划，并使用命令要求的显式确认参数。
+`setup` 与 `skill sync` 会向 `~/.claude/CLAUDE.md`、`~/.agents/AGENTS.md` 注入幂等的 campfire 路标块（带注释标记、不触碰块外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标），并把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`（`CAMPFIRE_SKILL_TARGETS` 可覆盖）。Agent 冷启动时由此知道本机装有 campfire。
+
+## 核心概念
+
+```text
+Workspace ── Space ── Domain 树 ── 文档
+     │        （_空间.md）（_领域.md + 自动 MOC）
+     └── Project（关联代码仓库与项目根 Domain）
+```
+
+| 对象 | 说明 | 事实源 |
+|------|------|--------|
+| Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/campfire.db`（注册）+ `.campfire.yaml`（便携 Manifest） |
+| Space / Domain | 顶级容器 / 可嵌套内容边界，声明式 + 自动 MOC | Vault 内 `_空间.md`、`_领域.md` |
+| Document | 知识、计划、问题、决策、记录等持久内容 | Markdown 正文 + Frontmatter |
+| Decision | 需要人类或高级 Agent 回答的持久判断 | 全局 SQLite，投影到 `_协作/decisions/` |
+| Generated View | MOC、相关文档页、Base、报告 | 派生数据，能生成就不手工维护 |
+
+设备边界：`.campfire.yaml` 只保存可跨设备同步的稳定身份与逻辑关联（Project id、Git remote、文档 Domain 等），禁止本机绝对路径；新设备执行 `campfire setup --workspace <vault>` 即可恢复。本机路径绑定、索引、Decision、锁与报告都在 `~/.campfire/`（可用 `CAMPFIRE_HOME` 覆盖），按 Workspace 隔离。
+
+## 常用命令
 
 ```bash
-campfire workspace add --id personal --path /path/to/vault --default
-campfire workspace create --id new-vault --path /new/path --default
-campfire setup --workspace /path/to/existing-vault --default
-campfire workspace attach --path /path/to/existing-vault --default
-campfire workspace project bind --id example --local-path /path/to/repository
-campfire workspace space list --workspace personal
-campfire workspace domain list --workspace personal
-campfire workspace domain check --workspace personal
+campfire tree                                    # 完整命令树
+campfire workspace resolve                       # Agent 冷启动第一步：解析当前 Workspace
+campfire workspace list / show / export / import # 注册库管理与备份
+campfire workspace project resolve               # 当前目录属于哪个已注册项目
+
+campfire maintenance check [--summary] [--scope] # Schema/枚举校验 + 刷新索引
+campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 与相关文档页
+campfire maintenance archive check / apply       # 归档候选检查与执行
+
+campfire document inspect / check / format       # 单篇文档查看、校验、格式化
+campfire document profile list / show / resolve  # Frontmatter Profile 规则
+campfire document type list                      # 文档类型与前缀
+
+campfire decision create / list / answer / close # 持久决策通道
+```
+
+结构治理命令默认只输出计划，追加 `--confirm` 才执行：
+
+```bash
 campfire workspace space create --id research --name "研究" --path myresearch --type research
-campfire workspace space create --id research --name "研究" --path myresearch --type research --confirm
-campfire workspace space adopt --id research --name "研究" --path myresearch --type research
-campfire workspace config check --workspace personal
-campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs
-campfire workspace domain create --id distributed-systems --name "分布式系统" --path "knowledge/分布式系统" --space knowledge --type knowledge-domain --governance knowledge-docs --confirm
-campfire workspace domain adopt --id meetings --name "会议记录" --path "mywork/会议记录" --space work --type work-domain --governance work-docs
-campfire workspace domain adopt --id meetings --name "会议记录" --path "mywork/会议记录" --space work --type work-domain --governance work-docs --confirm
-campfire workspace project add --id example --workspace personal --name "Example" --document-domain "work/example" --local-path /path/to/repository
-campfire workspace project list --workspace personal
-campfire --workspace personal document profile list
-campfire --workspace personal document profile show task
-campfire --workspace personal document profile resolve --path "work/example/任务-示例.md"
-campfire --workspace personal document type list
-campfire --workspace personal document check --path "knowledge/example/知识-示例.md"
-campfire --workspace personal document format --path "knowledge/example/知识-示例.md"
-campfire --workspace personal document format --path "knowledge/example/知识-示例.md" --confirm
-campfire --workspace personal decision create --key example-decision --question "需要确认什么？" --source-type agent
-campfire --workspace personal decision list --status pending
-campfire --workspace personal decision show <decision-id>
-campfire --workspace personal decision answer <decision-id> --answer "确认内容" --answered-by user
-campfire --workspace personal decision close <decision-id>
-campfire workspace export --output campfire-registry-backup.json
-campfire workspace import --input campfire-registry-backup.json
-campfire workspace import --input campfire-registry-backup.json --confirm
-campfire workspace resolve
-campfire workspace rebuild --confirm
+campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
+  --space work --type knowledge-domain --governance project-docs --confirm
+campfire workspace project add --id example --workspace personal \
+  --name "Example" --document-domain "work/example" --local-path /path/to/repo
+campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
+```
+
+## 存量接管与结构重构
+
+`workspace adopt` 负责首次接管已有文件夹：Vault 外来源先按哈希复制到 `_收件箱/待接管/<batch>`（原目录始终保留），Vault 内来源原地盘点；一次建立一个粗粒度 Domain，语义细分交给后续 Maintenance/Restructure 计划。
+
+```bash
 campfire workspace adopt inventory --source /path/to/folder --batch notes-001
-campfire workspace adopt inventory --source /path/to/folder --batch notes-001 --confirm
-campfire workspace adopt plan --batch notes-001 --target-path "mynote/新领域" --domain-id knowledge-new --name "新领域" --space knowledge --type knowledge-domain --governance knowledge-docs
+campfire workspace adopt plan --batch notes-001 --target-path "mynote/新领域" \
+  --domain-id knowledge-new --name "新领域" --space knowledge \
+  --type knowledge-domain --governance knowledge-docs
 campfire workspace adopt apply --batch notes-001 --confirm
 campfire workspace adopt verify --batch notes-001
-campfire tree
-campfire --workspace personal maintenance check
-campfire --workspace personal maintenance check --summary
-campfire --workspace personal maintenance plan --id <plan-id>
-campfire --workspace personal maintenance apply --plan <plan-id> --confirm
-campfire --workspace personal maintenance sync --dry-run
-campfire --workspace personal maintenance sync --scope "work/example"
 ```
 
-`maintenance check` 统一负责正式文档 Schema 与枚举校验，并从当前 `_空间.md`、`_领域.md` 刷新 SQLite 中可重建的 Space、Domain 和 Document 索引；结构声明本身由 `workspace space/domain check` 校验。`maintenance sync` 只因领域结构、MOC、路径或并发安全问题阻塞。单篇文档的元数据问题会继续出现在检查报告中，但不会阻止其他领域刷新生成视图。`sync` 和 `run` 可用 `--scope` 限定同步领域。索引损坏或被删除时使用 `workspace rebuild --confirm` 从 Manifest 和 Markdown SSOT 完整恢复。
-
-`workspace adopt` 负责首次接管已有文件夹。Vault 外来源先按哈希复制到 `_收件箱/待接管/<batch>`，原目录始终保留；Vault 内来源原地盘点。计划一次建立一个粗粒度 Domain，应用后自动生成声明与 MOC 并刷新索引。文档语义和子领域拆分仍由 Agent 通过 Maintenance/Restructure 的审批计划完成。
-
-所有受管内容文档都使用 `base` 或 `base → knowledge/project-doc/task` 的一层配置继承；`human-request` 等没有专属字段的类型直接使用 `base`。`_空间.md`、`_领域.md` 是 Workspace 声明，不是内容文档。`document profile show` 展示编译后的完整规则，`document profile resolve` 展示指定文档最终使用的 Profile。Formatter 只按有效 Profile 排序并保留值；不允许字段由 Validator 报告，不会被自动删除。
-
-Decision 的当前状态和追加事件位于全局 SQLite。全部状态自动投影到 `_协作/decisions/`，并统一显示在 `治理视图/决策工作台.base` 的不同状态视图中。投影不是事实源，不接受手工更新。
-
-跨目录重构或显式修改 Frontmatter 时，先冻结范围，再传入 YAML/JSON 意图规格：
-
-```yaml
-operations:
-  - source: work/old-project/技术-架构.md
-    target: work/new-project/platform/技术-架构.md
-    frontmatter:
-      project: new-project
-      domain: platform
-    reason: 文档实际描述新项目的平台实现
-    approved: false
-```
+跨目录重构先冻结范围，再传入 YAML/JSON 意图规格（含 Frontmatter 修改），逐项审查 `approved` 后执行：
 
 ```bash
-campfire --workspace /path/to/vault workspace restructure inventory --scope work --batch move-001
-campfire --workspace /path/to/vault workspace restructure plan --batch move-001 --spec restructure.yaml
-# 审查批次 plan.json，将确定项目 approved 改为 true
-campfire --workspace /path/to/vault workspace restructure apply --batch move-001
-campfire --workspace /path/to/vault workspace restructure apply --batch move-001 --confirm
-campfire --workspace /path/to/vault workspace restructure verify --batch move-001
+campfire workspace restructure inventory --scope work --batch move-001
+campfire workspace restructure plan --batch move-001 --spec restructure.yaml
+campfire workspace restructure apply --batch move-001 --confirm
+campfire workspace restructure verify --batch move-001
 ```
 
-领域名称、路径和稳定身份分别使用 `domain rename`、`domain move` 和高风险的 `domain rekey`。领域级命令会联动领域声明、子领域关系、Project、`.campfire.yaml` 和路径引用，默认只预览，追加 `--confirm` 才执行。
+领域三个维度独立演进：`domain rename`（显示名）、`domain move`（物理路径）、`domain rekey`（稳定身份，高风险）。领域级命令联动 `_领域.md`、子领域、Project、`.campfire.yaml` 与路径引用。
 
-Workspace Restructure、Maintenance、Archive 写入前会在治理锁内复核内容哈希；检测到其他会话修改时返回
-`concurrent-change` 或 `source-hash-changed`，不会覆盖新内容。文档、任务状态和 Skill 模板枚举由
-同一个治理规则引擎按照有效 `config.yml` 中的 `frontmatter_schema` 校验。
+## 治理模型
 
-产品默认契约位于包内 `resources/defaults/config.yml`，用户只在 `~/.campfire/config.yml` 写需要覆盖的配置。首次初始化会创建最小用户配置；修改后运行 `campfire workspace config check` 验证完整有效配置。`.campfire.yaml` 是便携元数据 SSOT；本机 SQLite 是设备路径、Decision、索引和运行状态的 SSOT。`workspace export/import` 只用于本机注册库备份，不承担跨设备同步。
+- **校验分工**：`maintenance check` 统一负责正式文档的 Schema 与枚举校验，并刷新可重建索引；结构声明由 `workspace space/domain check` 校验；`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
+- **Frontmatter Profile**：声明式一层继承（`base` 或 `base → knowledge/project-doc/task`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
+- **并发安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖。
+- **配置两层模型**：产品默认契约在包内 `resources/defaults/config.yml`（SSOT），用户只在 `~/.campfire/config.yml` 写覆盖项；Mapping 递归合并，`campfire workspace config check` 验证有效配置。
+
+## Agent 协作
+
+全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：先 `workspace resolve` 解析上下文，再读取目标 Workspace 的 `AGENTS.md`；只读检查可直接执行，`restructure apply`、`maintenance apply`、`archive apply` 必须先审查计划并用显式确认参数。有歧义的分类和重构进入 Decision 待确认，不由 Agent 擅自决定。
+
+## 许可
+
+MIT。
