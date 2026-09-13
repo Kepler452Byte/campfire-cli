@@ -44,7 +44,7 @@ description: "在 Agent 首次读写 Campfire 文档时解析 Workspace 和当�
 ## 工作流
 
 1. 运行 `campfire workspace resolve`，随后运行 `campfire workspace space list`。无法唯一解析 Workspace 时询问用户，不擅自使用无关默认值。
-2. 在当前工作目录运行 `campfire workspace project resolve --path <cwd>`。`matched` 才表示唯一项目；`unmatched` 和 `ambiguous` 都不能猜测。
+2. 在当前工作目录运行 `campfire workspace project resolve --path <cwd>`。`matched` 才表示唯一项目（依据是 local-path 匹配）；`unmatched` 和 `ambiguous` 都不能猜测。`unmatched` 且带 `remote_matches` 时，表示该目录仅与这些项目共享 Git remote（monorepo 子目录或未绑定本机路径的项目），不能当作其中任何一个工作：同一项目换机未绑路径时提议 `project bind`，monorepo 子目录则提议注册新项目，提示见返回的 `hint`。
 3. 唯一匹配后运行 `campfire workspace project check <id>`，把 Project 元信息和实际源码、Git、文档中心进行比较。
 4. CLI 能读取的信息先自行读取：Git 根目录、origin remote、默认分支、注册项目列表和现有文档中心。只询问用户无法可靠推断的稳定身份与归属。
 5. Project 未注册且文档中心不存在时，向用户展示建议的 `id`、`name`、Workspace、`document_domain`、`local_path`、remote、默认分支和依据。先运行不带 `--confirm` 的 `campfire workspace project create` 展示计划，用户确认后追加 `--confirm`；命令只初始化项目根领域和项目总览，不虚构业务子领域。已有文档中心使用 `project add` 接入。

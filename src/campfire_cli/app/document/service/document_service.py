@@ -9,8 +9,8 @@ from campfire_cli.app.document.service.frontmatter_formatter import format_text
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
-from campfire_cli.common.filesystem import atomic_write, safe_path, workspace_write_lock
-from campfire_cli.common.governance import capture_snapshot, snapshot_changes
+from campfire_cli.common.filesystem import atomic_write, safe_path
+from campfire_cli.common.governance import capture_snapshot, optimistic_write_lock
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -91,8 +91,9 @@ class DocumentService:
         changed = formatted != original
         if changed and confirm:
             snapshot = capture_snapshot(self._settings.vault_root, [path])
-            with workspace_write_lock(self._settings.state_root):
-                concurrent = snapshot_changes(self._settings.vault_root, snapshot)
+            with optimistic_write_lock(
+                self._settings.state_root, snapshot, self._settings.vault_root
+            ) as concurrent:
                 if concurrent:
                     raise GovernanceBlockedError(
                         "文档在格式化期间发生变化：" + ", ".join(concurrent)

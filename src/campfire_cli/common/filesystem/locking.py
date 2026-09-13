@@ -40,12 +40,16 @@ def _acquire(lock: Path) -> int:
             raise GovernanceBlockedError(f"已有治理写操作且锁内容无法确认：{lock}") from exc
         try:
             os.kill(pid, 0)
-        except ProcessLookupError:
-            lock.unlink(missing_ok=True)
-            try:
-                return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError as retry_exc:
-                raise GovernanceBlockedError(f"已有治理写操作：{lock}") from retry_exc
         except PermissionError:
+            raise GovernanceBlockedError(f"已有治理写操作（PID {pid}）：{lock}") from exc
+        except OSError:
+            # 进程不存在：POSIX 抛 ProcessLookupError，Windows 抛 WinError 87，
+            # 两者都是 OSError 子类，统一按死进程清理后重试。
             pass
-        raise GovernanceBlockedError(f"已有治理写操作（PID {pid}）：{lock}") from exc
+        else:
+            raise GovernanceBlockedError(f"已有治理写操作（PID {pid}）：{lock}") from exc
+        lock.unlink(missing_ok=True)
+        try:
+            return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as retry_exc:
+            raise GovernanceBlockedError(f"已有治理写操作：{lock}") from retry_exc

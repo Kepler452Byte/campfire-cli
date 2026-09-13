@@ -135,20 +135,43 @@ class ProjectService:
             if basis:
                 matches.append(ProjectMatch(project=project, match_basis=basis))
         local_matches = [item for item in matches if "local-path" in item.match_basis]
+        remote_only = [item for item in matches if "local-path" not in item.match_basis]
         if local_matches:
             deepest = max(len(Path(item.project.local_path or "/").parts) for item in local_matches)
-            matches = [
+            local_matches = [
                 item
                 for item in local_matches
                 if len(Path(item.project.local_path or "/").parts) == deepest
             ]
-        status = "matched" if len(matches) == 1 else "ambiguous" if matches else "unmatched"
+            status = "matched" if len(local_matches) == 1 else "ambiguous"
+            return ProjectResolutionResult(
+                status=status,
+                query_path=str(query),
+                git_root=str(git_root) if git_root else None,
+                git_remote_url=remote,
+                matches=local_matches,
+            )
+        if remote_only:
+            # 查询目录本身未注册（常见于 monorepo 子目录或未绑定 local_path 的新机器），
+            # 仅共享 Git remote 不足以断言"当前目录属于该项目"，不返回 matched 终态。
+            candidates = "、".join(item.project.id for item in remote_only)
+            return ProjectResolutionResult(
+                status="unmatched",
+                query_path=str(query),
+                git_root=str(git_root) if git_root else None,
+                git_remote_url=remote,
+                remote_matches=remote_only,
+                hint=(
+                    f"查询目录未注册为任何项目的 local_path，仅与 {candidates} 共享 Git remote；"
+                    "若确属其中之一请运行 campfire workspace project bind "
+                    "--id <id> --local-path <path>，若是新项目（如 monorepo 子目录）请走注册流程"
+                ),
+            )
         return ProjectResolutionResult(
-            status=status,
+            status="unmatched",
             query_path=str(query),
             git_root=str(git_root) if git_root else None,
             git_remote_url=remote,
-            matches=matches,
         )
 
     def check(self, project_id: str) -> ProjectCheckResult:

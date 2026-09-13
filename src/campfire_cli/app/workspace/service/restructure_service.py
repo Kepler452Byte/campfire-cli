@@ -24,10 +24,9 @@ from campfire_cli.app.workspace.service.restructure_protocol import RestructureR
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
-from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
     capture_snapshot,
-    snapshot_changes,
+    optimistic_write_lock,
 )
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
@@ -225,8 +224,9 @@ class RestructureService:
                 *(safe_path(self._settings.vault_root, item.target) for item in approved),
             ],
         )
-        with workspace_write_lock(self._settings.state_root):
-            changed = snapshot_changes(self._settings.vault_root, snapshot)
+        with optimistic_write_lock(
+            self._settings.state_root, snapshot, self._settings.vault_root
+        ) as changed:
             if changed:
                 return RestructureResult(
                     status="blocked",

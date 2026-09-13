@@ -59,8 +59,8 @@ def plan_item(root: Path, path: Path, config: dict[str, Any]) -> dict[str, Any] 
     target_name = prefixed_name(path.name, proposed, config) if proposed else path.name
     if proposed is not None and proposed == doc_type and target_name == path.name and not multiple:
         return None
-    rel = str(path.relative_to(root))
-    target = str(path.with_name(target_name).relative_to(root))
+    rel = path.relative_to(root).as_posix()
+    target = path.with_name(target_name).relative_to(root).as_posix()
     return {
         "source": rel,
         "target": target,

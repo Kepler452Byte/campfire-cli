@@ -23,12 +23,11 @@ from campfire_cli.app.maintenance.service.plan_service import MaintenancePlanSer
 from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.filesystem import atomic_write, safe_path
-from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance import (
     capture_snapshot,
     enrich_issue,
     filter_issues,
-    snapshot_changes,
+    optimistic_write_lock,
 )
 from campfire_cli.common.hashing import file_sha256
 from campfire_cli.common.reports.json_report import render_json_report
@@ -111,8 +110,9 @@ class MaintenanceService:
         observed = {document.path: document.content_hash for document in documents}
         observed.update({f"{item.path}/_空间.md": item.source_hash for item in spaces})
         observed.update({f"{item.path}/_领域.md": item.source_hash for item in domains})
-        with workspace_write_lock(self._settings.state_root):
-            changed = snapshot_changes(self._settings.vault_root, observed)
+        with optimistic_write_lock(
+            self._settings.state_root, observed, self._settings.vault_root
+        ) as changed:
             if changed:
                 return self._concurrent_result(changed)
             self._repository.replace_current_state(documents, issues, spaces, domains)
@@ -294,8 +294,9 @@ class MaintenanceService:
         for path, expected in generated_snapshot.items():
             snapshot.setdefault(path, expected)
         if not dry_run and changes:
-            with workspace_write_lock(self._settings.state_root):
-                changed = snapshot_changes(self._settings.vault_root, snapshot)
+            with optimistic_write_lock(
+                self._settings.state_root, snapshot, self._settings.vault_root
+            ) as changed:
                 if changed:
                     return self._concurrent_result(changed)
                 for path, content in changes:
@@ -351,8 +352,9 @@ class MaintenanceService:
                 self._settings.vault_root,
                 [path for item in items for path in (item.source, item.target)],
             )
-            with workspace_write_lock(self._settings.state_root):
-                changed = snapshot_changes(self._settings.vault_root, snapshot)
+            with optimistic_write_lock(
+                self._settings.state_root, snapshot, self._settings.vault_root
+            ) as changed:
                 if changed:
                     return self._concurrent_result(changed)
                 applied = project_archive.apply_items(

@@ -5,8 +5,7 @@ from pathlib import Path
 
 from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.schema.skill_schema import SkillInfo, SkillResult
-from campfire_cli.common.filesystem import workspace_write_lock
-from campfire_cli.common.governance import enrich_issue
+from campfire_cli.common.governance import enrich_issue, optimistic_write_lock
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.defaults import config_section
 from campfire_cli.config.settings import WorkspaceSettings
@@ -92,12 +91,9 @@ class SkillService:
                     expected = file_sha256(target) if target.is_file() else None
                     writes.append((target, content, expected))
         if not dry_run and writes:
-            with workspace_write_lock(self._settings.state_root):
-                changed = [
-                    str(path)
-                    for path, _content, expected in writes
-                    if self._current_hash(path) != expected
-                ]
+            # 全局 Skill 目录在 Vault 之外，快照键使用绝对路径。
+            snapshot = {str(path): expected for path, _content, expected in writes}
+            with optimistic_write_lock(self._settings.state_root, snapshot) as changed:
                 if changed:
                     return SkillResult(
                         status="blocked",
@@ -143,10 +139,6 @@ class SkillService:
 
     def _target_roots(self) -> list[Path]:
         return self._settings.skill_targets()
-
-    @staticmethod
-    def _current_hash(path: Path) -> str | None:
-        return file_sha256(path) if path.is_file() else None
 
     def _managed_names(self) -> list[str]:
         configured = list(self._settings.skills.get("managed_skills", []))

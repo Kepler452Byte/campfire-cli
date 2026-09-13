@@ -1,8 +1,16 @@
-.venv/
+# Python
 __pycache__/
+*.py[cod]
+.venv/
 .pytest_cache/
 .ruff_cache/
-*.pyc
+.coverage
+htmlcov/
+
+# 构建与发布
 dist/
-build/
 *.egg-info/
+
+# 本机环境
+.DS_Store
+Thumbs.db

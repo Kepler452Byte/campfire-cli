@@ -192,6 +192,8 @@ class ProjectResolutionResult(BaseModel):
     git_root: str | None = None
     git_remote_url: str | None = None
     matches: list[ProjectMatch] = Field(default_factory=list)
+    remote_matches: list[ProjectMatch] = Field(default_factory=list)
+    hint: str | None = None
 
 
 class ProjectCheckResult(BaseModel):

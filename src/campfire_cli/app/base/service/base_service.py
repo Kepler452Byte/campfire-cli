@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import yaml
 
 from campfire_cli.app.base.repository.base_repository import BaseRepository
 from campfire_cli.app.base.schema.base_schema import BaseInfo, BaseResult
-from campfire_cli.common.filesystem import workspace_write_lock
-from campfire_cli.common.governance import enrich_issue, snapshot_changes
+from campfire_cli.common.governance import enrich_issue, optimistic_write_lock
+from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.defaults import config_section
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -67,18 +66,19 @@ class BaseService:
                 {
                     "action": "update" if target.exists() else "create",
                     "path": name,
-                    "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                    "sha256": text_sha256(content),
                 }
             )
-            expected = hashlib.sha256(current.encode()).hexdigest() if current is not None else None
+            expected = file_sha256(target) if target.is_file() else None
             writes.append((target, content, expected))
         if not dry_run and writes:
             snapshot = {
                 path.relative_to(self._settings.vault_root).as_posix(): expected
                 for path, _content, expected in writes
             }
-            with workspace_write_lock(self._settings.state_root):
-                changed = snapshot_changes(self._settings.vault_root, snapshot)
+            with optimistic_write_lock(
+                self._settings.state_root, snapshot, self._settings.vault_root
+            ) as changed:
                 if changed:
                     return BaseResult(
                         status="blocked",

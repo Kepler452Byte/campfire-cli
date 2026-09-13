@@ -4,6 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
@@ -1922,7 +1923,10 @@ def test_adoption_blocks_symbolic_links(workspace: Path) -> None:
     source.mkdir()
     target = workspace.parent / "outside.md"
     target.write_text("outside\n", encoding="utf-8")
-    (source / "linked.md").symlink_to(target)
+    try:
+        (source / "linked.md").symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"当前环境无法创建符号链接（Windows 需开发者模式或管理员权限）：{exc}")
     result = runner.invoke(
         app,
         [
@@ -2017,3 +2021,79 @@ def test_skill_sync_rewrites_crlf_target_without_concurrent_change(
     payload = json.loads(result.output)
     assert payload["status"] == "synced", result.output
     assert "旧版本残留" not in target.read_text(encoding="utf-8")
+
+
+def test_project_resolve_does_not_match_by_shared_remote_alone(
+    tmp_path: Path, monkeypatch
+) -> None:
+    campfire_home = tmp_path / "campfire-home"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monorepo = tmp_path / "monorepo"
+    sibling_app = monorepo / "apps" / "another-app"
+    sibling_app.mkdir(parents=True)
+    subprocess.run(
+        ["git", "init", "--initial-branch", "main", str(monorepo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(monorepo),
+            "remote",
+            "add",
+            "origin",
+            "git@example.com:team/monorepo.git",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    runner.invoke(
+        app, ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"]
+    )
+    registered_app = monorepo / "apps" / "registered-app"
+    registered_app.mkdir(parents=True)
+    domain_dir = workspace / "mywork" / "example"
+    domain_dir.mkdir(parents=True)
+    added = runner.invoke(
+        app,
+        [
+            "workspace",
+            "project",
+            "add",
+            "--id",
+            "registered-app",
+            "--workspace",
+            "personal",
+            "--name",
+            "Registered App",
+            "--document-domain",
+            "mywork/example",
+            "--local-path",
+            str(registered_app),
+            "--git-remote-url",
+            "git@example.com:team/monorepo.git",
+        ],
+    )
+    assert added.exit_code == 0, added.output
+
+    resolved = json.loads(
+        runner.invoke(app, ["workspace", "project", "resolve", "--path", str(sibling_app)]).output
+    )
+    assert resolved["status"] == "unmatched", resolved
+    assert resolved["matches"] == []
+    assert [item["project"]["id"] for item in resolved["remote_matches"]] == ["registered-app"]
+    assert "bind" in resolved["hint"]
+
+    within = json.loads(
+        runner.invoke(
+            app, ["workspace", "project", "resolve", "--path", str(registered_app)]
+        ).output
+    )
+    assert within["status"] == "matched"
+    assert within["matches"][0]["project"]["id"] == "registered-app"
