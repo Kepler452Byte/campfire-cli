@@ -31,12 +31,12 @@ description: "把 Vault 内外已有文档文件夹首次接管为 Campfire Doma
 3. 阅读真实文档，确认 Space、目标路径、稳定 `domain_id`、领域名称、治理类型及可选 Project。无法确定唯一归属时先询问用户或创建 Decision。
 4. 使用 `campfire workspace adopt plan` 建立粗粒度目标 Domain。不要在接管阶段假装自动完成语义分类；需要多个子领域时，接管根领域后再使用 Restructure。
 5. 运行不带 `--confirm` 的 `apply` 审查最终计划；用户已经明确授权且没有冲突时追加 `--confirm`。
-6. 运行 `verify`。随后加载 Maintenance Skill，处理标题、摘要、类型、Frontmatter 和归档问题；需要拆分子领域时加载 Restructure Skill。
+6. 运行 `verify`，再按 apply 返回的 `follow_up` 加载 Maintenance Skill，显式刷新派生视图和索引，并处理标题、摘要、类型、Frontmatter 和归档问题；需要拆分子领域时加载 Restructure Skill。
 
 ## 安全边界
 
 - 外部来源只复制到暂存区，绝不修改或删除原目录。
 - 软链接、目标冲突、暂存内容冲突或源哈希变化必须阻塞。
 - 接管计划一次建立一个粗粒度 Domain；语义拆分由 Agent 提案并走独立重构计划。
-- CLI 管理复制、哈希、声明、Project/Manifest 联动、MOC 与索引；Agent 负责理解正文。
+- CLI 原子管理复制、哈希、声明、初始 MOC 与 Project/Manifest 联动；派生视图和索引由 `follow_up` 显式刷新，Agent 负责理解正文。
 - 验收前不得宣称接管完成；报告复制数量、目标 Domain、剩余治理问题和原始来源是否保留。

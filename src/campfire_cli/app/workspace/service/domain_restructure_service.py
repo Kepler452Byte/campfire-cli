@@ -4,12 +4,16 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
-from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
+from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
 from campfire_cli.app.workspace.repository.manifest_repository import (
     WorkspaceManifestRepository,
 )
 from campfire_cli.app.workspace.schema.restructure_schema import DomainRestructureResult
-from campfire_cli.app.workspace.schema.workspace_schema import Domain, ManifestProject
+from campfire_cli.app.workspace.schema.workspace_schema import (
+    Domain,
+    ManifestProject,
+    ProjectEntry,
+)
 from campfire_cli.app.workspace.service.structure_service import (
     DOMAIN_MARKER,
     ID_RE,
@@ -20,7 +24,14 @@ from campfire_cli.app.workspace.service.structure_service import (
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import atomic_write, safe_path, workspace_write_lock
+from campfire_cli.common.filesystem import (
+    FileChangeExecutor,
+    FileChangeSet,
+    FileWrite,
+    PathMove,
+    safe_path,
+)
+from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -31,14 +42,13 @@ class DomainRestructureService:
         self,
         settings: WorkspaceSettings,
         workspace_repository: WorkspaceRepositoryProtocol,
-        maintenance: MaintenanceService,
         manifest_repository: WorkspaceManifestRepository | None = None,
     ) -> None:
         self._settings = settings
         self._workspaces = workspace_repository
-        self._maintenance = maintenance
         self._manifests = manifest_repository or WorkspaceManifestRepository()
         self._domains = DomainService(settings.vault_root, settings.state_root)
+        self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def rename(
         self,
@@ -156,34 +166,34 @@ class DomainRestructureService:
             return self._result(domain, new_id, name, new_relative, operations, projects, False)
         if target != domain.path and target.exists():
             raise ConfigurationError(f"目标路径已存在：{new_relative}")
-        with workspace_write_lock(self._settings.state_root):
-            current = self._domain(domain.id)
-            if current.path != domain.path or current.name != domain.name:
-                raise ConfigurationError("Domain 在预览后发生变化，请重新执行")
-            if target != domain.path:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                domain.path.rename(target)
-            marker = target / DOMAIN_MARKER
-            self._update_marker(marker, name=name, domain_id=new_id, parent_domain=parent_domain)
-            if new_id != domain.id:
-                self._rewrite_child_parent_ids(target, domain.id, new_id)
-                self._rewrite_domain_id_references(domain.id, new_id)
-            self._rewrite_path_references(old_relative, new_relative)
-            for project in projects:
-                updated = project.model_copy(
-                    update={
-                        "document_domain": new_relative,
-                        "name": project_name.strip() if project_name else project.name,
-                    }
-                )
-                self._workspaces.save_project(updated)
-            self._sync_manifest()
-        sync = self._maintenance.sync(scope=new_relative)
-        index = self._maintenance.check(summary=True)
-        operations.extend(
-            {str(key): str(value) for key, value in operation.items()}
-            for operation in sync.operations
+        current = self._domain(domain.id)
+        if current.path != domain.path or current.name != domain.name:
+            raise ConfigurationError("Domain 在预览后发生变化，请重新执行")
+        updated_projects = [
+            project.model_copy(
+                update={
+                    "document_domain": new_relative,
+                    "name": project_name.strip() if project_name else project.name,
+                }
+            )
+            for project in projects
+        ]
+        change_set = self._plan_changes(
+            domain,
+            target=target,
+            name=name,
+            new_id=new_id,
+            parent_domain=parent_domain,
+            updated_projects=updated_projects,
         )
+        try:
+            with self._executor.transaction(change_set):
+                if updated_projects:
+                    self._workspaces.save_projects(updated_projects)
+        except Exception:
+            if projects:
+                self._workspaces.save_projects(projects)
+            raise
         domain_check = self._domains.check()
         affected_prefix = f"{new_relative}/"
         issues = [
@@ -192,8 +202,6 @@ class DomainRestructureService:
             if str(issue.get("path", "")).startswith(affected_prefix)
             or issue.get("path") == new_relative
         ]
-        issues.extend(issue.model_dump(mode="json") for issue in sync.issues)
-        issues.extend(issue.model_dump(mode="json") for issue in index.issues)
         result = self._result(domain, new_id, name, new_relative, operations, projects, True)
         if issues:
             result.status = "needs-review"
@@ -230,73 +238,110 @@ class DomainRestructureService:
             return f"【{name}】文档中心"
         return name
 
-    @staticmethod
-    def _update_marker(
-        marker: Path, *, name: str, domain_id: str, parent_domain: str | None
-    ) -> None:
-        parsed = parse_document(marker.read_text(encoding="utf-8"))
+    def _plan_changes(
+        self,
+        domain: Domain,
+        *,
+        target: Path,
+        name: str,
+        new_id: str,
+        parent_domain: str | None,
+        updated_projects: list[ProjectEntry],
+    ) -> FileChangeSet:
+        references = self._reference_files()
+        originals = {path: path.read_text(encoding="utf-8") for path in references}
+        contents = dict(originals)
+        marker = domain.path / DOMAIN_MARKER
+        parsed = parse_document(contents[marker])
         frontmatter = dict(parsed.frontmatter)
         frontmatter["name"] = name
-        frontmatter["domain_id"] = domain_id
+        frontmatter["domain_id"] = new_id
         if parent_domain:
             frontmatter["parent_domain"] = parent_domain
         else:
             frontmatter.pop("parent_domain", None)
         body = re.sub(r"^# .+$", f"# {name}", parsed.body, count=1, flags=re.MULTILINE)
-        atomic_write(marker, render_document(frontmatter, body, list(frontmatter)))
+        contents[marker] = render_document(frontmatter, body, list(frontmatter))
 
-    def _rewrite_child_parent_ids(self, root: Path, old_id: str, new_id: str) -> None:
-        for marker in root.rglob(DOMAIN_MARKER):
-            if (
-                marker == root / DOMAIN_MARKER
-                or parse_marker(marker).get("parent_domain") != old_id
-            ):
-                continue
-            parsed = parse_document(marker.read_text(encoding="utf-8"))
-            frontmatter = dict(parsed.frontmatter)
-            frontmatter["parent_domain"] = new_id
-            atomic_write(marker, render_document(frontmatter, parsed.body, list(frontmatter)))
+        if new_id != domain.id:
+            for child in domain.path.rglob(DOMAIN_MARKER):
+                if child == marker or parse_marker(child).get("parent_domain") != domain.id:
+                    continue
+                child_parsed = parse_document(contents[child])
+                child_frontmatter = dict(child_parsed.frontmatter)
+                child_frontmatter["parent_domain"] = new_id
+                contents[child] = render_document(
+                    child_frontmatter, child_parsed.body, list(child_frontmatter)
+                )
+            pattern = re.compile(
+                rf"(?m)^(\s*(?:domain|domain_id|parent_domain):\s*)(['\"]?)"
+                rf"{re.escape(domain.id)}\2\s*$"
+            )
+            for path, content in contents.items():
+                if path.suffix.lower() == ".md":
+                    contents[path] = pattern.sub(rf"\g<1>\g<2>{new_id}\g<2>", content)
 
-    def _rewrite_domain_id_references(self, old_id: str, new_id: str) -> None:
-        pattern = re.compile(
-            rf"(?m)^(\s*(?:domain|domain_id|parent_domain):\s*)(['\"]?){re.escape(old_id)}\2\s*$"
+        old_relative = domain.path.relative_to(self._settings.vault_root).as_posix()
+        new_relative = target.relative_to(self._settings.vault_root).as_posix()
+        if old_relative != new_relative:
+            for path, content in contents.items():
+                contents[path] = content.replace(old_relative, new_relative).replace(
+                    quote(old_relative), quote(new_relative)
+                )
+
+        def final_path(path: Path) -> Path:
+            if path == domain.path or domain.path in path.parents:
+                return target / path.relative_to(domain.path)
+            return path
+
+        writes = [
+            FileWrite(final_path(path), content)
+            for path, content in contents.items()
+            if content != originals[path]
+        ]
+        expected = {path: file_sha256(path) for path in references}
+        if updated_projects:
+            manifest_path, manifest_content = self._manifest_update(updated_projects)
+            writes.append(FileWrite(manifest_path, manifest_content))
+            expected[manifest_path] = file_sha256(manifest_path)
+        return FileChangeSet(
+            writes=tuple(writes),
+            moves=(PathMove(domain.path, target),) if target != domain.path else (),
+            label="domain restructure",
+            expected=expected,
         )
-        for path in self._settings.vault_root.rglob("*.md"):
-            if ".git" in path.relative_to(self._settings.vault_root).parts:
-                continue
-            text = path.read_text(encoding="utf-8")
-            updated = pattern.sub(rf"\g<1>\g<2>{new_id}\g<2>", text)
-            if updated != text:
-                atomic_write(path, updated)
 
-    def _rewrite_path_references(self, old: str, new: str) -> None:
-        if old == new:
-            return
-        ignored = {".git", ".obsidian"}
-        for path in self._settings.vault_root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in {".md", ".canvas", ".base"}:
-                continue
-            if any(part in ignored for part in path.relative_to(self._settings.vault_root).parts):
-                continue
-            text = path.read_text(encoding="utf-8")
-            updated = text.replace(old, new).replace(quote(old), quote(new))
-            if updated != text:
-                atomic_write(path, updated)
-
-    def _sync_manifest(self) -> None:
+    def _manifest_update(self, updated_projects: list[ProjectEntry]) -> tuple[Path, str]:
         manifest = self._manifests.load(self._settings.vault_root)
         if manifest is None:
             raise ConfigurationError("Workspace 缺少 .campfire.yaml")
+        replacements = {project.id: project for project in updated_projects}
+        projects = [
+            replacements.get(project.id, project)
+            for project in self._workspaces.list_projects(self._settings.workspace_id)
+        ]
         manifest.projects = [
             ManifestProject.model_validate(
                 project.model_dump(exclude={"workspace_id", "local_path"})
             )
-            for project in self._workspaces.list_projects(self._settings.workspace_id)
+            for project in projects
         ]
-        self._manifests.save(self._settings.vault_root, manifest)
+        return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
-    @staticmethod
+    def _reference_files(self) -> list[Path]:
+        ignored = {".git", ".obsidian"}
+        return sorted(
+            path
+            for path in self._settings.vault_root.rglob("*")
+            if path.is_file()
+            and path.suffix.lower() in {".md", ".canvas", ".base"}
+            and not any(
+                part in ignored for part in path.relative_to(self._settings.vault_root).parts
+            )
+        )
+
     def _result(
+        self,
         domain: Domain,
         domain_id: str,
         name: str,
@@ -313,4 +358,5 @@ class DomainRestructureService:
             operations=operations,
             affected_projects=[project.id for project in projects],
             write_performed=written,
+            follow_up=maintenance_follow_up(self._settings.workspace_id, [path]),
         )

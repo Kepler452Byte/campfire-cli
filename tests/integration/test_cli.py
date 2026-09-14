@@ -9,6 +9,15 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+from campfire_cli.app.workspace.repository.adoption_repository import (
+    SqliteAdoptionRepository,
+)
+from campfire_cli.app.workspace.repository.restructure_repository import (
+    SqliteRestructureRepository,
+)
+from campfire_cli.app.workspace.repository.workspace_repository import (
+    SqliteWorkspaceRepository,
+)
 from campfire_cli.common.package_version import InstallMethod
 from campfire_cli.main import app
 
@@ -792,18 +801,17 @@ def test_document_profile_list_reads_effective_user_config(workspace: Path) -> N
         {
             "version": 1,
             "frontmatter_schema": {
-                "profiles": {
-                    "custom": {"field_order": [], "required": [], "optional": []}
-                }
+                "profiles": {"custom": {"field_order": [], "required": [], "optional": []}}
             },
         },
     )
     result = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "list"])
     assert result.exit_code == 0, result.output
     assert "custom" in {item["name"] for item in json.loads(result.output)["profiles"]}
-    assert "custom" in yaml.safe_load(path.read_text(encoding="utf-8"))["frontmatter_schema"][
-        "profiles"
-    ]
+    assert (
+        "custom"
+        in yaml.safe_load(path.read_text(encoding="utf-8"))["frontmatter_schema"]["profiles"]
+    )
 
 
 def test_document_type_list_reads_effective_user_config(workspace: Path) -> None:
@@ -811,9 +819,7 @@ def test_document_type_list_reads_effective_user_config(workspace: Path) -> None
         workspace,
         {
             "version": 1,
-            "document_types": {
-                "types": {"custom": {"prefix": "自定义-", "label": "自定义"}}
-            },
+            "document_types": {"types": {"custom": {"prefix": "自定义-", "label": "自定义"}}},
         },
     )
 
@@ -944,9 +950,7 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
         {
             "version": 1,
             "frontmatter_schema": {
-                "profiles": {
-                    "task": {"enums": {"lifecycle": ["blocked", "completed"]}}
-                }
+                "profiles": {"task": {"enums": {"lifecycle": ["blocked", "completed"]}}}
             },
         },
     )
@@ -1024,7 +1028,9 @@ def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: 
     assert "source-hash-changed" in result.output
 
 
-def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(workspace: Path) -> None:
+def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source = workspace / "mynote" / "知识-迁移.md"
     source.write_text(
         "---\nname: 迁移\ndescription: test\ntype: knowledge\nstatus: current\n"
@@ -1073,6 +1079,30 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(worksp
         ],
     )
     assert json.loads(planned.output)["item_count"] == 1
+    real_save_execution = SqliteRestructureRepository.save_execution
+
+    def fail_execution(_repository, _result) -> None:
+        raise OSError("injected execution record failure")
+
+    monkeypatch.setattr(SqliteRestructureRepository, "save_execution", fail_execution)
+    failed = runner.invoke(
+        app,
+        [
+            "--workspace",
+            str(workspace),
+            "workspace",
+            "restructure",
+            "apply",
+            "--batch",
+            "move",
+            "--confirm",
+        ],
+    )
+    assert failed.exit_code != 0
+    assert source.is_file()
+    assert not (workspace / "mywork/知识-迁移.md").exists()
+    assert "mynote/知识-迁移.md" in reference.read_text(encoding="utf-8")
+    monkeypatch.setattr(SqliteRestructureRepository, "save_execution", real_save_execution)
     applied = runner.invoke(
         app,
         [
@@ -1726,7 +1756,7 @@ def test_archive_scope_does_not_apply_other_candidates(workspace: Path) -> None:
 
 
 def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
-    workspace: Path,
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = workspace / "mywork/【Old】文档中心"
     child = root / "Child"
@@ -1789,8 +1819,40 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
     preview = runner.invoke(app, command)
     assert json.loads(preview.output)["status"] == "planned"
     assert root.is_dir()
+    real_save_projects = SqliteWorkspaceRepository.save_projects
+    calls = 0
+
+    def fail_once(repository, projects) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("injected project registry failure")
+        real_save_projects(repository, projects)
+
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_once)
+    failed = runner.invoke(app, [*command, "--confirm"])
+    assert failed.exit_code != 0
+    assert root.is_dir()
+    assert not (workspace / "mywork/【New】文档中心").exists()
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["name"] == "Old Project"
+    assert project["document_domain"] == "mywork/【Old】文档中心"
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", real_save_projects)
     applied = runner.invoke(app, [*command, "--confirm"])
     assert applied.exit_code == 0, applied.output
+    applied_payload = json.loads(applied.output)
+    assert applied_payload["follow_up"] == [
+        {
+            "command": "maintenance sync",
+            "workspace": "test",
+            "scope": "mywork/【New】文档中心",
+        },
+        {
+            "command": "maintenance check",
+            "workspace": "test",
+            "scope": "mywork/【New】文档中心",
+        },
+    ]
     renamed = workspace / "mywork/【New】文档中心"
     assert renamed.is_dir() and not root.exists()
     assert parse_yaml_frontmatter(renamed / "_领域.md")["domain_id"] == "project-old"
@@ -1940,19 +2002,31 @@ def test_external_folder_adoption_stages_applies_and_preserves_source(workspace:
         ["workspace", "adopt", "apply", "--batch", "external-001", "--confirm"],
     )
     assert applied.exit_code == 0, applied.output
+    assert json.loads(applied.output)["follow_up"] == [
+        {
+            "command": "maintenance sync",
+            "workspace": "test",
+            "scope": "mynote/Go并发",
+        },
+        {
+            "command": "maintenance check",
+            "workspace": "test",
+            "scope": "mynote/Go并发",
+        },
+    ]
     target = workspace / "mynote/Go并发"
     assert (target / "_领域.md").is_file()
     assert (target / "知识-并发.md").is_file()
     assert source.is_dir() and (source / "知识-并发.md").is_file()
     assert not (workspace / "_收件箱/待接管/external-001").exists()
-    verified = runner.invoke(
-        app, ["workspace", "adopt", "verify", "--batch", "external-001"]
-    )
+    verified = runner.invoke(app, ["workspace", "adopt", "verify", "--batch", "external-001"])
     assert verified.exit_code == 0, verified.output
     assert json.loads(verified.output)["status"] == "ok"
 
 
-def test_internal_folder_adoption_is_applied_in_place(workspace: Path) -> None:
+def test_internal_folder_adoption_is_applied_in_place(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source = workspace / "mynote/LooseNotes"
     source.mkdir(parents=True)
     note = source / "知识-原地接管.md"
@@ -2001,6 +2075,27 @@ def test_internal_folder_adoption_is_applied_in_place(workspace: Path) -> None:
     assert planned.exit_code == 0, planned.output
     assert json.loads(planned.output)["status"] == "planned"
 
+    real_save = SqliteAdoptionRepository.save
+    failed_once = False
+
+    def fail_applied_once(repository, state) -> None:
+        nonlocal failed_once
+        if state.status == "applied" and not failed_once:
+            failed_once = True
+            raise OSError("injected adoption state failure")
+        real_save(repository, state)
+
+    monkeypatch.setattr(SqliteAdoptionRepository, "save", fail_applied_once)
+    failed = runner.invoke(
+        app,
+        ["workspace", "adopt", "apply", "--batch", "internal-001", "--confirm"],
+    )
+    assert failed.exit_code != 0
+    assert note.is_file()
+    assert not (source / "_领域.md").exists()
+    assert not (source / "_总览/MOC-零散笔记总览.md").exists()
+    monkeypatch.setattr(SqliteAdoptionRepository, "save", real_save)
+
     applied = runner.invoke(
         app,
         ["workspace", "adopt", "apply", "--batch", "internal-001", "--confirm"],
@@ -2011,9 +2106,7 @@ def test_internal_folder_adoption_is_applied_in_place(workspace: Path) -> None:
     assert (source / "_领域.md").is_file()
     assert (source / "_总览/MOC-零散笔记总览.md").is_file()
 
-    verified = runner.invoke(
-        app, ["workspace", "adopt", "verify", "--batch", "internal-001"]
-    )
+    verified = runner.invoke(app, ["workspace", "adopt", "verify", "--batch", "internal-001"])
     assert verified.exit_code == 0, verified.output
     assert json.loads(verified.output)["status"] == "ok"
 
@@ -2088,9 +2181,7 @@ def test_sync_does_not_flag_crlf_generated_file_as_concurrent_change(
     assert payload["issue_counts"].get("concurrent-change") is None
 
 
-def test_skill_commands_work_without_registered_workspace(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_skill_commands_work_without_registered_workspace(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "fresh-home"))
     monkeypatch.setenv("CAMPFIRE_SKILL_TARGETS", str(tmp_path / "skills"))
     listing = runner.invoke(app, ["skill", "list"])
@@ -2110,9 +2201,7 @@ def test_skill_sync_rewrites_crlf_target_without_concurrent_change(
     applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
     assert applied.exit_code == 0, applied.output
 
-    target = next(
-        (workspace / "_global_skills").glob("campfire-document-capture/SKILL.md")
-    )
+    target = next((workspace / "_global_skills").glob("campfire-document-capture/SKILL.md"))
     stale = target.read_text(encoding="utf-8") + "\n<!-- 旧版本残留 -->\n"
     target.write_bytes(stale.replace("\n", "\r\n").encode("utf-8"))
 
@@ -2123,9 +2212,7 @@ def test_skill_sync_rewrites_crlf_target_without_concurrent_change(
     assert "旧版本残留" not in target.read_text(encoding="utf-8")
 
 
-def test_project_resolve_does_not_match_by_shared_remote_alone(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_project_resolve_does_not_match_by_shared_remote_alone(tmp_path: Path, monkeypatch) -> None:
     campfire_home = tmp_path / "campfire-home"
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     workspace = tmp_path / "workspace"
@@ -2197,14 +2284,10 @@ def test_project_resolve_does_not_match_by_shared_remote_alone(
     assert within["matches"][0]["project"]["id"] == "registered-app"
 
 
-def test_setup_injects_agent_hints_idempotently(
-    workspace: Path, monkeypatch
-) -> None:
+def test_setup_injects_agent_hints_idempotently(workspace: Path, monkeypatch) -> None:
     claude_md = workspace / "CLAUDE.md"
     agents_md = workspace / "AGENTS.md"
-    monkeypatch.setenv(
-        "CAMPFIRE_AGENT_HINT_PATH", f"{claude_md}{os.pathsep}{agents_md}"
-    )
+    monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", f"{claude_md}{os.pathsep}{agents_md}")
     first = runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "test"])
     assert first.exit_code == 0, first.output
     payload = json.loads(first.output)
@@ -2215,14 +2298,12 @@ def test_setup_injects_agent_hints_idempotently(
 
     second = runner.invoke(app, ["setup", "--workspace", str(workspace)])
     assert second.exit_code == 0, second.output
-    assert {
-        item["action"] for item in json.loads(second.output)["resources"]["agent_hints"]
-    } == {"kept"}
+    assert {item["action"] for item in json.loads(second.output)["resources"]["agent_hints"]} == {
+        "kept"
+    }
 
 
-def test_upgrade_syncs_resources_and_removes_update_alias(
-    workspace: Path, monkeypatch
-) -> None:
+def test_upgrade_syncs_resources_and_removes_update_alias(workspace: Path, monkeypatch) -> None:
     monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: None)
     claude_md = workspace / "CLAUDE.md"
     monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(claude_md))
@@ -2267,9 +2348,7 @@ def test_upgrade_skips_package_update_for_editable_install(workspace: Path, monk
     assert payload["skills"]["status"] == "synced"
 
 
-def test_upgrade_spawns_detached_updater_for_managed_install(
-    workspace: Path, monkeypatch
-) -> None:
+def test_upgrade_spawns_detached_updater_for_managed_install(workspace: Path, monkeypatch) -> None:
     monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: "9.9.9")
     monkeypatch.setattr(
         "campfire_cli.container.detect_install_method",
@@ -2328,7 +2407,7 @@ def test_archive_check_lists_candidates_with_reason_and_related(
     (workspace / "mywork" / "_空间.md").exists()
     (domain / "_领域.md").write_text(
         "---\nname: 归档测试\ndomain_id: archive-test\ndomain_type: project-domain\n"
-        "governance: project-docs\nmoc: \"[[MOC-归档测试]]\"\nstatus: active\n---\n",
+        'governance: project-docs\nmoc: "[[MOC-归档测试]]"\nstatus: active\n---\n',
         encoding="utf-8",
     )
     (domain / "MOC-归档测试.md").write_text(
@@ -2344,7 +2423,7 @@ def test_archive_check_lists_candidates_with_reason_and_related(
         "---\nname: 待归档\ndescription: 测试\ntype: plan\nproject: archive-test\n"
         "domain: archive-test\n"
         "status: current\nlifecycle: proposed\n"
-        "related:\n  - \"[[看板-某清单]]\"\n"
+        'related:\n  - "[[看板-某清单]]"\n'
         "superseded_by: []\narchive_requested: true\narchive_reason: completed\n"
         "created: 2026-09-14\nupdated: 2026-09-14\n---\n# 待归档\n",
         encoding="utf-8",
@@ -2353,9 +2432,9 @@ def test_archive_check_lists_candidates_with_reason_and_related(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     candidates = payload["candidates"]
-    assert [
-        "mywork/【归档测试】文档中心/计划-待归档.md".replace("/", os.sep)
-    ] == [item["source"] for item in candidates]
+    assert ["mywork/【归档测试】文档中心/计划-待归档.md".replace("/", os.sep)] == [
+        item["source"] for item in candidates
+    ]
     assert candidates[0]["archive_reason"] == "completed"
     assert candidates[0]["related"] == ["[[看板-某清单]]"]
 
@@ -2383,9 +2462,7 @@ def test_document_kanban_check_validates_renderability_contract(workspace: Path)
     assert plain_payload["renderable"] is False
     assert "kanban-plugin-missing" in {item["code"] for item in plain_payload["issues"]}
 
-    rendered_result = runner.invoke(
-        app, ["document", "kanban-check", "--path", str(rendered)]
-    )
+    rendered_result = runner.invoke(app, ["document", "kanban-check", "--path", str(rendered)])
     assert rendered_result.exit_code == 0, rendered_result.output
     rendered_payload = json.loads(rendered_result.output)
     assert rendered_payload["renderable"] is True

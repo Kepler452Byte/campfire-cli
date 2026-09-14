@@ -125,8 +125,19 @@ def move_document(
     ctx: typer.Context,
     source: str = typer.Option(..., "--from"),
     target: str = typer.Option(..., "--to"),
+    set_values: list[str] | None = typer.Option(None, "--set"),
+    unset_fields: list[str] | None = typer.Option(None, "--unset"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
-    """预览或移动同一 Domain 内的一篇文档，并更新可确定解析的引用。"""
-    invoke(lambda: service(ctx).move(source, target, expected_hash=expected_hash, confirm=confirm))
+    """预览或移动一篇文档，并按目标 Domain 契约更新归属与引用。"""
+    invoke(
+        lambda: service(ctx).move(
+            source,
+            target,
+            values=parse_values(set_values or []),
+            unset_fields=tuple(unset_fields or []),
+            expected_hash=expected_hash,
+            confirm=confirm,
+        )
+    )

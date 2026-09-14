@@ -29,10 +29,13 @@ class WorkspaceManifestRepository:
 
     def save(self, workspace: Path, manifest: WorkspaceManifest) -> Path:
         target = self.path(workspace)
-        content = yaml.safe_dump(
+        atomic_write(target, self.render(manifest))
+        return target
+
+    @staticmethod
+    def render(manifest: WorkspaceManifest) -> str:
+        return yaml.safe_dump(
             manifest.model_dump(mode="json", exclude_none=True),
             allow_unicode=True,
             sort_keys=False,
         )
-        atomic_write(target, content)
-        return target

@@ -336,7 +336,37 @@ def test_move_renames_document_and_updates_references(workspace: Path) -> None:
     assert "(计划-新名称.md)" in reference.read_text(encoding="utf-8")
 
 
-def test_move_blocks_cross_domain_changes(workspace: Path) -> None:
+def test_move_same_domain_preserves_frontmatter_bytes(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    source = domain / "计划-保留注释.md"
+    original = (
+        "---\n"
+        "name: 保留注释 # inline comment\n"
+        "description: 发布计划\n"
+        "type: plan\n"
+        "project: example\n"
+        "domain: project-example\n"
+        "status: draft\n"
+        "lifecycle: proposed\n"
+        "created: 2026-09-15\n"
+        "updated: '2026-09-15'\n"
+        "tags: []\n"
+        "---\n"
+        "# 保留注释\n"
+    )
+    source.write_text(original, encoding="utf-8")
+
+    result = service(workspace).move(
+        "mywork/【Example】文档中心/计划-保留注释.md",
+        "mywork/【Example】文档中心/计划-仍保留注释.md",
+        confirm=True,
+    )
+
+    assert result.status == "moved"
+    assert (domain / "计划-仍保留注释.md").read_text(encoding="utf-8") == original
+
+
+def test_move_crosses_domains_and_updates_structural_frontmatter(workspace: Path) -> None:
     project_domain(workspace)
     other = workspace / "mywork" / "另一个领域"
     other.mkdir()
@@ -356,10 +386,103 @@ def test_move_blocks_cross_domain_changes(workspace: Path) -> None:
         )
     )
 
-    result = document.move(source, "mywork/另一个领域/计划-旧名称.md", confirm=True)
+    target = "mywork/另一个领域/计划-旧名称.md"
+    preview = document.move(source, target)
+    result = document.move(source, target, expected_hash=preview.expected_hash, confirm=True)
+
+    assert result.status == "moved"
+    assert result.source_domain == "project-example"
+    assert result.target_domain == "other"
+    assert result.profile == "base"
+    assert result.frontmatter_changes["domain"] == "other"
+    assert result.frontmatter_changes["project"] is None
+    assert not (workspace / source).exists()
+    moved = parse_document((workspace / target).read_text(encoding="utf-8"))
+    assert moved.frontmatter["domain"] == "other"
+    assert "project" not in moved.frontmatter
+    assert [item.scope for item in result.follow_up] == [
+        "mywork/【Example】文档中心",
+        "mywork/另一个领域",
+        "mywork/【Example】文档中心",
+        "mywork/另一个领域",
+    ]
+
+
+def test_move_cross_domain_returns_all_missing_target_profile_fields(workspace: Path) -> None:
+    project_domain(workspace)
+    other = workspace / "mywork" / "另一个领域"
+    other.mkdir()
+    (other / "_领域.md").write_text(
+        "---\nname: Other\ndomain_id: other\ndomain_type: work-domain\n"
+        "governance: work-docs\nmoc: MOC-Other\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    source = other / "计划-迁入项目.md"
+    source.write_text(
+        "---\nname: 迁入项目\ndescription: 示例\ntype: plan\n"
+        "domain: other\nstatus: draft\ncreated: 2026-09-15\nupdated: 2026-09-15\n"
+        "tags: []\n---\n# 迁入项目\n",
+        encoding="utf-8",
+    )
+    document = service(workspace)
+    source_name = "mywork/另一个领域/计划-迁入项目.md"
+    target_name = "mywork/【Example】文档中心/计划-迁入项目.md"
+
+    blocked = document.move(source_name, target_name, confirm=True)
+
+    assert blocked.status == "needs-input"
+    assert blocked.missing_fields == ["lifecycle"]
+    assert blocked.issues[0]["allowed"] == [
+        "maintained",
+        "proposed",
+        "completed",
+        "archived",
+    ]
+    assert source.is_file()
+
+    moved = document.move(
+        source_name,
+        target_name,
+        values={"lifecycle": "proposed"},
+        expected_hash=blocked.expected_hash,
+        confirm=True,
+    )
+
+    assert moved.status == "moved"
+    parsed = parse_document((workspace / target_name).read_text(encoding="utf-8"))
+    assert parsed.frontmatter["project"] == "example"
+    assert parsed.frontmatter["domain"] == "project-example"
+    assert parsed.frontmatter["lifecycle"] == "proposed"
+
+
+def test_move_rejects_new_field_outside_target_profile(workspace: Path) -> None:
+    project_domain(workspace)
+    source = "mywork/【Example】文档中心/计划-未知字段.md"
+    document = service(workspace)
+    document.apply(
+        DocumentApplyRequest(
+            path=source,
+            document_type="plan",
+            values={"description": "发布计划", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    result = document.move(
+        source,
+        "mywork/【Example】文档中心/计划-新名称.md",
+        values={"invented": "value"},
+        confirm=True,
+    )
 
     assert result.status == "blocked"
-    assert result.issues[0]["code"] == "cross-domain-move"
+    assert result.issues == [
+        {
+            "code": "frontmatter-field-not-allowed",
+            "path": "mywork/【Example】文档中心/计划-新名称.md",
+            "field": "invented",
+        }
+    ]
     assert (workspace / source).is_file()
 
 

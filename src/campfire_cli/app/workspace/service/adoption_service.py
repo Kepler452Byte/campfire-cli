@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
+from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
 from campfire_cli.app.workspace.repository.manifest_repository import (
     WorkspaceManifestRepository,
 )
@@ -23,7 +23,13 @@ from campfire_cli.app.workspace.service.structure_service import (
 )
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import atomic_write, safe_path, workspace_write_lock
+from campfire_cli.common.filesystem import (
+    FileChangeExecutor,
+    FileChangeSet,
+    FileWrite,
+    PathMove,
+    safe_path,
+)
 from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -38,15 +44,14 @@ class AdoptionService:
         settings: WorkspaceSettings,
         repository: AdoptionRepositoryProtocol,
         workspace_repository: WorkspaceRepositoryProtocol,
-        maintenance: MaintenanceService,
         manifest_repository: WorkspaceManifestRepository | None = None,
     ) -> None:
         self._settings = settings
         self._repository = repository
         self._workspaces = workspace_repository
-        self._maintenance = maintenance
         self._manifests = manifest_repository or WorkspaceManifestRepository()
         self._domains = DomainService(settings.vault_root, settings.state_root)
+        self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def inventory(self, batch: str, source: Path, confirm: bool = False) -> AdoptionResult:
         root = source.expanduser().resolve()
@@ -197,49 +202,57 @@ class AdoptionService:
             result = self._result(state, "blocked" if issues else "ready")
             result.issues = issues
             return result
-        with workspace_write_lock(self._settings.state_root):
-            locked_issues = self._verify_files(source, state.inventory)
-            if locked_issues:
-                result = self._result(state, "blocked")
-                result.issues = locked_issues
-                return result
-            if target != source:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                source.rename(target)
-            domain = Domain(
-                id=state.plan.domain_id,
-                name=state.plan.name,
-                path=target,
-                space_id=state.plan.space_id,
-                type=state.plan.domain_type,
-                governance=state.plan.governance,
-                moc=f"_总览/MOC-{state.plan.name}总览",
-                parent_domain=state.plan.parent_domain,
-                project_id=state.plan.project_id,
-            )
-            atomic_write(target / DOMAIN_MARKER, DomainService.render_marker(domain))
-            atomic_write(target / f"{domain.moc}.md", DomainService.render_moc(domain))
-            if state.plan.project_id:
-                project = self._workspaces.get_project(state.plan.project_id)
-                if project:
-                    self._workspaces.save_project(
-                        project.model_copy(update={"document_domain": state.plan.target_path})
-                    )
-                    self._sync_manifest()
-            state.status = "applied"
-            self._repository.save(state)
-        sync = self._maintenance.sync(scope=state.plan.target_path)
-        health = self._maintenance.check(scope=state.plan.target_path, summary=True)
+        domain = Domain(
+            id=state.plan.domain_id,
+            name=state.plan.name,
+            path=target,
+            space_id=state.plan.space_id,
+            type=state.plan.domain_type,
+            governance=state.plan.governance,
+            moc=f"_总览/MOC-{state.plan.name}总览",
+            parent_domain=state.plan.parent_domain,
+            project_id=state.plan.project_id,
+        )
+        writes = [
+            FileWrite(target / DOMAIN_MARKER, DomainService.render_marker(domain)),
+            FileWrite(target / f"{domain.moc}.md", DomainService.render_moc(domain)),
+        ]
+        expected = {source / item.path: item.sha256 for item in state.inventory}
+        expected[target / DOMAIN_MARKER] = None
+        expected[target / f"{domain.moc}.md"] = None
+        moves = (PathMove(source, target),) if target != source else ()
+        original_project = None
+        updated_project = None
+        if state.plan.project_id:
+            original_project = self._workspaces.get_project(state.plan.project_id)
+            if original_project:
+                updated_project = original_project.model_copy(
+                    update={"document_domain": state.plan.target_path}
+                )
+                manifest_path, manifest_content = self._manifest_update(updated_project)
+                writes.append(FileWrite(manifest_path, manifest_content))
+                expected[manifest_path] = file_sha256(manifest_path)
+        original_state = state.model_copy(deep=True)
+        state.status = "applied"
+        try:
+            with self._executor.transaction(
+                FileChangeSet(
+                    writes=tuple(writes),
+                    moves=moves,
+                    label="workspace adoption",
+                    expected=expected,
+                )
+            ):
+                if updated_project:
+                    self._workspaces.save_project(updated_project)
+                self._repository.save(state)
+        except Exception:
+            if original_project:
+                self._workspaces.save_project(original_project)
+            self._repository.save(original_state)
+            raise
         result = self._result(state, "applied")
         result.write_performed = True
-        result.operations = [
-            {str(key): str(value) for key, value in operation.items()}
-            for operation in sync.operations
-        ]
-        result.issues = [issue.model_dump(mode="json") for issue in health.issues]
-        if sync.status == "blocked":
-            result.status = "needs-review"
-            result.issues.extend(issue.model_dump(mode="json") for issue in sync.issues)
         return result
 
     def verify(self, batch: str) -> AdoptionResult:
@@ -323,17 +336,21 @@ class AdoptionService:
                 issues.append({"code": "source-hash-changed", "path": item.path})
         return issues
 
-    def _sync_manifest(self) -> None:
+    def _manifest_update(self, updated_project) -> tuple[Path, str]:
         manifest = self._manifests.load(self._settings.vault_root)
         if manifest is None:
             raise ConfigurationError("Workspace 缺少 .campfire.yaml")
+        projects = self._workspaces.list_projects(self._settings.workspace_id)
+        projects = [
+            updated_project if project.id == updated_project.id else project for project in projects
+        ]
         manifest.projects = [
             ManifestProject.model_validate(
                 project.model_dump(exclude={"workspace_id", "local_path"})
             )
-            for project in self._workspaces.list_projects(self._settings.workspace_id)
+            for project in projects
         ]
-        self._manifests.save(self._settings.vault_root, manifest)
+        return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
     def _result(
         self,
@@ -351,6 +368,11 @@ class AdoptionService:
             target_path=state.plan.target_path if state.plan else None,
             item_count=len(state.inventory),
             operations=operations or [],
+            follow_up=(
+                maintenance_follow_up(self._settings.workspace_id, [state.plan.target_path])
+                if state.plan
+                else []
+            ),
         )
 
     def _blocked(self, state: AdoptionBatchState, code: str, path: str) -> AdoptionResult:

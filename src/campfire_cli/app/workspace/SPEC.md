@@ -10,7 +10,9 @@
 
 `workspace config check` 统一校验包内产品默认值和当前 Workspace 的有效治理契约，包括目录与 Space 冲突、文档类型前缀、Profile 引用和继承、归档策略以及托管资源列表。
 
-`workspace restructure` 负责一次性改变已有 Workspace 的物理结构：冻结范围、生成带内容哈希的审批计划、执行跨领域移动或改名、更新引用并验证迁移事实。纯移动不得重写文档内容；`verify` 只验证本批次 source/target 结果，文档格式合规由 Maintenance 独立检查。该能力属于 Workspace Service，不设独立 App，也不用于日常增量维护。
+`workspace restructure` 负责一次性改变已有 Workspace 的批量文档或 Domain 物理结构：冻结范围、生成带内容哈希的审批计划、执行批量跨领域移动或改名、更新引用并验证迁移事实。单篇文档移动属于 `document move`。纯移动不得重写文档内容；`verify` 只验证本批次 source/target 结果，文档格式合规由 Maintenance 独立检查。该能力属于 Workspace Service，不设独立 App，也不用于日常增量维护。
+
+Adoption、文档批量 Restructure 与 Domain Restructure 均使用共享 ChangeSet Executor 提交文件写入和路径移动，并在协调的 Repository 写入失败时补偿恢复。Workspace Service 不调用 Maintenance Service；成功结果以轻量 `follow_up` 返回 scoped `maintenance sync/check`。
 
 Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space 并继承 governance。`_收件箱` 与 `治理视图` 是系统区域，不是 Space。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
 

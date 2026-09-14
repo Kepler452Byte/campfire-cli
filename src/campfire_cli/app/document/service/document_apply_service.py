@@ -4,10 +4,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
 from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
-    DocumentFollowUp,
 )
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
@@ -59,9 +59,7 @@ class DocumentApplyService:
         if expected_name != path.name:
             raise ConfigurationError(f"文件名应为：{expected_name}")
         if request.values.get("type", document_type) != document_type:
-            raise GovernanceBlockedError(
-                "--set type 与有效文档类型不一致；请使用专用重构命令"
-            )
+            raise GovernanceBlockedError("--set type 与有效文档类型不一致；请使用专用重构命令")
 
         today = date.today().isoformat()
         frontmatter = dict(parsed.frontmatter)
@@ -226,16 +224,5 @@ class DocumentApplyService:
             expected_hash=expected_hash,
             issues=issues,
             missing_fields=missing_fields or [],
-            follow_up=[
-                DocumentFollowUp(
-                    command="maintenance sync",
-                    workspace=self._settings.workspace_id,
-                    scope=scope,
-                ),
-                DocumentFollowUp(
-                    command="maintenance check",
-                    workspace=self._settings.workspace_id,
-                    scope=scope,
-                ),
-            ],
+            follow_up=maintenance_follow_up(self._settings.workspace_id, [scope]),
         )

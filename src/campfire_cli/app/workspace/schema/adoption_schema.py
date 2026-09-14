@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from campfire_cli.app.base.schema.operation_schema import CommandFollowUp
+
 
 class AdoptionInventoryItem(BaseModel):
     path: str
@@ -44,4 +46,5 @@ class AdoptionResult(BaseModel):
     copied_count: int = 0
     operations: list[dict[str, str]] = Field(default_factory=list)
     issues: list[dict[str, Any]] = Field(default_factory=list)
+    follow_up: list[CommandFollowUp] = Field(default_factory=list)
     write_performed: bool = False

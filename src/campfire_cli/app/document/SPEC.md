@@ -39,7 +39,7 @@ document/
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。
 - `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile 和具体问题。
 - `apply`：根据目标路径和类型解析 Profile，不存在时生成文档，已存在时仅应用显式补丁；先完整渲染并校验，追加 `--confirm` 后原子写入。
-- `move`：在同一 Domain 内移动或改名一篇文档，更新可确定解析的 Wiki、Markdown 和路径引用；跨 Domain 交给 Workspace Restructure。
+- `move`：在任意已声明 Domain 之间移动或改名一篇文档，按目标 Profile 对齐可确定的 `domain`/`project` 归属，并更新可确定解析的 Wiki、Markdown 和路径引用。目标 Profile 缺少业务字段时返回 `needs-input`，不猜测。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。
 
 Document Service 可以被 Maintenance 和 Workspace Restructure 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。

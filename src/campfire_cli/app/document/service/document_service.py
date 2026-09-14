@@ -31,7 +31,7 @@ class DocumentService:
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
         self._application = DocumentApplyService(settings, self._rules, self._profiles)
-        self._movement = DocumentMoveService(settings, self._rules)
+        self._movement = DocumentMoveService(settings, self._rules, self._profiles)
 
     def check(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
@@ -139,10 +139,19 @@ class DocumentService:
         source: str,
         target: str,
         *,
+        values: dict[str, Any] | None = None,
+        unset_fields: tuple[str, ...] = (),
         expected_hash: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
-        return self._movement.move(source, target, expected_hash=expected_hash, confirm=confirm)
+        return self._movement.move(
+            source,
+            target,
+            values=values or {},
+            unset_fields=unset_fields,
+            expected_hash=expected_hash,
+            confirm=confirm,
+        )
 
     def _document_path(self, relative_path: str) -> Path:
         path = safe_path(self._settings.vault_root, relative_path)

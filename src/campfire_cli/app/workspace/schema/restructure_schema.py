@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from campfire_cli.app.base.schema.operation_schema import CommandFollowUp
+
 
 class InventoryItem(BaseModel):
     path: str
@@ -62,3 +64,4 @@ class DomainRestructureResult(BaseModel):
     affected_projects: list[str] = Field(default_factory=list)
     write_performed: bool = False
     issues: list[dict[str, Any]] = Field(default_factory=list)
+    follow_up: list[CommandFollowUp] = Field(default_factory=list)

@@ -77,6 +77,21 @@ class SqliteWorkspaceRepository:
             row.status = project.status
         return operation
 
+    def save_projects(self, projects: list[ProjectEntry]) -> None:
+        with open_session(self._engine) as session, session.begin():
+            for project in projects:
+                row = session.get(Project, project.id)
+                if row is None:
+                    row = Project(id=project.id, workspace_id=project.workspace_id)
+                    session.add(row)
+                row.workspace_id = project.workspace_id
+                row.name = project.name
+                row.document_domain = project.document_domain
+                row.git_remote_url = project.git_remote_url
+                row.local_path = project.local_path
+                row.default_branch = project.default_branch
+                row.status = project.status
+
     def replace_registry(self, registry: WorkspaceRegistry, projects: list[ProjectEntry]) -> None:
         with open_session(self._engine) as session, session.begin():
             session.execute(delete(Project))

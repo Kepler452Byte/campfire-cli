@@ -23,11 +23,7 @@ from campfire_cli.app.workspace.schema.restructure_schema import (
 from campfire_cli.app.workspace.service.restructure_protocol import RestructureRepositoryProtocol
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import GovernanceBlockedError
-from campfire_cli.common.filesystem import atomic_write, safe_path
-from campfire_cli.common.governance import (
-    capture_snapshot,
-    optimistic_write_lock,
-)
+from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -44,6 +40,7 @@ class RestructureService:
         self._settings = settings
         self._repository = repository
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
+        self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def inventory(self, batch: str, scope: str) -> RestructureResult:
         root = safe_path(self._settings.vault_root, scope)
@@ -217,42 +214,11 @@ class RestructureService:
                 item_count=len(approved),
                 issues=issues,
             )
-        snapshot = capture_snapshot(
-            self._settings.vault_root,
-            [
-                *self._reference_files(),
-                *(safe_path(self._settings.vault_root, item.target) for item in approved),
-            ],
-        )
-        with optimistic_write_lock(
-            self._settings.state_root, snapshot, self._settings.vault_root
-        ) as changed:
-            if changed:
-                return RestructureResult(
-                    status="blocked",
-                    batch=batch,
-                    item_count=len(approved),
-                    issues=[{"code": "concurrent-change", "path": path} for path in changed],
-                )
-            locked_issues = self._preflight(plan, approved)
-            if locked_issues:
-                return RestructureResult(
-                    status="blocked",
-                    batch=batch,
-                    item_count=len(approved),
-                    issues=locked_issues,
-                )
-            stem_counts: dict[str, int] = {}
-            for path in self._reference_files():
-                if path.suffix.lower() == ".md":
-                    stem_counts[path.stem] = stem_counts.get(path.stem, 0) + 1
-            for item in approved:
-                source = safe_path(self._settings.vault_root, item.source)
-                self._apply_item(item, stem_counts.get(source.stem) == 1)
         result = RestructureResult(
             status="applied", batch=batch, item_count=len(approved), applied_count=len(approved)
         )
-        self._repository.save_execution(result)
+        with self._executor.transaction(self._build_change_set(approved)):
+            self._repository.save_execution(result)
         return result
 
     def verify(self, batch: str) -> RestructureResult:
@@ -314,46 +280,67 @@ class RestructureService:
             sources.add(source)
         return issues
 
-    def _apply_item(self, item: RestructurePlanItem, unique_source_stem: bool) -> None:
-        source = safe_path(self._settings.vault_root, item.source)
-        target = safe_path(self._settings.vault_root, item.target)
-        text = source.read_text(encoding="utf-8")
-        updated = text
-        if item.frontmatter or item.proposed_type:
-            parsed = parse_document(text)
-            frontmatter = dict(parsed.frontmatter)
-            frontmatter.update(item.frontmatter)
-            if item.proposed_type:
-                frontmatter["type"] = item.proposed_type
-            updated = render_document(
-                frontmatter,
-                parsed.body,
-                # 必须用目标文档有效 Profile 的字段序渲染；base 序缺少
-                # Profile 专属字段，会把新增字段甩到 frontmatter 末尾。
-                self._rules.field_order_for(frontmatter),
-            )
-        atomic_write(target, updated)
-        if target != source:
-            source.unlink()
-            self._rewrite_references(item.source, item.target, unique_source_stem)
+    def _build_change_set(self, items: list[RestructurePlanItem]) -> FileChangeSet:
+        references = self._reference_files()
+        original_contents = {path: path.read_text(encoding="utf-8") for path in references}
+        contents = dict(original_contents)
+        stem_counts: dict[str, int] = {}
+        for path in references:
+            if path.suffix.lower() == ".md":
+                stem_counts[path.stem] = stem_counts.get(path.stem, 0) + 1
 
-    def _rewrite_references(self, old: str, new: str, unique_source_stem: bool) -> None:
-        old_path = Path(old)
-        new_path = Path(new)
-        for reference in self._reference_files():
-            text = reference.read_text(encoding="utf-8")
-            updated = text.replace(old, new).replace(quote(old), quote(new))
-            if unique_source_stem and old_path.stem != new_path.stem:
-                updated = rewrite_wikilinks(updated, old_path.stem, new_path.stem)
-            if reference.suffix.lower() == ".md":
-                updated = rewrite_markdown_links(
-                    updated,
-                    reference,
-                    self._settings.vault_root / old_path,
-                    self._settings.vault_root / new_path,
+        for item in items:
+            source = safe_path(self._settings.vault_root, item.source)
+            target = safe_path(self._settings.vault_root, item.target)
+            updated = contents.pop(source)
+            if item.frontmatter or item.proposed_type:
+                parsed = parse_document(updated)
+                frontmatter = dict(parsed.frontmatter)
+                frontmatter.update(item.frontmatter)
+                if item.proposed_type:
+                    frontmatter["type"] = item.proposed_type
+                updated = render_document(
+                    frontmatter,
+                    parsed.body,
+                    self._rules.field_order_for(frontmatter, target),
                 )
-            if updated != text:
-                atomic_write(reference, updated)
+            contents[target] = updated
+
+            old_path = Path(item.source)
+            new_path = Path(item.target)
+            for reference, text in list(contents.items()):
+                rewritten = text.replace(item.source, item.target).replace(
+                    quote(item.source), quote(item.target)
+                )
+                if stem_counts.get(source.stem) == 1 and old_path.stem != new_path.stem:
+                    rewritten = rewrite_wikilinks(rewritten, old_path.stem, new_path.stem)
+                if reference.suffix.lower() == ".md":
+                    rewritten = rewrite_markdown_links(
+                        rewritten,
+                        reference,
+                        self._settings.vault_root / old_path,
+                        self._settings.vault_root / new_path,
+                    )
+                contents[reference] = rewritten
+
+        sources = {safe_path(self._settings.vault_root, item.source) for item in items}
+        writes = tuple(
+            FileWrite(path, content)
+            for path, content in contents.items()
+            if path not in original_contents or content != original_contents[path]
+        )
+        deletes = tuple(source for source in sources if source not in contents)
+        expected = {path: file_sha256(path) for path in references}
+        for item in items:
+            target = safe_path(self._settings.vault_root, item.target)
+            if target not in original_contents:
+                expected[target] = None
+        return FileChangeSet(
+            writes=writes,
+            deletes=deletes,
+            label="workspace restructure",
+            expected=expected,
+        )
 
     def _reference_files(self) -> list[Path]:
         ignored = {".git", ".campfire"}

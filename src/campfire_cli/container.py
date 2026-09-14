@@ -189,8 +189,7 @@ class AppContainer:
     @staticmethod
     def _inject_hints() -> list[dict[str, str]]:
         return [
-            {"path": str(path), "action": inject_agent_hint(path)}
-            for path in default_hint_paths()
+            {"path": str(path), "action": inject_agent_hint(path)} for path in default_hint_paths()
         ]
 
     @classmethod
@@ -233,13 +232,12 @@ class AppContainer:
         )
         restructure = RestructureService(settings, restructure_repository)
         domain_restructure = DomainRestructureService(
-            settings, SqliteWorkspaceRepository(governance_root), maintenance
+            settings, SqliteWorkspaceRepository(governance_root)
         )
         adoption = AdoptionService(
             settings,
             SqliteAdoptionRepository(session, resolution.workspace_id),
             SqliteWorkspaceRepository(governance_root),
-            maintenance,
         )
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())

@@ -75,6 +75,7 @@ def render_patch(
     values: dict[str, Any],
     body: str,
     field_order: list[str],
+    removed_fields: tuple[str, ...] = (),
 ) -> tuple[str, list[str]]:
     """Patch selected fields while preserving every untouched YAML block verbatim."""
     bounds = frontmatter_bounds(text)
@@ -85,6 +86,8 @@ def render_patch(
     if len(keys) != len(set(keys)):
         return text, ["frontmatter-duplicate-key"]
     patched = dict(blocks)
+    for key in removed_fields:
+        patched.pop(key, None)
     for key, value in values.items():
         patched[key] = (
             yaml.safe_dump({key: value}, allow_unicode=True, sort_keys=False).rstrip().splitlines()
