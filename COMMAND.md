@@ -28,7 +28,7 @@ campfire workspace restructure domain move --domain <id> --target-path <path> [-
 campfire workspace restructure domain rekey --domain <id> --new-id <id> [--confirm]
 campfire workspace project resolve --path "$PWD"
 campfire document apply --path <workspace-relative-markdown> --type <type> --set <field=value> [--body-file <path>] [--confirm]
-campfire document move --from <source> --to <target> [--expected-hash <sha256>] [--confirm]
+campfire document move --from <source> --to <target> [--set <field=value>] [--unset <field>] [--expected-hash <sha256>] [--confirm]
 campfire document inspect --path <file>
 campfire document type list
 campfire document profile list
@@ -47,4 +47,4 @@ campfire maintenance verify --plan <plan-id>
 campfire maintenance sync --scope <path> --dry-run
 ```
 
-Space、Domain、Project 的 `create`、存量对象的 `adopt`，以及文档移动、重构、归档写操作默认先预览；审查通过后才追加 `--confirm`。`adopt` 只接入已有对象，不移动已有内容。具体参数以对应命令的 `-h` 为准，避免在文档中维护第二份参数目录。
+Space、Domain、Project 的 `create`、存量对象的 `adopt`，以及文档移动、重构、归档写操作默认先预览；审查通过后才追加 `--confirm`。`document move` 可在任意已声明 Domain 之间移动单篇文档，自动对齐可确定的 `domain`/`project` 归属；目标 Profile 缺失语义字段时返回 `needs-input`，调用方通过 `--set`/`--unset` 显式补齐。`adopt` 只接入已有对象，不移动已有内容。具体参数以对应命令的 `-h` 为准，避免在文档中维护第二份参数目录。

@@ -105,7 +105,9 @@ Campfire 使用语义化版本：
 
 - SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
 - `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
-- 领域重构完成后必须刷新受影响 MOC，并重建当前 Workspace 索引。
+- 领域重构只提交当前结构意图，并返回 scoped `maintenance sync` 与
+  `maintenance check` follow-up；调用方必须显式执行它们以刷新受影响 MOC
+  和当前 Workspace 索引。
 - `workspace rebuild` 默认只预览；`--confirm` 后从 Manifest 和 Markdown 完整替换派生索引。
 
 ## Workspace 接管

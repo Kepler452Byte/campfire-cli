@@ -91,15 +91,41 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 | [Terraform plan/apply](https://developer.hashicorp.com/terraform/cli/commands/plan) | 写入前预览，可审查计划后再执行，执行前重新确认输入未漂移 | 不把所有日常写入都升级为持久计划；单文档原子修改保持轻量 |
 | [Git plumbing/porcelain](https://git-scm.com/book/en/v2/Git-Internals-Plumbing-and-Porcelain) | CLI 提供可组合、可脚本化的稳定原语，Skill 组合成人类可理解的 SOP | 不暴露仅供内部实现使用的隐藏命令，不要求用户理解底层存储 |
 
+本文中的“原子命令”特指**意图原子命令**，不是把实现拆成最小文件操作或最小函数。一个公共命令需同时满足三层原子性：
+
+| 层次 | 规范 | 例子 |
+| --- | --- | --- |
+| 语义原子性 | 一条命令只表达一个可以用一句话说清的用户意图 | `document move` 表达“在已声明 Domain 之间正确移动一篇文档” |
+| 一致性原子性 | 为保持该意图不变量而必须一起变更的事实，属于同一个变更集；整体成功或恢复到执行前 | 移动文档时同步修复可确定解析的引用 |
+| 可组合原子性 | 不相关的派生治理不隐式执行；命令用结构化 `follow_up` 声明后续步骤，由 Skill 决定组合顺序 | `document apply` 不自动运行 `maintenance sync/check` |
+
+命令副作用按下列边界分类：
+
+- **必须纳入当前事务**：不执行就会让当前意图产生破损状态的变更，例如结构迁移时的 Domain 声明、Project 归属和可移植 Manifest 对齐。
+- **必须显式返回**：可从原始事实重建的派生结果，例如 MOC、关系页、索引和治理报告；这些作为 `follow_up` 由 Skill 显式执行。
+- **禁止捎带**：与当前意图无关的全 Workspace 格式化、归档、结构重构或其他写操作。
+
+“一次改多个文件”不等于不原子；“一次只改一个字段”也不自动等于边界正确。评审新命令时必须逐项回答：
+
+1. 用户意图能否用一句话准确表达？
+2. 对象和作用域是否显式？
+3. 所有被修改的事实是否都是维持该意图不变量所必需？
+4. 预览和 JSON 输出能否完整说明变更、阻断和后续操作？
+5. 重复执行是否幂等，或至少以稳定结果明确拒绝？
+6. 预览后的并发变更是否会被锁与快照复核阻断？
+7. 可重建的派生工作是否作为可组合 `follow_up` 返回？
+
 命令设计遵循以下约束：
 
 1. **对象域优先**：公共入口采用 `campfire <object-domain> <verb>`，例如 `document apply`、`maintenance check`；动词在所属业务对象内保持单义，不为同一行为保留多个别名。
-2. **原子命令无隐藏副作用**：`document apply` 只创建或更新目标文档，`document move` 只完成同一 Domain 内的文档事务；MOC、关系页和索引治理由 Skill 显式编排 `maintenance sync/check`。
+2. **意图原子、派生显式**：`document apply` 只创建或更新目标文档，`document move` 原子完成单文档移动、目标 Profile 对齐和确定性引用修复；MOC、关系页和索引治理由 Skill 显式编排 `maintenance sync/check`。
 3. **契约声明式，变更显式**：Profile 是字段、类型、枚举、顺序和条件必填的 SSOT。Agent 提交业务值，CLI 解析有效 Profile 并拒绝猜测；已有文档只修改明确给出的字段或正文操作。
 4. **写入先证明安全**：写命令默认预览，显式确认后才提交；提交时在锁内复核快照或期望哈希，多文件变更作为一个 ChangeSet 执行，失败回滚，避免静默覆盖和部分写入。
 5. **人类与 Agent 共用一个契约**：命令和结果只有一套语义。JSON 状态、issues、missing fields 与 follow-up 供 Agent 稳定消费，`tree` 和分层 `-h` 供人类与 Agent 渐进发现，不维护第二套参数目录。
 6. **语义与机制分层**：人类决定高风险取舍，Agent 理解正文和业务语义，Skill 规定加载时机、事实门禁与 SOP，CLI 只执行可确定验证的治理机制。歧义进入 Decision，不为“自动化成功”而猜测。
 7. **聚合入口是少数例外**：`setup` 和 `upgrade` 可以编排多个服务，因为它们表达完整安装生命周期；日常内容治理保持原子能力，避免重新出现 `maintenance run` 一类不可审查的聚合入口。
+
+横切关注点与业务 SOP 不使用同一种复用手段。哈希复核、写锁、原子替换和失败恢复由显式 ChangeSet Executor 复用；`apply → sync → check` 等业务顺序由 Skill 明文编排。不为了复用 Maintenance 而引入 AOP 切面、命令总线、全局钩子或隐式中间件。
 
 因此，`document apply` 的准确含义是“对一个 Markdown 文档应用经 Profile 校验的显式意图”，不是“把完整声明持续调谐到某个服务端状态”。用户或 Agent 可以直接 edit 已有正文；无论通过 apply 还是 edit 写入，跨文档派生结果都由后续显式 Maintenance 收敛。
 
@@ -155,7 +181,7 @@ SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不�
 
 ### 存量文件夹接管
 
-Adoption 是首次接管边界，不属于日常 Maintenance。外部目录只读并复制到 `_收件箱/待接管/<batch>`，Vault 内目录原地冻结事实；两者随后通过同一份计划建立一个粗粒度 Domain。CLI 负责文件清单、哈希、软链接与冲突保护、声明、MOC、Project/Manifest 联动和索引；Agent 负责阅读正文、选择目标 Space/Domain，并在接管后继续生成格式治理或子领域重构计划。
+Adoption 是首次接管边界，不属于日常 Maintenance。外部目录只读并复制到 `_收件箱/待接管/<batch>`，Vault 内目录原地冻结事实；两者随后通过同一份计划建立一个粗粒度 Domain。CLI 负责文件清单、哈希、软链接与冲突保护、声明、初始 MOC 和 Project/Manifest 联动；Agent 负责阅读正文、选择目标 Space/Domain，并按 `follow_up` 显式刷新派生视图与索引。
 
 ## 6. 本地 Web 工作台
 
