@@ -16,8 +16,8 @@ from campfire_cli.app.document.service.document_profile_service import (
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
-from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 profile_cli = typer.Typer(
     help="查看和解析文档 Profile 契约",

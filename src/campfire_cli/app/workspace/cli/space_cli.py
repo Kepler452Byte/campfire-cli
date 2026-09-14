@@ -8,8 +8,8 @@ from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
-from campfire_cli.config.settings import campfire_home
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.settings import campfire_home
 
 space_cli = typer.Typer(
     help="管理 Workspace 顶级内容空间", context_settings={"help_option_names": ["-h", "--help"]}

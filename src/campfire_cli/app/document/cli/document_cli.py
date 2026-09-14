@@ -13,8 +13,8 @@ from campfire_cli.app.document.service.document_service import DocumentService
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
-from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 document_cli = typer.Typer(
     help="创建、检查和维护文档及其规则",

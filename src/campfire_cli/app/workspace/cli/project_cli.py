@@ -8,8 +8,8 @@ from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectUpsertRequest
 from campfire_cli.app.workspace.service.project_service import ProjectService
-from campfire_cli.config.settings import campfire_home
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.settings import campfire_home
 
 project_cli = typer.Typer(
     help="注册代码项目及其 Workspace 文档领域",

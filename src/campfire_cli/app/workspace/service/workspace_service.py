@@ -26,8 +26,8 @@ from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
-from campfire_cli.config.defaults import config_section
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.defaults import config_section
 
 
 class WorkspaceService:

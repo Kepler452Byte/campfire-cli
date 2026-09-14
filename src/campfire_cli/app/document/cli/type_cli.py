@@ -14,8 +14,8 @@ from campfire_cli.app.document.service.document_type_service import DocumentType
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
-from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 type_cli = typer.Typer(
     help="查看文档类型与文件名前缀契约",

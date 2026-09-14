@@ -32,6 +32,7 @@ from campfire_cli.app.workspace.service.workspace_service import WorkspaceServic
 from campfire_cli.common.agent_hints import default_hint_paths, inject_agent_hint
 from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
 from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.common.package_version import (
     default_align_command,
     detect_install_method,
@@ -41,7 +42,6 @@ from campfire_cli.common.package_version import (
 )
 from campfire_cli.config.defaults import effective_config
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
-from campfire_cli.common.filesystem.cwd import safe_cwd
 
 PACKAGE_NAME = "campfire-cli"
 

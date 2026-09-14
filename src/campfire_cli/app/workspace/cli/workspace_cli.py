@@ -11,8 +11,8 @@ from campfire_cli.app.workspace.repository.workspace_repository import SqliteWor
 from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceCreateRequest
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
-from campfire_cli.config.settings import campfire_home
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.config.settings import campfire_home
 
 workspace_cli = typer.Typer(
     help="注册、初始化和解析多个 Workspace",
