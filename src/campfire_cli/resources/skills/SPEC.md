@@ -6,13 +6,14 @@
 
 ```text
 conversation-router → context-bootstrap → document-capture / task-management
-                    → document upsert → workspace-maintenance
+                    → document apply / edit → workspace-maintenance
                     → workspace-restructure / kanban-board 等专项流程
 ```
 
 - Skill 负责加载时机、事实门禁、业务语义和工作流程。
 - CLI Profile 负责字段、枚举、类型、顺序和条件必填；Skill 不复制这些契约。
-- 创建正式文档或修改 Frontmatter 使用 `document upsert`。正文局部编辑可用 edit，写后必须验证。
+- 创建正式文档或修改 Frontmatter 使用 `document apply`。正文局部编辑可用 edit。
+- 写入命令保持原子性；Skill 在写后显式编排 scoped `maintenance sync` 与 `check`。
 
 ## 新增或修改 Skill checklist
 

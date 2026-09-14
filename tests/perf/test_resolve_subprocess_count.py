@@ -31,7 +31,9 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
         or subprocess.CompletedProcess(command, 1, stdout="", stderr=""),
     )
     runner = CliRunner()
-    bootstrapped = runner.invoke(app, ["setup", "--workspace", str(workspace), "--default"])
+    bootstrapped = runner.invoke(
+        app, ["setup", "--workspace", str(workspace), "--id", "test", "--default"]
+    )
     assert bootstrapped.exit_code == 0, bootstrapped.output
     for index in range(5):
         project_dir = tmp_path_factory.mktemp(f"project-{index}")
@@ -40,7 +42,7 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
             [
                 "workspace",
                 "project",
-                "add",
+                "adopt",
                 "--id",
                 f"perf-project-{index}",
                 "--workspace",

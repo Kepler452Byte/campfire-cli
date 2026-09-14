@@ -138,6 +138,17 @@ class WorkspaceConfigService:
                 profile.get("field_order", []),
                 issues,
             )
+            value_types = profile.get("value_types", {})
+            if not isinstance(value_types, dict) or any(
+                not isinstance(field, str) or expected not in {"string", "boolean"}
+                for field, expected in value_types.items()
+            ):
+                self._issue(
+                    issues,
+                    "frontmatter_schema",
+                    f"profiles.{name}.value_types",
+                    "invalid-value-types",
+                )
         resolver = config.get("resolver", {})
         referenced = [resolver.get("fallback")]
         referenced.extend(resolver.get("profile_by_type", {}).values())

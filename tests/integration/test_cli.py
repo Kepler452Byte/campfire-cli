@@ -44,7 +44,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["base", "-h"],
         ["workspace", "-h"],
         ["workspace", "project", "-h"],
-        ["workspace", "project", "add", "-h"],
+        ["workspace", "project", "adopt", "-h"],
         ["workspace", "project", "create", "-h"],
         ["workspace", "project", "resolve", "-h"],
         ["workspace", "project", "check", "-h"],
@@ -68,7 +68,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["document", "check", "-h"],
         ["document", "inspect", "-h"],
         ["document", "format", "-h"],
-        ["document", "upsert", "-h"],
+        ["document", "apply", "-h"],
+        ["document", "move", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -98,13 +99,39 @@ def test_project_is_not_exposed_as_a_top_level_command() -> None:
     assert result.exit_code != 0
 
 
-def test_document_upsert_cli_creates_checks_and_syncs(workspace: Path) -> None:
+def test_removed_compatibility_commands_are_not_registered() -> None:
+    commands = [
+        ["document", "upsert", "-h"],
+        ["workspace", "add", "-h"],
+        ["workspace", "attach", "-h"],
+        ["workspace", "project", "add", "-h"],
+        ["maintenance", "run", "-h"],
+        ["update", "-h"],
+    ]
+    for command in commands:
+        assert runner.invoke(app, command).exit_code != 0, command
+
+
+def test_document_apply_cli_creates_valid_document_without_hidden_sync(workspace: Path) -> None:
     domain_args = [
-        "workspace", "domain", "create",
-        "--id", "project-example", "--name", "Example",
-        "--path", "mywork/【Example】文档中心", "--space", "work",
-        "--type", "project-domain", "--governance", "project-docs",
-        "--project", "example", "--confirm",
+        "workspace",
+        "domain",
+        "create",
+        "--id",
+        "project-example",
+        "--name",
+        "Example",
+        "--path",
+        "mywork/【Example】文档中心",
+        "--space",
+        "work",
+        "--type",
+        "project-domain",
+        "--governance",
+        "project-docs",
+        "--project",
+        "example",
+        "--confirm",
     ]
     assert runner.invoke(app, domain_args).exit_code == 0
     body = workspace / "body.md"
@@ -113,17 +140,39 @@ def test_document_upsert_cli_creates_checks_and_syncs(workspace: Path) -> None:
     result = runner.invoke(
         app,
         [
-            "document", "upsert", "--path", relative, "--type", "plan",
-            "--set", "description=发布计划", "--set", "lifecycle=proposed",
-            "--body-file", str(body), "--confirm",
+            "document",
+            "apply",
+            "--path",
+            relative,
+            "--type",
+            "plan",
+            "--set",
+            "description=发布计划",
+            "--set",
+            "lifecycle=proposed",
+            "--body-file",
+            str(body),
+            "--confirm",
         ],
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["status"] == "applied"
     assert payload["action"] == "create"
-    assert payload["validation"]["status"] == "ok"
-    assert payload["sync"]["status"] == "synced"
+    assert payload["follow_up"] == [
+        {
+            "command": "maintenance sync",
+            "workspace": "test",
+            "scope": "mywork/【Example】文档中心",
+        },
+        {
+            "command": "maintenance check",
+            "workspace": "test",
+            "scope": "mywork/【Example】文档中心",
+        },
+    ]
+    checked = runner.invoke(app, ["document", "check", "--path", relative])
+    assert json.loads(checked.output)["status"] == "ok"
 
 
 def test_setup_creates_manifest_without_overwriting_user_config(
@@ -134,12 +183,10 @@ def test_setup_creates_manifest_without_overwriting_user_config(
     existing = campfire_home / "config.yml"
     existing.parent.mkdir(parents=True)
     existing.write_text("version: 1\ngovernance:\n  custom: true\n", encoding="utf-8")
-    registered = runner.invoke(
+    result = runner.invoke(
         app,
-        ["workspace", "add", "--id", "new-workspace", "--path", str(tmp_path), "--default"],
+        ["setup", "--workspace", str(tmp_path), "--id", "new-workspace", "--default"],
     )
-    assert registered.exit_code == 0, registered.output
-    result = runner.invoke(app, ["setup", "--workspace", str(tmp_path), "--default"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["status"] == "initialized"
@@ -149,6 +196,19 @@ def test_setup_creates_manifest_without_overwriting_user_config(
     assert (tmp_path / ".campfire.yaml").is_file()
     resolved = runner.invoke(app, ["workspace", "resolve", "--workspace", "new-workspace"])
     assert json.loads(resolved.output)["workspace"] == str(tmp_path)
+
+
+def test_setup_requires_id_when_existing_workspace_has_no_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "campfire-home"))
+    workspace = tmp_path / "vault"
+    workspace.mkdir()
+
+    result = runner.invoke(app, ["setup", "--workspace", str(workspace)])
+
+    assert result.exit_code == 2
+    assert "首次 setup 必须提供 --id" in result.output
 
 
 def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local(
@@ -172,9 +232,7 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
 
     monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-a"))
     assert (
-        runner.invoke(
-            app, ["workspace", "add", "--id", "personal", "--path", str(workspace)]
-        ).exit_code
+        runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "personal"]).exit_code
         == 0
     )
     assert (
@@ -183,7 +241,7 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
             [
                 "workspace",
                 "project",
-                "add",
+                "adopt",
                 "--id",
                 "example",
                 "--workspace",
@@ -224,8 +282,8 @@ def test_multiple_registered_workspaces_can_be_selected(tmp_path: Path, monkeypa
     right = tmp_path / "right"
     left.mkdir()
     right.mkdir()
-    runner.invoke(app, ["workspace", "add", "--id", "left", "--path", str(left), "--default"])
-    runner.invoke(app, ["workspace", "add", "--id", "right", "--path", str(right)])
+    runner.invoke(app, ["setup", "--workspace", str(left), "--id", "left", "--default"])
+    runner.invoke(app, ["setup", "--workspace", str(right), "--id", "right"])
     listed = json.loads(runner.invoke(app, ["workspace", "list"]).output)
     assert listed["default_workspace"] == "left"
     assert set(listed["workspaces"]) == {"left", "right"}
@@ -434,6 +492,15 @@ def test_workspace_config_check_validates_effective_contracts(tmp_path: Path, mo
     assert payload["status"] == "issues-found"
     assert any(item["code"] == "duplicate-value" for item in payload["issues"])
 
+    path.write_text(
+        "version: 1\nfrontmatter_schema:\n  profiles:\n    task:\n"
+        "      value_types:\n        requires_human: number\n",
+        encoding="utf-8",
+    )
+    invalid_types = runner.invoke(app, ["workspace", "config", "check"])
+    type_payload = json.loads(invalid_types.output)
+    assert any(item["code"] == "invalid-value-types" for item in type_payload["issues"])
+
 
 def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None:
     campfire_home = tmp_path / "campfire-home"
@@ -454,7 +521,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     )
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     added_workspace = runner.invoke(
-        app, ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"]
+        app, ["setup", "--workspace", str(workspace), "--id", "personal", "--default"]
     )
     assert added_workspace.exit_code == 0, added_workspace.output
     added = runner.invoke(
@@ -462,7 +529,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
         [
             "workspace",
             "project",
-            "add",
+            "adopt",
             "--id",
             "example",
             "--workspace",
@@ -526,8 +593,7 @@ def test_project_create_previews_then_initializes_document_domain(
     repository.mkdir()
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     added = runner.invoke(
-        app,
-        ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"],
+        app, ["setup", "--workspace", str(workspace), "--id", "personal", "--default"]
     )
     assert added.exit_code == 0, added.output
     arguments = [
@@ -580,10 +646,7 @@ def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, m
     for workspace_id in ("left", "right"):
         root = tmp_path / workspace_id
         root.mkdir()
-        added = runner.invoke(
-            app,
-            ["workspace", "add", "--id", workspace_id, "--path", str(root)],
-        )
+        added = runner.invoke(app, ["setup", "--workspace", str(root), "--id", workspace_id])
         assert added.exit_code == 0, added.output
         note = root / "mynote" / "知识-相同路径.md"
         note.parent.mkdir()
@@ -1582,7 +1645,9 @@ def test_sync_reports_bad_metadata_without_blocking_generated_views(workspace: P
     domain = _create_domain(workspace, "Project")
     (domain / "需求-旧文档.md").write_text("# 缺少元数据\n", encoding="utf-8")
 
-    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "run"])
+    synced = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "sync"])
+    assert synced.exit_code == 0, synced.output
+    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
 
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
@@ -1616,6 +1681,7 @@ def test_scoped_sync_ignores_structural_issue_outside_scope(workspace: Path) -> 
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
     assert payload["status"] == "synced"
+    assert payload["scope"] == "mywork/Healthy"
     assert payload["write_performed"] is True
     assert "记录-进展" in (healthy / "MOC-Healthy.md").read_text(encoding="utf-8")
 
@@ -1694,7 +1760,7 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
         [
             "workspace",
             "project",
-            "add",
+            "adopt",
             "--id",
             "example",
             "--workspace",
@@ -2087,9 +2153,7 @@ def test_project_resolve_does_not_match_by_shared_remote_alone(
         capture_output=True,
         text=True,
     )
-    runner.invoke(
-        app, ["workspace", "add", "--id", "personal", "--path", str(workspace), "--default"]
-    )
+    runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "personal", "--default"])
     registered_app = monorepo / "apps" / "registered-app"
     registered_app.mkdir(parents=True)
     domain_dir = workspace / "mywork" / "example"
@@ -2099,7 +2163,7 @@ def test_project_resolve_does_not_match_by_shared_remote_alone(
         [
             "workspace",
             "project",
-            "add",
+            "adopt",
             "--id",
             "registered-app",
             "--workspace",
@@ -2141,7 +2205,7 @@ def test_setup_injects_agent_hints_idempotently(
     monkeypatch.setenv(
         "CAMPFIRE_AGENT_HINT_PATH", f"{claude_md}{os.pathsep}{agents_md}"
     )
-    first = runner.invoke(app, ["setup", "--workspace", str(workspace)])
+    first = runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "test"])
     assert first.exit_code == 0, first.output
     payload = json.loads(first.output)
     actions = payload["resources"]["agent_hints"]
@@ -2156,7 +2220,7 @@ def test_setup_injects_agent_hints_idempotently(
     } == {"kept"}
 
 
-def test_upgrade_syncs_resources_and_accepts_update_alias(
+def test_upgrade_syncs_resources_and_removes_update_alias(
     workspace: Path, monkeypatch
 ) -> None:
     monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _name: None)
@@ -2177,10 +2241,12 @@ def test_upgrade_syncs_resources_and_accepts_update_alias(
     stale.write_text("过时内容\n", encoding="utf-8")
 
     alias = runner.invoke(app, ["update"])
-    assert alias.exit_code == 0, alias.output
-    aliased = json.loads(alias.output)
-    assert aliased["skills"]["status"] == "synced"
-    assert aliased["agent_hints"][0]["action"] == "kept"
+    assert alias.exit_code != 0
+    repeated = runner.invoke(app, ["upgrade"])
+    assert repeated.exit_code == 0, repeated.output
+    upgraded = json.loads(repeated.output)
+    assert upgraded["skills"]["status"] == "synced"
+    assert upgraded["agent_hints"][0]["action"] == "kept"
     assert stale.read_text(encoding="utf-8") != "过时内容\n"
 
 
@@ -2244,7 +2310,7 @@ def test_setup_without_workspace_syncs_global_resources_and_prints_guidance(
     payload = json.loads(result.output)
     assert payload["status"] == "needs-input"
     commands = {item["command"] for item in payload["paths"]}
-    assert "campfire setup --workspace <vault路径> --default" in commands
+    assert "campfire setup --workspace <vault路径> [--id <id>] --default" in commands
     assert any("workspace create" in command for command in commands)
     assert any("upgrade" in command for command in commands)
     assert payload["resources"]["skills"]["status"] == "synced"

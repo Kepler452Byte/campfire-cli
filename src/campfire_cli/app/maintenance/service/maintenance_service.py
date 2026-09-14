@@ -308,6 +308,7 @@ class MaintenanceService:
             generated_file_count=len(changes),
             write_performed=bool(changes and not dry_run),
             operations=operations,
+            scope=scope,
         )
 
     def _sync_blocked(self, code: str, path: str, scope: str | None) -> MaintenanceResult:

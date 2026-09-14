@@ -39,37 +39,6 @@ def invoke[ResultT: BaseModel](operation: Callable[[], ResultT]) -> ResultT:
         raise typer.Exit(exc.exit_code) from exc
 
 
-def initialize(workspace_id: str, path: Path, make_default: bool) -> BaseModel:
-    return invoke(
-        lambda: service().add(
-            WorkspaceCreateRequest(workspace_id=workspace_id, path=path, make_default=make_default)
-        )
-    )
-
-
-def setup_workspace(path: Path, make_default: bool) -> BaseModel:
-    return invoke(lambda: service().setup(path, make_default))
-
-
-@workspace_cli.command("add", hidden=True)
-def add(
-    workspace_id: str = typer.Option(..., "--id"),
-    path: Path = typer.Option(..., "--path"),
-    make_default: bool = typer.Option(False, "--default"),
-) -> None:
-    """注册并初始化一个已存在的 Workspace。"""
-    emit(initialize(workspace_id, path, make_default))
-
-
-@workspace_cli.command("attach", hidden=True)
-def attach(
-    path: Path = typer.Option(..., "--path"),
-    make_default: bool = typer.Option(False, "--default"),
-) -> None:
-    """根据 Vault 根目录的 .campfire.yaml 接入本机。"""
-    emit(setup_workspace(path, make_default))
-
-
 @workspace_cli.command("create")
 def create(
     workspace_id: str = typer.Option(..., "--id"),

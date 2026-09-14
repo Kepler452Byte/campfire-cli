@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.document.schema import (
+    DocumentApplyRequest,
+    DocumentApplyResult,
+    DocumentMoveResult,
+)
+from campfire_cli.app.document.service.document_apply_service import DocumentApplyService
+from campfire_cli.app.document.service.document_move_service import DocumentMoveService
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import exempt_document
 from campfire_cli.app.document.service.frontmatter_formatter import format_text
@@ -12,12 +18,10 @@ from campfire_cli.app.document.service.kanban_service import (
     renderability_result,
 )
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
-from campfire_cli.common.documents.document_types import prefixed_name
-from campfire_cli.common.documents.markdown import parse_document, render_document
+from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
 from campfire_cli.common.governance import capture_snapshot, optimistic_write_lock
-from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -26,6 +30,8 @@ class DocumentService:
         self._settings = settings
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
+        self._application = DocumentApplyService(settings, self._rules, self._profiles)
+        self._movement = DocumentMoveService(settings, self._rules)
 
     def check(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
@@ -124,152 +130,19 @@ class DocumentService:
             "write_performed": changed and confirm,
         }
 
-    def upsert(
+    def apply(self, request: DocumentApplyRequest) -> DocumentApplyResult:
+        """Create or patch exactly one document using its effective Profile contract."""
+        return self._application.apply(request)
+
+    def move(
         self,
-        relative_path: str,
+        source: str,
+        target: str,
         *,
-        document_type: str | None = None,
-        values: dict[str, Any] | None = None,
-        body: str | None = None,
-        append_section: str | None = None,
-        replace_body: bool = False,
         expected_hash: str | None = None,
         confirm: bool = False,
-    ) -> dict[str, Any]:
-        """Create or patch one document using its effective Profile contract."""
-        path = safe_path(self._settings.vault_root, relative_path)
-        if path.suffix.lower() != ".md":
-            raise ConfigurationError("document upsert 目标必须是 Markdown 文件")
-        exists = path.is_file()
-        original = path.read_text(encoding="utf-8") if exists else ""
-        parsed = parse_document(original)
-        if exists and not parsed.has_frontmatter:
-            raise GovernanceBlockedError("已有文档缺少 Frontmatter，不能安全 upsert")
-        current_type = parsed.frontmatter.get("type")
-        resolved_type = document_type or (current_type if isinstance(current_type, str) else None)
-        if not resolved_type:
-            raise ConfigurationError("创建文档时必须提供 --type")
-        if resolved_type not in self._settings.document_types.get("types", {}):
-            raise ConfigurationError(f"未知文档类型：{resolved_type}")
-        if exists and document_type and current_type != document_type:
-            raise GovernanceBlockedError("不允许通过 upsert 改变已有文档的 type")
-        expected_name = prefixed_name(path.name, resolved_type, self._settings.document_types)
-        if expected_name != path.name:
-            raise ConfigurationError(f"文件名应为：{expected_name}")
-
-        patch = dict(values or {})
-        if exists and any(
-            key in patch and patch[key] != parsed.frontmatter.get(key)
-            for key in ("type", "project", "domain")
-        ):
-            raise GovernanceBlockedError("不允许通过 upsert 改变 type、project 或 domain")
-        today = date.today().isoformat()
-        frontmatter = dict(parsed.frontmatter)
-        if not exists:
-            frontmatter.update(self._creation_defaults(path, resolved_type, today))
-        frontmatter.update(patch)
-        frontmatter["type"] = resolved_type
-        frontmatter["updated"] = today
-        profile = self._profiles.resolve(resolved_type, frontmatter, path)
-        unknown = sorted(set(patch) - set(profile.allowed))
-        if unknown:
-            return {
-                "status": "blocked",
-                "workspace_id": self._settings.workspace_id,
-                "action": "update" if exists else "create",
-                "path": relative_path,
-                "profile": profile.name,
-                "expected_hash": file_sha256(path) if exists else "missing",
-                "write_performed": False,
-                "issues": [
-                    {"code": "frontmatter-field-not-allowed", "path": relative_path, "field": key}
-                    for key in unknown
-                ],
-                "missing_fields": [],
-            }
-
-        if exists and body is not None and not append_section and not replace_body:
-            raise ConfigurationError(
-                "更新时 --body-file 必须与 --append-section 或 --replace-body 同时使用"
-            )
-        next_body = parsed.body if exists else (body or "")
-        if exists and replace_body and body is not None:
-            next_body = body
-        if append_section:
-            if body is None:
-                raise ConfigurationError("--append-section 必须与 --body-file 同时使用")
-            next_body = self._append_to_section(parsed.body, append_section, body)
-        rendered = render_document(frontmatter, next_body, list(profile.field_order))
-        issues = self._rules.check_content(self._settings.vault_root, path, rendered)
-        missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
-        missing = [item for item in issues if item["code"] in missing_codes]
-        status = "needs-input" if missing else "blocked" if issues else "planned"
-        actual_hash = file_sha256(path) if exists else "missing"
-        result: dict[str, Any] = {
-            "status": status,
-            "workspace_id": self._settings.workspace_id,
-            "action": "update" if exists else "create",
-            "path": relative_path,
-            "profile": profile.name,
-            "expected_hash": actual_hash,
-            "write_performed": False,
-            "issues": issues,
-            "missing_fields": [item.get("field") or item.get("detail") for item in missing],
-        }
-        if issues or not confirm:
-            return result
-        if expected_hash is not None and expected_hash != actual_hash:
-            return {
-                **result,
-                "status": "blocked",
-                "issues": [{"code": "concurrent-change", "path": relative_path}],
-            }
-        snapshot = capture_snapshot(self._settings.vault_root, [path])
-        with optimistic_write_lock(
-            self._settings.state_root, snapshot, self._settings.vault_root
-        ) as concurrent:
-            if concurrent:
-                raise GovernanceBlockedError("文档在 upsert 期间发生变化：" + ", ".join(concurrent))
-            atomic_write(path, rendered)
-        return {**result, "status": "applied", "write_performed": True}
-
-    def _creation_defaults(self, path: Path, document_type: str, today: str) -> dict[str, Any]:
-        stem = path.stem
-        prefix = self._settings.document_types["types"][document_type]["prefix"]
-        values: dict[str, Any] = {
-            "name": stem[len(prefix) :] if stem.startswith(prefix) else stem,
-            "type": document_type,
-            "status": "current" if document_type == "task" else "draft",
-            "created": today,
-            "updated": today,
-            "tags": [],
-        }
-        current = path.parent
-        marker_name = self._settings.governance.get("domain_marker", "_领域.md")
-        found_domain = False
-        while current == self._settings.vault_root or self._settings.vault_root in current.parents:
-            marker = current / marker_name
-            if marker.is_file():
-                found_domain = True
-                domain = parse_document(marker.read_text(encoding="utf-8")).frontmatter
-                if domain.get("domain_id"):
-                    values["domain"] = domain["domain_id"]
-                project = domain.get("project_id") or domain.get("project")
-                if project:
-                    values["project"] = project
-                break
-            if current == self._settings.vault_root:
-                break
-            current = current.parent
-        if not found_domain:
-            raise ConfigurationError("正式文档必须位于已声明的 Domain 内")
-        return values
-
-    @staticmethod
-    def _append_to_section(current: str, heading: str, content: str) -> str:
-        heading_line = f"## {heading.strip().lstrip('#').strip()}"
-        suffix = f"\n\n{heading_line}\n\n{content.strip()}\n"
-        return current.rstrip() + suffix
+    ) -> DocumentMoveResult:
+        return self._movement.move(source, target, expected_hash=expected_hash, confirm=confirm)
 
     def _document_path(self, relative_path: str) -> Path:
         path = safe_path(self._settings.vault_root, relative_path)

@@ -22,7 +22,7 @@ from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
 from campfire_cli.app.workspace.cli.workspace_cli import workspace_cli
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.exceptions import AppError, ConfigurationError
 from campfire_cli.container import AppContainer
 
 # Windows 控制台默认 GBK 代码页会把中文输出编码成 GBK 导致乱码；
@@ -128,14 +128,19 @@ def setup(
     workspace: Path | None = typer.Option(
         None, "--workspace", help="要初始化的 Workspace 根目录；缺省时仅同步全局资源并输出接入引导"
     ),
+    workspace_id: str | None = typer.Option(
+        None, "--id", help="缺少 .campfire.yaml 时使用的稳定 Workspace id"
+    ),
     make_default: bool = typer.Option(False, "--default", help="设为默认 Workspace"),
 ) -> None:
     """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
     try:
+        if workspace is None and workspace_id is not None:
+            raise ConfigurationError("--id 只能与 --workspace 一起使用")
         result = (
             AppContainer.setup_global_resources()
             if workspace is None
-            else AppContainer.setup(workspace, make_default)
+            else AppContainer.setup(workspace, make_default, workspace_id)
         )
     except AppError as exc:
         typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
@@ -159,9 +164,3 @@ def upgrade(
         )
         raise typer.Exit(exc.exit_code) from exc
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-@app.command("update", hidden=True)
-def update() -> None:
-    """campfire upgrade 的等价别名。"""
-    upgrade()

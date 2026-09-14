@@ -53,12 +53,12 @@ document inspect 取契约 → 写入 → check → sync → 回报路径
 
 1. 文件名使用 `任务-<一句话标题>.md` 前缀，类型契约以 `campfire document type list` 为准。
 2. 有项目任务落各自文档中心的任务子目录；已有 `任务/` 惯例的项目沿用，无先例时在文档中心根下创建并沿用同规则。
-3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document upsert --type task`。CLI 负责 Profile、枚举、字段顺序和 YAML 类型；Skill 不硬编码这些可演进契约。
+3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 负责 Profile、枚举、字段顺序和 YAML 类型；Skill 不硬编码这些可演进契约。
 4. CLI 返回 `needs-input` 时，根据其一次性列出的必填字段与允许值补齐事实，不猜测。
 
 ### 4. 状态流转
 
-- 更新任务：Frontmatter 补丁使用 `document upsert --set`，进展记录使用 upsert 追加区块；只修正文的小范围改动可使用 edit。
+- 更新任务：Frontmatter 补丁使用 `document apply --set`，进展记录使用 `document apply --append-section`；只修正文的小范围改动可使用 edit。
 - 完成或取消任务时，以 CLI 返回的当前 Task Profile 为准补齐状态、结果与验证信息，不在 Skill 中复制枚举。
 - 用户口头报进度时主动提议同步对应任务文档；一次汇报合并提议，不逐条打断。
 
@@ -69,7 +69,7 @@ campfire --workspace personal document check --path "mywork/【某项目】文�
 campfire --workspace personal maintenance sync --scope "mywork/【某项目】文档中心"
 ```
 
-upsert 成功时由 CLI 内部完成 check 与 scoped sync。只使用 edit 修改正文时才手动执行上述局部验证。向用户回报写入路径、动作、验证结果与未决字段；验证不通过不得声称完成。
+`document apply` 与 edit 都只修改目标文档，不包含隐藏维护副作用。写入后依次执行上述 scoped sync 与 check。向用户回报写入路径、动作、验证结果与未决字段；验证不通过不得声称完成。
 
 ## 边界
 

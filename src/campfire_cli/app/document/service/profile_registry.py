@@ -21,6 +21,7 @@ class EffectiveProfile:
     required: tuple[str, ...]
     optional: tuple[str, ...]
     enums: dict[str, tuple[str, ...]]
+    value_types: dict[str, str]
     lists: tuple[str, ...]
     dates: tuple[str, ...]
     conditional_required: tuple[dict[str, Any], ...]
@@ -50,6 +51,7 @@ class EffectiveProfile:
             "optional": list(self.optional),
             "allowed": list(self.allowed),
             "enums": {key: list(value) for key, value in self.enums.items()},
+            "value_types": dict(self.value_types),
             "lists": list(self.lists),
             "dates": list(self.dates),
             "conditional_required": list(self.conditional_required),
@@ -117,6 +119,8 @@ class ProfileRegistry:
         optional = ordered_union(parent.optional if parent else (), raw.get("optional", []))
         enums = dict(parent.enums) if parent else {}
         enums.update({key: tuple(value) for key, value in raw.get("enums", {}).items()})
+        value_types = dict(parent.value_types) if parent else {}
+        value_types.update(raw.get("value_types", {}))
         lists = ordered_union(parent.lists if parent else (), raw.get("lists", []))
         dates = ordered_union(parent.dates if parent else (), raw.get("dates", []))
         conditions = tuple(
@@ -127,7 +131,7 @@ class ProfileRegistry:
         if unknown_fields not in {"preserve", "report"}:
             raise ConfigurationError(f"Profile {name} unknown_fields 必须是 preserve 或 report")
         allowed = set(required) | set(optional)
-        constrained = set(enums) | set(lists) | set(dates)
+        constrained = set(enums) | set(value_types) | set(lists) | set(dates)
         condition_fields = {
             field
             for condition in conditions
@@ -136,6 +140,11 @@ class ProfileRegistry:
         invalid_constraints = sorted((constrained | condition_fields) - allowed)
         if invalid_constraints:
             raise ConfigurationError(f"Profile {name} 约束了未允许字段：{invalid_constraints}")
+        invalid_types = sorted(
+            {value for value in value_types.values() if value not in {"string", "boolean"}}
+        )
+        if invalid_types:
+            raise ConfigurationError(f"Profile {name} 包含未知 value_types：{invalid_types}")
         if set(order) != allowed:
             missing = sorted(allowed - set(order))
             extra = sorted(set(order) - allowed)
@@ -148,6 +157,7 @@ class ProfileRegistry:
             required=required,
             optional=optional,
             enums=enums,
+            value_types=value_types,
             lists=lists,
             dates=dates,
             conditional_required=conditions,

@@ -78,6 +78,7 @@ campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 与相关文档页
 campfire maintenance archive check / apply       # 归档候选检查与执行
 
 campfire document inspect / check / format       # 单篇文档查看、校验、格式化
+campfire document apply / move                   # 单篇文档创建更新、同 Domain 移动
 campfire document profile list / show / resolve  # Frontmatter Profile 规则
 campfire document type list                      # 文档类型与前缀
 
@@ -90,7 +91,7 @@ campfire decision create / list / answer / close # 持久决策通道
 campfire workspace space create --id research --name "研究" --path myresearch --type research
 campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
   --space work --type knowledge-domain --governance project-docs --confirm
-campfire workspace project add --id example --workspace personal \
+campfire workspace project adopt --id example --workspace personal \
   --name "Example" --document-domain "work/example" --local-path /path/to/repo
 campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
 ```

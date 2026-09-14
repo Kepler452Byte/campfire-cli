@@ -160,6 +160,11 @@ frontmatter_schema:
         - draft
         - current
         - archived
+      value_types:
+        name: string
+        description: string
+        type: string
+        status: string
       lists:
       - tags
       dates:
@@ -218,6 +223,12 @@ frontmatter_schema:
         - proposed
         - completed
         - archived
+      value_types:
+        project: string
+        domain: string
+        lifecycle: string
+        archive_requested: boolean
+        archive_reason: string
       lists:
       - related
       - superseded_by
@@ -280,6 +291,16 @@ frontmatter_schema:
         - high
         - medium
         - low
+      value_types:
+        task_id: string
+        project: string
+        lifecycle: string
+        priority: string
+        task_source: string
+        requested_by: string
+        requires_human: boolean
+        blocked_reason: string
+        result_summary: string
       lists:
       - assignee
       - verification

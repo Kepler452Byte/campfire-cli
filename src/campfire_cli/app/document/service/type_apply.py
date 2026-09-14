@@ -18,10 +18,11 @@ SPEC:
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from campfire_cli.common.documents.document_types import (
     prefixed_name,
@@ -103,21 +104,40 @@ def rewrite_wikilinks(text: str, old_stem: str, new_stem: str) -> str:
     return WIKILINK_RE.sub(replace, text)
 
 
-def rewrite_same_directory_markdown_links(
-    text: str, reference: Path, source: Path, target: Path
-) -> str:
-    if reference.parent.resolve() != source.parent.resolve():
-        return text
-    plain = {source.name: target.name, f"./{source.name}": f"./{target.name}"}
-    encoded = {quote(old): quote(new) for old, new in plain.items()}
-    replacements = {**plain, **encoded}
+def rewrite_markdown_links(text: str, reference: Path, source: Path, target: Path) -> str:
+    def replace(match: re.Match[str]) -> str:
+        destination = match.group(2)
+        base, separator, fragment = destination.partition("#")
+        if not base or base.startswith("/") or re.match(r"^[a-z][a-z0-9+.-]*:", base, re.I):
+            return match.group(0)
+        decoded = unquote(base)
+        if (reference.parent / decoded).resolve() != source.resolve():
+            return match.group(0)
+        relative = os.path.relpath(target, reference.parent).replace(os.sep, "/")
+        if base.startswith("./") and not relative.startswith("."):
+            relative = f"./{relative}"
+        rewritten_base = quote(relative) if unquote(base) != base else relative
+        rewritten = rewritten_base + (separator + fragment if separator else "")
+        return match.group(1) + rewritten + match.group(3)
+
+    return MARKDOWN_LINK_RE.sub(replace, text)
+
+
+def rebase_markdown_links(text: str, source: Path, target: Path) -> str:
+    """Keep relative outbound Markdown links stable when their document moves."""
 
     def replace(match: re.Match[str]) -> str:
         destination = match.group(2)
         base, separator, fragment = destination.partition("#")
-        if base not in replacements:
+        if not base or base.startswith("/") or re.match(r"^[a-z][a-z0-9+.-]*:", base, re.I):
             return match.group(0)
-        rewritten = replacements[base] + (separator + fragment if separator else "")
+        decoded = unquote(base)
+        resolved = (source.parent / decoded).resolve()
+        relative = os.path.relpath(resolved, target.parent).replace(os.sep, "/")
+        if base.startswith("./") and not relative.startswith("."):
+            relative = f"./{relative}"
+        rewritten_base = quote(relative) if unquote(base) != base else relative
+        rewritten = rewritten_base + (separator + fragment if separator else "")
         return match.group(1) + rewritten + match.group(3)
 
     return MARKDOWN_LINK_RE.sub(replace, text)
@@ -168,7 +188,7 @@ def apply_plan(root: Path, operations: list[dict[str, Any]]) -> dict[str, Any]:
             if original_stem_counts.get(source.stem) == 1:
                 updated = rewrite_wikilinks(updated, source.stem, target.stem)
             if path.suffix.lower() == ".md":
-                updated = rewrite_same_directory_markdown_links(updated, path, source, target)
+                updated = rewrite_markdown_links(updated, path, source, target)
             source_rel = str(source.relative_to(root)).replace("\\", "/")
             target_rel = str(target.relative_to(root)).replace("\\", "/")
             updated = updated.replace(source_rel, target_rel).replace(

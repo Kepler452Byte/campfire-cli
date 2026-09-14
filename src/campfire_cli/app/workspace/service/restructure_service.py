@@ -10,7 +10,7 @@ import yaml
 
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.type_apply import (
-    rewrite_same_directory_markdown_links,
+    rewrite_markdown_links,
     rewrite_wikilinks,
 )
 from campfire_cli.app.workspace.schema.restructure_schema import (
@@ -346,7 +346,7 @@ class RestructureService:
             if unique_source_stem and old_path.stem != new_path.stem:
                 updated = rewrite_wikilinks(updated, old_path.stem, new_path.stem)
             if reference.suffix.lower() == ".md":
-                updated = rewrite_same_directory_markdown_links(
+                updated = rewrite_markdown_links(
                     updated,
                     reference,
                     self._settings.vault_root / old_path,

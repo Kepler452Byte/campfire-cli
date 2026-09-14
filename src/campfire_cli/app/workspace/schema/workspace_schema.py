@@ -156,7 +156,7 @@ class ProjectEntry(BaseModel):
     status: str = "active"
 
 
-class ProjectUpsertRequest(BaseModel):
+class ProjectRegistrationRequest(BaseModel):
     project_id: str
     workspace_id: str
     name: str

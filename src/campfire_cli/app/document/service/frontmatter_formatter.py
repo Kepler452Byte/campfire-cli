@@ -19,6 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import frontmatter_bounds
@@ -65,13 +67,43 @@ def format_text(text: str, field_order: list[str]) -> tuple[str, list[str]]:
     keys = [key for key, _ in blocks]
     if len(keys) != len(set(keys)):
         return text, ["frontmatter-duplicate-key"]
-    by_key = {key: lines for key, lines in blocks}
-    sorted_keys = ordered_keys(blocks, field_order)
+    return _render_blocks(preamble, blocks, field_order, text[bounds[1] :]), []
+
+
+def render_patch(
+    text: str,
+    values: dict[str, Any],
+    body: str,
+    field_order: list[str],
+) -> tuple[str, list[str]]:
+    """Patch selected fields while preserving every untouched YAML block verbatim."""
+    bounds = frontmatter_bounds(text)
+    if not bounds:
+        return text, ["frontmatter-missing-or-unclosed"]
+    preamble, blocks, _ = split_blocks(text)
+    keys = [key for key, _ in blocks]
+    if len(keys) != len(set(keys)):
+        return text, ["frontmatter-duplicate-key"]
+    patched = dict(blocks)
+    for key, value in values.items():
+        patched[key] = (
+            yaml.safe_dump({key: value}, allow_unicode=True, sort_keys=False).rstrip().splitlines()
+        )
+    closing_and_body = "\n---\n" + body
+    return _render_blocks(preamble, list(patched.items()), field_order, closing_and_body), []
+
+
+def _render_blocks(
+    preamble: list[str],
+    blocks: list[tuple[str, list[str]]],
+    field_order: list[str],
+    suffix: str,
+) -> str:
+    by_key = dict(blocks)
     rendered_lines = [*preamble]
-    for key in sorted_keys:
+    for key in ordered_keys(blocks, field_order):
         rendered_lines.extend(by_key[key])
-    rendered = "---\n" + "\n".join(rendered_lines) + text[bounds[1] :]
-    return rendered, []
+    return "---\n" + "\n".join(rendered_lines) + suffix
 
 
 def build_result(

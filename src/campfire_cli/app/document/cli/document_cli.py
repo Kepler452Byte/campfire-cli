@@ -7,9 +7,11 @@ from typing import Any
 
 import typer
 import yaml
+from pydantic import BaseModel
 
 from campfire_cli.app.document.cli.profile_cli import profile_cli
 from campfire_cli.app.document.cli.type_cli import type_cli
+from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.document_service import DocumentService
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
@@ -35,9 +37,11 @@ def service(ctx: typer.Context) -> DocumentService:
     return DocumentService(settings)
 
 
-def invoke(operation: Callable[[], dict[str, Any]]) -> None:
+def invoke(operation: Callable[[], dict[str, Any] | BaseModel]) -> None:
     try:
-        typer.echo(json.dumps(operation(), ensure_ascii=False, indent=2))
+        result = operation()
+        payload = result.model_dump(mode="json") if isinstance(result, BaseModel) else result
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     except AppError as exc:
         typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
         raise typer.Exit(exc.exit_code) from exc
@@ -86,8 +90,8 @@ def parse_values(items: list[str]) -> dict[str, Any]:
     return values
 
 
-@document_cli.command("upsert")
-def upsert_document(
+@document_cli.command("apply")
+def apply_document(
     ctx: typer.Context,
     path: str = typer.Option(..., "--path"),
     document_type: str | None = typer.Option(None, "--type"),
@@ -98,20 +102,31 @@ def upsert_document(
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
-    """按 Profile 契约创建或安全更新一篇文档。"""
-    from campfire_cli.container import AppContainer
-
+    """预览或应用一篇 Profile 合法文档的创建与补丁。"""
     body = body_file.read_text(encoding="utf-8") if body_file else None
-    container = AppContainer.build(ctx.find_root().params.get("workspace"))
     invoke(
-        lambda: container.upsert_document(
-            path,
-            document_type=document_type,
-            values=parse_values(set_values or []),
-            body=body,
-            append_section=append_section,
-            replace_body=replace_body,
-            expected_hash=expected_hash,
-            confirm=confirm,
+        lambda: service(ctx).apply(
+            DocumentApplyRequest(
+                path=path,
+                document_type=document_type,
+                values=parse_values(set_values or []),
+                body=body,
+                append_section=append_section,
+                replace_body=replace_body,
+                expected_hash=expected_hash,
+                confirm=confirm,
+            )
         )
     )
+
+
+@document_cli.command("move")
+def move_document(
+    ctx: typer.Context,
+    source: str = typer.Option(..., "--from"),
+    target: str = typer.Option(..., "--to"),
+    expected_hash: str | None = typer.Option(None, "--expected-hash"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """预览或移动同一 Domain 内的一篇文档，并更新可确定解析的引用。"""
+    invoke(lambda: service(ctx).move(source, target, expected_hash=expected_hash, confirm=confirm))

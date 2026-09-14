@@ -71,19 +71,6 @@ def sync(
     emit(ctx.obj.maintenance.sync(dry_run, scope))
 
 
-@maintenance_cli.command("run", hidden=True)
-def run(
-    ctx: typer.Context,
-    scope: str | None = typer.Option(None, "--scope", help="只同步并显示指定范围"),
-) -> None:
-    """执行同步和最终只读检查。"""
-    sync_result = ctx.obj.maintenance.sync(False, scope)
-    if sync_result.issue_count:
-        emit(sync_result)
-        raise typer.Exit(3)
-    emit(ctx.obj.maintenance.check(scope=scope))
-
-
 @archive_cli.command("check")
 def archive_check(
     ctx: typer.Context,

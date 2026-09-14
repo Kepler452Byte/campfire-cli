@@ -92,7 +92,7 @@ campfire --workspace personal maintenance sync --scope "mywork/【某项目】�
 
 ## 路由
 
-预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。准备可验证的正文语义后，创建正式文档或修改 Frontmatter 统一调用 `campfire document upsert`；只对已有正文做小范围修改时可使用 edit，但写后仍需局部验证。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤；需要改变已有主物理位置时再加载 `campfire-workspace-restructure`。
+预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。准备可验证的正文语义后，创建正式文档或修改 Frontmatter 调用 `campfire document apply`；只对已有正文做小范围修改时可使用 edit。两种写法完成后都显式运行 scoped `maintenance sync` 和 `maintenance check`。同一 Domain 内改名或移动使用 `document move`；改变主 Domain 时加载 `campfire-workspace-restructure`。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤。
 
 ## Pending Decision
 

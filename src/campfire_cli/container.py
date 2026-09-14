@@ -59,33 +59,15 @@ class AppContainer:
     base: BaseService
     decision: DecisionService
 
-    def upsert_document(self, relative_path: str, **kwargs: object) -> dict:
-        """Write one document, then refresh and verify its derived workspace state."""
-        result = self.document.upsert(relative_path, **kwargs)
-        if not result.get("write_performed"):
-            return result
-        scope = Path(relative_path).parent.as_posix()
-        sync = self.maintenance.sync(False, scope)
-        validation = self.document.check(relative_path)
-        status = (
-            "applied"
-            if sync.status == "synced" and validation["status"] == "ok"
-            else "needs-review"
-        )
-        return {
-            **result,
-            "status": status,
-            "sync": sync.model_dump(mode="json"),
-            "validation": validation,
-        }
-
     @classmethod
-    def setup(cls, workspace: Path, make_default: bool = False) -> dict:
+    def setup(
+        cls, workspace: Path, make_default: bool = False, workspace_id: str | None = None
+    ) -> dict:
         """Bootstrap one device from the portable Workspace Manifest."""
         governance_root = campfire_home()
         setup_result = WorkspaceService(
             governance_root, SqliteWorkspaceRepository(governance_root)
-        ).setup(workspace, make_default)
+        ).setup(workspace, make_default, workspace_id)
         container = cls.build(setup_result.workspace_id)
         settings = container.settings
         return {
@@ -111,7 +93,7 @@ class AppContainer:
             "paths": [
                 {
                     "scenario": "接入已有 Vault（目录已存在，含或不含 .campfire.yaml）",
-                    "command": "campfire setup --workspace <vault路径> --default",
+                    "command": "campfire setup --workspace <vault路径> [--id <id>] --default",
                 },
                 {
                     "scenario": "从零创建新 Workspace（初始化目录结构并注册）",

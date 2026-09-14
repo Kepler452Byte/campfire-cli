@@ -41,26 +41,12 @@ class WorkspaceService:
         self._repository = repository
         self._manifests = manifest_repository or WorkspaceManifestRepository()
 
-    def add(self, request: WorkspaceCreateRequest) -> WorkspaceResult:
-        root = request.path.expanduser().resolve()
-        if not root.is_dir():
-            raise ConfigurationError(f"Workspace 不存在：{root}")
-        result = self._initialize(request.workspace_id, root, request.make_default)
-        if self._manifests.load(root) is None:
-            self._manifests.save(
-                root,
-                WorkspaceManifest(
-                    workspace=ManifestWorkspace(id=request.workspace_id, name=request.workspace_id)
-                ),
-            )
-        return result
-
     def create(self, request: WorkspaceCreateRequest) -> WorkspaceResult:
         root = request.path.expanduser().resolve()
         self._validate_id(request.workspace_id)
         if root.exists():
             raise ConfigurationError(
-                f"目标路径已存在；接入现有 Workspace 请使用 workspace add：{root}"
+                f"目标路径已存在；接入现有 Workspace 请使用 campfire setup：{root}"
             )
         template = config_section("workspace")
         spaces = tuple(Space.model_validate(item) for item in template["spaces"])
@@ -81,18 +67,29 @@ class WorkspaceService:
         )
         return result
 
-    def setup(self, path: Path, make_default: bool = False) -> WorkspaceSetupResult:
+    def setup(
+        self,
+        path: Path,
+        make_default: bool = False,
+        workspace_id: str | None = None,
+    ) -> WorkspaceSetupResult:
         """Attach an existing portable Workspace or create its first Manifest."""
         root = path.expanduser().resolve()
         if not root.is_dir():
             raise ConfigurationError(f"Workspace 不存在：{root}")
         manifest = self._manifests.load(root)
         manifest_operation = "preserved"
+        if manifest is not None and workspace_id and workspace_id != manifest.workspace.id:
+            raise ConfigurationError(
+                f"--id 与 Workspace Manifest 不一致：{workspace_id} != {manifest.workspace.id}"
+            )
         if manifest is None:
-            workspace_id = self._registered_id_for_path(root)
-            projects = self._repository.list_projects(workspace_id)
+            if not workspace_id:
+                raise ConfigurationError("Workspace 缺少 Manifest；首次 setup 必须提供 --id")
+            resolved_id = workspace_id
+            projects = self._repository.list_projects(resolved_id)
             manifest = WorkspaceManifest(
-                workspace=ManifestWorkspace(id=workspace_id, name=workspace_id),
+                workspace=ManifestWorkspace(id=resolved_id, name=resolved_id),
                 projects=[
                     ManifestProject.model_validate(
                         project.model_dump(exclude={"workspace_id", "local_path"})
@@ -247,7 +244,7 @@ class WorkspaceService:
                 if Path(entry.path).expanduser().resolve() == candidate:
                     return workspace_id, candidate
             raise ConfigurationError(
-                f"Workspace 未注册：{selector}；请先运行 campfire workspace add"
+                f"Workspace 未注册：{selector}；请运行 campfire setup --workspace <path> --id <id>"
             )
         current = (cwd or safe_cwd()).resolve()
         matches = [
@@ -264,22 +261,9 @@ class WorkspaceService:
         raise ConfigurationError(
             "没有可用 Workspace；已有 Vault（含 .campfire.yaml）运行 "
             "campfire setup --workspace <path> --default，"
-            "全新目录运行 campfire workspace add --id <id> --path <path> --default"
+            "已有 Vault（无 Manifest）追加 --id <id>，全新目录运行 "
+            "campfire workspace create --id <id> --path <path> --default"
         )
-
-    def _registered_id_for_path(self, root: Path) -> str:
-        registry = self._repository.load_registry()
-        matches = [
-            workspace_id
-            for workspace_id, entry in registry.workspaces.items()
-            if Path(entry.path).expanduser().resolve() == root
-        ]
-        if len(matches) != 1:
-            raise ConfigurationError(
-                "Workspace 尚无 Manifest，且无法从本机注册表唯一推断 id；"
-                "请先运行 campfire workspace add --id <id> --path <path>"
-            )
-        return matches[0]
 
     @classmethod
     def _validate_import(cls, payload: RegistryExport) -> None:

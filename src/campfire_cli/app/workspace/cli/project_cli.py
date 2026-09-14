@@ -6,7 +6,7 @@ import typer
 
 from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
-from campfire_cli.app.workspace.schema.workspace_schema import ProjectUpsertRequest
+from campfire_cli.app.workspace.schema.workspace_schema import ProjectRegistrationRequest
 from campfire_cli.app.workspace.service.project_service import ProjectService
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import campfire_home
@@ -31,8 +31,8 @@ def request(
     git_remote_url: str | None,
     default_branch: str | None,
     status: str,
-) -> ProjectUpsertRequest:
-    return ProjectUpsertRequest(
+) -> ProjectRegistrationRequest:
+    return ProjectRegistrationRequest(
         project_id=project_id,
         workspace_id=workspace_id,
         name=name,
@@ -71,9 +71,9 @@ def project_options(operation: str):
     return command
 
 
-project_cli.command("add", help="注册一个新 Project；提供本地 Git 路径时自动发现 remote 和分支。")(
-    project_options("add")
-)
+project_cli.command(
+    "adopt", help="接入已有 Project 文档领域；提供本地 Git 路径时自动发现 remote 和分支。"
+)(project_options("adopt"))
 project_cli.command("update", help="完整更新一个已注册 Project。")(project_options("update"))
 
 

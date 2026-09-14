@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from campfire_cli.common.filesystem import workspace_write_lock
+from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.common.governance.snapshots import snapshot_changes
 
 

@@ -13,9 +13,9 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectEntry,
     ProjectListResult,
     ProjectMatch,
+    ProjectRegistrationRequest,
     ProjectResolutionResult,
     ProjectResult,
-    ProjectUpsertRequest,
 )
 from campfire_cli.app.workspace.service.structure_service import DomainService, SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
@@ -35,27 +35,29 @@ class ProjectService:
         self._repository = repository
         self._manifests = manifest_repository or WorkspaceManifestRepository()
 
-    def add(self, request: ProjectUpsertRequest) -> ProjectResult:
+    def adopt(self, request: ProjectRegistrationRequest) -> ProjectResult:
         if self._repository.get_project(request.project_id):
             raise ConfigurationError(
                 f"Project 已存在：{request.project_id}；请使用 campfire workspace project update"
             )
         return self._save(request)
 
-    def update(self, request: ProjectUpsertRequest) -> ProjectResult:
+    def update(self, request: ProjectRegistrationRequest) -> ProjectResult:
         if not self._repository.get_project(request.project_id):
             raise ConfigurationError(
-                f"Project 未注册：{request.project_id}；请使用 campfire workspace project add"
+                f"Project 未注册：{request.project_id}；请使用 campfire workspace project adopt"
             )
         return self._save(request)
 
-    def create(self, request: ProjectUpsertRequest, confirm: bool = False) -> ProjectCreateResult:
+    def create(
+        self, request: ProjectRegistrationRequest, confirm: bool = False
+    ) -> ProjectCreateResult:
         if self._repository.get_project(request.project_id):
             raise ConfigurationError(f"Project 已存在：{request.project_id}")
         project, domain_path = self._prepare(request, require_domain=False)
         if domain_path.exists():
             raise ConfigurationError(
-                f"项目文档领域已存在；接入现有领域请使用 project add：{domain_path}"
+                f"项目文档领域已存在；接入现有领域请使用 project adopt：{domain_path}"
             )
         structure = DomainService(
             Path(self._repository.load_registry().workspaces[project.workspace_id].path), self._root
@@ -278,7 +280,7 @@ class ProjectService:
             self._sync_manifest(updated.workspace_id)
         return ProjectBindResult(project=updated)
 
-    def _save(self, request: ProjectUpsertRequest) -> ProjectResult:
+    def _save(self, request: ProjectRegistrationRequest) -> ProjectResult:
         project, _domain_path = self._prepare(request, require_domain=True)
         with workspace_write_lock(self._root):
             operation = self._repository.save_project(project)
@@ -305,7 +307,7 @@ class ProjectService:
         self._manifests.save(root, manifest)
 
     def _prepare(
-        self, request: ProjectUpsertRequest, *, require_domain: bool
+        self, request: ProjectRegistrationRequest, *, require_domain: bool
     ) -> tuple[ProjectEntry, Path]:
         self._validate_id(request.project_id)
         registry = self._repository.load_registry()

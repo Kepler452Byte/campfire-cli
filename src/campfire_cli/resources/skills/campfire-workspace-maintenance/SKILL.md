@@ -24,10 +24,10 @@ campfire workspace rebuild --confirm
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
 2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。默认先预览，用户确认后追加 `--confirm`。顶级 Space、根 Domain 和有歧义的父子关系必须由用户确认。
-3. 创建正式文档或修改 Frontmatter 使用 `campfire document upsert`，由 CLI 解析有效 Profile；只读诊断已有文档时使用 `document inspect`。字段、顺序与枚举不在 Skill 中复制。
+3. 创建正式文档或修改 Frontmatter 使用 `campfire document apply`，由 CLI 解析有效 Profile；只读诊断已有文档时使用 `document inspect`。正文小改可用 edit，但两种写法后都必须显式 sync 和 check。字段、顺序与枚举不在 Skill 中复制。
 4. 确定性问题可以生成普通 Plan；缺标题、摘要、类型等语义时，Agent 必须阅读正文和领域上下文，生成 YAML/JSON Spec，再运行 `campfire maintenance plan --id <id> --scope <path> --spec <file>`。Spec 中每项默认不审批；只有用户已明确授权或逐项审查通过才写 `approved: true`。
 5. 依次运行 `maintenance show --plan <id>`、`maintenance apply --plan <id>` 预检、`maintenance apply --plan <id> --confirm` 执行和 `maintenance verify --plan <id>` 局部验收。出现 `concurrent-change` 或配置变化时废弃旧计划并重新生成。
-6. 使用 `maintenance sync --scope <path> --dry-run` 预览当前范围的 MOC、关系页与治理视图变更，审查后去掉 `--dry-run`。日常完整流程使用 `maintenance run --scope <path>`。
+6. 使用 `maintenance sync --scope <path> --dry-run` 预览当前范围的 MOC、关系页与治理视图变更，审查后去掉 `--dry-run`；再运行 `maintenance check --scope <path>`。两个原子命令由 Skill 顺序编排，不使用聚合别名。
 7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。涉及跨领域移动、领域拆分或合并时停止，改用 `campfire-workspace-restructure`。
 8. 无法从正文、领域上下文或项目事实唯一决定时，统一调用 `campfire decision create`。不要判断当前是交互会话还是定时任务；当前对话获得回答后调用 `decision answer`，答案被原任务消费后调用 `decision close`。全部状态由 CLI 投影到统一的决策工作台，未回答事项显示在“待我确认”视图。
 
@@ -36,9 +36,12 @@ campfire workspace rebuild --confirm
 ```text
 发现对象
    |
-   +-- 已在 Domain，字段、类型、同目录命名或 Formatter 不合规
+   +-- 已在 Domain，字段、类型或 Formatter 不合规
    |      -> inspect/check -> Agent 语义判断 -> plan --spec
    |      -> show -> apply 预检 -> apply --confirm -> verify -> sync --scope
+   |
+   +-- 同一 Domain 内改名或移动
+   |      -> document move 预览 -> document move --confirm -> sync -> check
    |
    +-- 已有目录但没有声明
    |      -> space/domain adopt

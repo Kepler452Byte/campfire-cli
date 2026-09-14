@@ -170,6 +170,19 @@ class DocumentRuleService:
                         "allowed": allowed,
                     }
                 )
+        for field, expected in rules["value_types"].items():
+            value = frontmatter.get(field)
+            if value is not None and not self._matches_value_type(value, expected):
+                issues.append(
+                    {
+                        "code": "frontmatter-type-invalid",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": type(value).__name__,
+                        "allowed": [expected],
+                    }
+                )
         issues.extend(self._state_invariants(relative, path, document_type, frontmatter))
         return issues
 
@@ -296,7 +309,28 @@ class DocumentRuleService:
                         "allowed": allowed,
                     }
                 )
+        for field, expected in rules["value_types"].items():
+            value = patch.get(field)
+            if (
+                field in patch
+                and value is not None
+                and not self._matches_value_type(value, expected)
+            ):
+                issues.append(
+                    {
+                        "code": "frontmatter-type-invalid",
+                        "path": relative,
+                        "detail": field,
+                        "field": field,
+                        "actual": type(value).__name__,
+                        "allowed": [expected],
+                    }
+                )
         return issues
+
+    @staticmethod
+    def _matches_value_type(value: Any, expected: str) -> bool:
+        return isinstance(value, str) if expected == "string" else isinstance(value, bool)
 
     def _rules(self, document_type: Any, path: Path, frontmatter: dict[str, Any]) -> dict[str, Any]:
         return self._profiles.resolve(document_type, frontmatter, path).model_dump()
