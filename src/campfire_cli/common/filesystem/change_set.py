@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from campfire_cli.common.exceptions import GovernanceBlockedError
-from campfire_cli.common.filesystem.atomic import atomic_write
+from campfire_cli.common.filesystem.atomic import atomic_write, atomic_write_bytes
 from campfire_cli.common.governance import capture_snapshot, optimistic_write_lock
 
 
@@ -71,7 +71,7 @@ class FileChangeExecutor:
             self._validate_moves(changes.moves)
             completed_moves: list[PathMove] = []
             created_directories: list[Path] = []
-            originals: dict[Path, str | None] = {}
+            originals: dict[Path, bytes | None] = {}
             try:
                 for move in changes.moves:
                     created_directories.extend(self._create_parents(move.target.parent))
@@ -81,8 +81,7 @@ class FileChangeExecutor:
                     dict.fromkeys([*(item.path for item in changes.writes), *changes.deletes])
                 )
                 originals = {
-                    path: path.read_text(encoding="utf-8") if path.is_file() else None
-                    for path in content_paths
+                    path: path.read_bytes() if path.is_file() else None for path in content_paths
                 }
                 for item in changes.writes:
                     atomic_write(item.path, item.content)
@@ -127,9 +126,9 @@ class FileChangeExecutor:
         return list(reversed(missing))
 
     @staticmethod
-    def _restore(originals: dict[Path, str | None]) -> None:
+    def _restore(originals: dict[Path, bytes | None]) -> None:
         for path, content in originals.items():
             if content is None:
                 path.unlink(missing_ok=True)
             else:
-                atomic_write(path, content)
+                atomic_write_bytes(path, content)

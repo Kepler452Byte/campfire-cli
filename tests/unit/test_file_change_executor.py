@@ -20,7 +20,7 @@ def test_change_set_restores_all_files_when_commit_fails(
     vault.mkdir()
     first = vault / "first.md"
     second = vault / "second.md"
-    first.write_text("first-before\n", encoding="utf-8")
+    first.write_bytes(b"first-before\r\n")
     second.write_text("second-before\n", encoding="utf-8")
     calls = 0
 
@@ -43,7 +43,7 @@ def test_change_set_restores_all_files_when_commit_fails(
             )
         )
 
-    assert first.read_text(encoding="utf-8") == "first-before\n"
+    assert first.read_bytes() == b"first-before\r\n"
     assert second.read_text(encoding="utf-8") == "second-before\n"
 
 
