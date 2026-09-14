@@ -80,6 +80,29 @@ Document App 是所有面向用户和 Agent 的文档命令入口；Profile、�
 
 Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`knowledge`、`project-doc`、`task` 只允许一层继承。Profile Loader 将配置编译为完整 EffectiveProfile，Resolver 根据文档类型和领域上下文选择 Profile，Validator 与 Formatter 共同消费该结果。字段规则不使用每种文档一个 Python 子类，也不在 Skill 中复制。
 
+### CLI 设计理念：治理原语 + Skill SOP
+
+Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合成熟 CLI 经验形成的独立设计。它在资源心智模型、`apply` 语义和机器可读接口上借鉴 kubectl，在“计划—审查—执行”上借鉴 Terraform，在稳定原语与上层工作流分离上借鉴 Git/Unix；Markdown SSOT、Agent 语义判断和显式 Maintenance 则是 Campfire 自身边界。
+
+| 参考 | Campfire 采用的部分 | Campfire 不照搬的部分 |
+| --- | --- | --- |
+| [kubectl 命令与资源模型](https://kubernetes.io/docs/reference/kubectl/) | 按对象域组织命令、用 `apply` 统一创建与更新、显式选择作用域、提供稳定机器输出 | 不复制 `kubectl <verb> <type> <name>` 语法，不引入 API Server、Controller 或持续调谐 |
+| [kubectl 声明式 apply](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/) | 目标不存在时创建、存在时更新；把“期望变更”交给工具校验和执行 | 不保存 `last-applied-configuration`，不实现三方合并或字段所有权；Campfire apply 是 Profile 约束下的显式补丁 |
+| [Terraform plan/apply](https://developer.hashicorp.com/terraform/cli/commands/plan) | 写入前预览，可审查计划后再执行，执行前重新确认输入未漂移 | 不把所有日常写入都升级为持久计划；单文档原子修改保持轻量 |
+| [Git plumbing/porcelain](https://git-scm.com/book/en/v2/Git-Internals-Plumbing-and-Porcelain) | CLI 提供可组合、可脚本化的稳定原语，Skill 组合成人类可理解的 SOP | 不暴露仅供内部实现使用的隐藏命令，不要求用户理解底层存储 |
+
+命令设计遵循以下约束：
+
+1. **对象域优先**：公共入口采用 `campfire <object-domain> <verb>`，例如 `document apply`、`maintenance check`；动词在所属业务对象内保持单义，不为同一行为保留多个别名。
+2. **原子命令无隐藏副作用**：`document apply` 只创建或更新目标文档，`document move` 只完成同一 Domain 内的文档事务；MOC、关系页和索引治理由 Skill 显式编排 `maintenance sync/check`。
+3. **契约声明式，变更显式**：Profile 是字段、类型、枚举、顺序和条件必填的 SSOT。Agent 提交业务值，CLI 解析有效 Profile 并拒绝猜测；已有文档只修改明确给出的字段或正文操作。
+4. **写入先证明安全**：写命令默认预览，显式确认后才提交；提交时在锁内复核快照或期望哈希，多文件变更作为一个 ChangeSet 执行，失败回滚，避免静默覆盖和部分写入。
+5. **人类与 Agent 共用一个契约**：命令和结果只有一套语义。JSON 状态、issues、missing fields 与 follow-up 供 Agent 稳定消费，`tree` 和分层 `-h` 供人类与 Agent 渐进发现，不维护第二套参数目录。
+6. **语义与机制分层**：人类决定高风险取舍，Agent 理解正文和业务语义，Skill 规定加载时机、事实门禁与 SOP，CLI 只执行可确定验证的治理机制。歧义进入 Decision，不为“自动化成功”而猜测。
+7. **聚合入口是少数例外**：`setup` 和 `upgrade` 可以编排多个服务，因为它们表达完整安装生命周期；日常内容治理保持原子能力，避免重新出现 `maintenance run` 一类不可审查的聚合入口。
+
+因此，`document apply` 的准确含义是“对一个 Markdown 文档应用经 Profile 校验的显式意图”，不是“把完整声明持续调谐到某个服务端状态”。用户或 Agent 可以直接 edit 已有正文；无论通过 apply 还是 edit 写入，跨文档派生结果都由后续显式 Maintenance 收敛。
+
 ## 5. SSOT 与派生数据
 
 | 数据 | 唯一事实来源 | 派生或运行副本 |
