@@ -444,6 +444,7 @@ skills:
   - campfire-inbox-triage
   - campfire-weekly-report-writing
   - campfire-kanban-board
+  - campfire-task-management
   unknown_skill_policy: ignore
   orphaned_skill_policy: report
 bases:
