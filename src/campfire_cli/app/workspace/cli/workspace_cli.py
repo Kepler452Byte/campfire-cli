@@ -12,6 +12,7 @@ from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceCreateRe
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
 from campfire_cli.config.settings import campfire_home
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 workspace_cli = typer.Typer(
     help="注册、初始化和解析多个 Workspace",
@@ -97,7 +98,7 @@ def show(workspace_id: str) -> None:
 @workspace_cli.command("resolve")
 def resolve(selector: str | None = typer.Option(None, "--workspace")) -> None:
     """按显式选择、当前目录或默认值解析 Workspace。"""
-    emit(invoke(lambda: service().resolve(selector, Path.cwd())))
+    emit(invoke(lambda: service().resolve(selector, safe_cwd())))
 
 
 @workspace_cli.command("set-default")

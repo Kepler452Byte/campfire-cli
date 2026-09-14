@@ -9,6 +9,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import SqliteWor
 from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.config.settings import campfire_home
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 domain_cli = typer.Typer(
     help="管理 Space 内可嵌套的内容领域", context_settings={"help_option_names": ["-h", "--help"]}
@@ -18,7 +19,7 @@ domain_cli = typer.Typer(
 def service(workspace: str | None) -> DomainService:
     home = campfire_home()
     resolved = WorkspaceService(home, SqliteWorkspaceRepository(home)).resolve(
-        workspace, Path.cwd()
+        workspace, safe_cwd()
     )
     return DomainService(Path(resolved.workspace), home)
 

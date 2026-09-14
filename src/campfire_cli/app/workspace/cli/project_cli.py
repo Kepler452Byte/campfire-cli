@@ -9,6 +9,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import SqliteWor
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectUpsertRequest
 from campfire_cli.app.workspace.service.project_service import ProjectService
 from campfire_cli.config.settings import campfire_home
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 project_cli = typer.Typer(
     help="注册代码项目及其 Workspace 文档领域",
@@ -117,7 +118,7 @@ def show(project_id: str) -> None:
 @project_cli.command("resolve")
 def resolve(path: Path | None = typer.Option(None, "--path")) -> None:
     """按本地路径和 Git remote 解析已注册 Project，不修改注册数据。"""
-    emit(invoke(lambda: service().resolve(path or Path.cwd())))
+    emit(invoke(lambda: service().resolve(path or safe_cwd())))
 
 
 @project_cli.command("check")

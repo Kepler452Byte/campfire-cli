@@ -41,6 +41,7 @@ from campfire_cli.common.package_version import (
 )
 from campfire_cli.config.defaults import effective_config
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 PACKAGE_NAME = "campfire-cli"
 
@@ -213,7 +214,7 @@ class AppContainer:
         governance_root = campfire_home()
         resolution = WorkspaceService(
             governance_root, SqliteWorkspaceRepository(governance_root)
-        ).resolve(str(workspace) if workspace is not None else None, Path.cwd())
+        ).resolve(str(workspace) if workspace is not None else None, safe_cwd())
         settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
         database_path = governance_root / "campfire.db"
         upgrade_database(database_path)

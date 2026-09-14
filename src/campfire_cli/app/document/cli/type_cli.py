@@ -15,6 +15,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import SqliteWor
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 type_cli = typer.Typer(
     help="查看文档类型与文件名前缀契约",
@@ -26,7 +27,7 @@ def service(ctx: typer.Context) -> DocumentTypeService:
     selector = ctx.find_root().params.get("workspace")
     root = campfire_home()
     resolution = WorkspaceService(root, SqliteWorkspaceRepository(root)).resolve(
-        selector, Path.cwd()
+        selector, safe_cwd()
     )
     settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
     return DocumentTypeService(

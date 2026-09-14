@@ -9,6 +9,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import SqliteWor
 from campfire_cli.app.workspace.service.config_service import WorkspaceConfigService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 config_cli = typer.Typer(
     help="检查 Workspace 治理配置契约",
@@ -19,7 +20,7 @@ config_cli = typer.Typer(
 def service(workspace: str | None) -> WorkspaceConfigService:
     home = campfire_home()
     resolved = WorkspaceService(home, SqliteWorkspaceRepository(home)).resolve(
-        workspace, Path.cwd()
+        workspace, safe_cwd()
     )
     settings = WorkspaceSettings.load(resolved.workspace_id, Path(resolved.workspace))
     return WorkspaceConfigService(settings)

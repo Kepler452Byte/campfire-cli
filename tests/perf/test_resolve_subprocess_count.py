@@ -10,7 +10,7 @@ import pytest
 def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
     workspace: Path, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    """resolve 的 git 子进程数固定为至多 2 次，不随注册项目数增长。"""
+    """resolve 的 git 子进程数：命中注册 local_path 时为 0，未命中走 remote 兜底时至多 2 次。"""
     from typer.testing import CliRunner
 
     from campfire_cli.main import app
@@ -60,8 +60,7 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
         app, ["workspace", "project", "resolve", "--path", str(project_dir)]
     )
     assert matched.exit_code == 0, matched.output
-    bounded = len(calls)
-    assert bounded <= 2, calls
+    assert len(calls) == 0, calls
 
     unregistered = tmp_path_factory.mktemp("unregistered")
     calls.clear()
@@ -69,4 +68,4 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
         app, ["workspace", "project", "resolve", "--path", str(unregistered)]
     )
     assert unmatched.exit_code == 0, unmatched.output
-    assert len(calls) == bounded, calls
+    assert len(calls) <= 2, calls

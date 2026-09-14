@@ -115,6 +115,31 @@ class ProjectService:
 
     def resolve(self, path: Path) -> ProjectResolutionResult:
         query = path.expanduser().resolve()
+        # 先做零成本的 local_path 匹配；有命中时注册信息足以应答，跳过 git 子进程
+        # （每次会话冷启动必经路径，两个 git 探测只为富化字段，属纯延迟开销）。
+        # 无 local_path 命中才跑 git 探测走 remote 兜底；此时 git_root/git_remote_url
+        # 输出实测值，local 命中路径输出 None 与注册 remote。
+        local_matches: list[ProjectMatch] = []
+        for project in self._repository.list_projects():
+            if not project.local_path:
+                continue
+            registered = Path(project.local_path).expanduser().resolve()
+            if query == registered or registered in query.parents:
+                local_matches.append(ProjectMatch(project=project, match_basis=["local-path"]))
+        if local_matches:
+            deepest = max(len(Path(item.project.local_path or "/").parts) for item in local_matches)
+            local_matches = [
+                item
+                for item in local_matches
+                if len(Path(item.project.local_path or "/").parts) == deepest
+            ]
+            return ProjectResolutionResult(
+                status="matched" if len(local_matches) == 1 else "ambiguous",
+                query_path=str(query),
+                git_root=None,
+                git_remote_url=local_matches[0].project.git_remote_url,
+                matches=local_matches,
+            )
         git_root_value = self._git_command(query, "rev-parse", "--show-toplevel")
         git_root = Path(git_root_value).resolve() if git_root_value else None
         remote = self._git_command(git_root or query, "remote", "get-url", "origin")
@@ -122,10 +147,6 @@ class ProjectService:
         matches: list[ProjectMatch] = []
         for project in self._repository.list_projects():
             basis: list[str] = []
-            if project.local_path:
-                registered = Path(project.local_path).expanduser().resolve()
-                if query == registered or registered in query.parents:
-                    basis.append("local-path")
             if (
                 normalized_remote
                 and project.git_remote_url
@@ -134,8 +155,7 @@ class ProjectService:
                 basis.append("git-remote")
             if basis:
                 matches.append(ProjectMatch(project=project, match_basis=basis))
-        local_matches = [item for item in matches if "local-path" in item.match_basis]
-        remote_only = [item for item in matches if "local-path" not in item.match_basis]
+        remote_only = matches
         if local_matches:
             deepest = max(len(Path(item.project.local_path or "/").parts) for item in local_matches)
             local_matches = [

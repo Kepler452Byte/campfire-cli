@@ -27,6 +27,7 @@ from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepos
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
 from campfire_cli.config.defaults import config_section
+from campfire_cli.common.filesystem.cwd import safe_cwd
 
 
 class WorkspaceService:
@@ -248,7 +249,7 @@ class WorkspaceService:
             raise ConfigurationError(
                 f"Workspace 未注册：{selector}；请先运行 campfire workspace add"
             )
-        current = (cwd or Path.cwd()).resolve()
+        current = (cwd or safe_cwd()).resolve()
         matches = [
             (workspace_id, Path(entry.path).expanduser().resolve())
             for workspace_id, entry in registry.workspaces.items()
