@@ -102,7 +102,11 @@ def render_command_tree(command: Any, name: str, prefix: str = "") -> list[str]:
     lines = [prefix + name]
     if not hasattr(command, "commands"):
         return lines
-    children = list(command.commands.items())
+    children = [
+        (child_name, child)
+        for child_name, child in command.commands.items()
+        if not getattr(child, "hidden", False)
+    ]
     for index, (child_name, child) in enumerate(children):
         last = index == len(children) - 1
         connector = "└── " if last else "├── "

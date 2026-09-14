@@ -68,6 +68,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["document", "check", "-h"],
         ["document", "inspect", "-h"],
         ["document", "format", "-h"],
+        ["document", "upsert", "-h"],
     ]
     for command in commands:
         result = runner.invoke(app, command)
@@ -87,11 +88,42 @@ def test_tree_discovers_registered_commands_without_a_parallel_catalog() -> None
     assert "\n├── project" not in result.output
     assert "\n└── project" not in result.output
     assert "database" not in result.output
+    assert "\n│   ├── add" not in result.output
+    assert "\n│   ├── attach" not in result.output
+    assert "run" not in result.output
 
 
 def test_project_is_not_exposed_as_a_top_level_command() -> None:
     result = runner.invoke(app, ["project", "-h"])
     assert result.exit_code != 0
+
+
+def test_document_upsert_cli_creates_checks_and_syncs(workspace: Path) -> None:
+    domain_args = [
+        "workspace", "domain", "create",
+        "--id", "project-example", "--name", "Example",
+        "--path", "mywork/【Example】文档中心", "--space", "work",
+        "--type", "project-domain", "--governance", "project-docs",
+        "--project", "example", "--confirm",
+    ]
+    assert runner.invoke(app, domain_args).exit_code == 0
+    body = workspace / "body.md"
+    body.write_text("# 发布计划\n", encoding="utf-8")
+    relative = "mywork/【Example】文档中心/计划-发布.md"
+    result = runner.invoke(
+        app,
+        [
+            "document", "upsert", "--path", relative, "--type", "plan",
+            "--set", "description=发布计划", "--set", "lifecycle=proposed",
+            "--body-file", str(body), "--confirm",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "applied"
+    assert payload["action"] == "create"
+    assert payload["validation"]["status"] == "ok"
+    assert payload["sync"]["status"] == "synced"
 
 
 def test_setup_creates_manifest_without_overwriting_user_config(

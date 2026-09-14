@@ -11,10 +11,19 @@ HINT_END = "<!-- campfire:agent-hints:end -->"
 HINT_BODY = """## Campfire 文档治理
 
 本机装有 campfire CLI（`campfire --help`），Obsidian Vault 已注册为文档工作区。
-当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时，先运行
-`campfire workspace resolve` 解析工作区，再按 campfire skill 流程处理；
-不要直接在代码仓库里创建笔记文件。文档分类不确定时用"记录-"前缀兜底，
-字段规则以 `campfire document inspect` 返回的有效 Profile 为准。
+当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时：
+
+1. 当前 Session 首次读写 Campfire 文档前，加载并执行
+   `campfire-context-bootstrap`。
+2. 按用户意图加载对应的 Campfire 垂直 Skill。
+3. 创建正式文档或修改 Frontmatter 时，优先使用
+   `campfire document upsert`；不手写或猜测 Profile 字段和枚举。
+4. 只对已有文档的正文做小范围编辑时，可以使用文件编辑工具，
+   但不得编辑自动生成区域，并在写后执行局部验证。
+5. CLI 返回 `needs-input` 时补齐事实后重试，不为通过检查而猜测。
+
+不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
+字段、枚举和顺序以 Campfire Profile 为唯一事实来源。
 
 ## 写作风格
 

@@ -21,8 +21,12 @@ class DocumentRuleService:
         self._profiles = ProfileRegistry(type_config, schema)
 
     def check_document(self, root: Path, path: Path) -> list[dict[str, Any]]:
+        return self.check_content(root, path, path.read_text(encoding="utf-8"))
+
+    def check_content(self, root: Path, path: Path, text: str) -> list[dict[str, Any]]:
+        """Validate proposed Markdown without requiring it to exist on disk."""
         relative = path.relative_to(root).as_posix()
-        parsed = parse_document(path.read_text(encoding="utf-8"))
+        parsed = parse_document(text)
         if not parsed.has_frontmatter:
             return [{"code": "frontmatter-missing", "path": relative}]
         frontmatter = parsed.frontmatter

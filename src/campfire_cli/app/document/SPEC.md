@@ -34,9 +34,12 @@ document/
 - `frontmatter`：检查、规划、执行和格式化文档属性。
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。
 - `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile 和具体问题。
+- `upsert`：根据目标路径和类型解析 Profile，不存在时生成文档，已存在时仅应用显式补丁。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。
 
 Document Service 可以被 Maintenance 和 Workspace Restructure 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
+
+`upsert` 的单文档写入属于 Document App；写入后的 scoped sync 与最终校验由 `AppContainer` 跨 App 编排，Document App 不反向依赖 Maintenance。
 
 包内 `config.yml` 的默认 Profile 与用户级 `~/.campfire/config.yml` 覆盖共同构成当前治理契约。
 

@@ -51,7 +51,7 @@ def setup_workspace(path: Path, make_default: bool) -> BaseModel:
     return invoke(lambda: service().setup(path, make_default))
 
 
-@workspace_cli.command("add")
+@workspace_cli.command("add", hidden=True)
 def add(
     workspace_id: str = typer.Option(..., "--id"),
     path: Path = typer.Option(..., "--path"),
@@ -61,7 +61,7 @@ def add(
     emit(initialize(workspace_id, path, make_default))
 
 
-@workspace_cli.command("attach")
+@workspace_cli.command("attach", hidden=True)
 def attach(
     path: Path = typer.Option(..., "--path"),
     make_default: bool = typer.Option(False, "--default"),

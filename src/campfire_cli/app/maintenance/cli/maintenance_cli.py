@@ -71,7 +71,7 @@ def sync(
     emit(ctx.obj.maintenance.sync(dry_run, scope))
 
 
-@maintenance_cli.command("run")
+@maintenance_cli.command("run", hidden=True)
 def run(
     ctx: typer.Context,
     scope: str | None = typer.Option(None, "--scope", help="只同步并显示指定范围"),

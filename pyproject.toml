@@ -1,6 +1,6 @@
 [project]
 name = "campfire-cli"
-version = "0.1.6"
+version = "0.1.7"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 license = "MIT"

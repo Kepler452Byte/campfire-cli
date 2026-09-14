@@ -11,6 +11,7 @@ from campfire_cli.app.decision.service.decision_projection_service import (
     DecisionProjectionService,
 )
 from campfire_cli.app.decision.service.decision_service import DecisionService
+from campfire_cli.app.document.service.document_service import DocumentService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
@@ -49,6 +50,7 @@ PACKAGE_NAME = "campfire-cli"
 @dataclass
 class AppContainer:
     settings: WorkspaceSettings
+    document: DocumentService
     maintenance: MaintenanceService
     restructure: RestructureService
     domain_restructure: DomainRestructureService
@@ -56,6 +58,26 @@ class AppContainer:
     skill: SkillService
     base: BaseService
     decision: DecisionService
+
+    def upsert_document(self, relative_path: str, **kwargs: object) -> dict:
+        """Write one document, then refresh and verify its derived workspace state."""
+        result = self.document.upsert(relative_path, **kwargs)
+        if not result.get("write_performed"):
+            return result
+        scope = Path(relative_path).parent.as_posix()
+        sync = self.maintenance.sync(False, scope)
+        validation = self.document.check(relative_path)
+        status = (
+            "applied"
+            if sync.status == "synced" and validation["status"] == "ok"
+            else "needs-review"
+        )
+        return {
+            **result,
+            "status": status,
+            "sync": sync.model_dump(mode="json"),
+            "validation": validation,
+        }
 
     @classmethod
     def setup(cls, workspace: Path, make_default: bool = False) -> dict:
@@ -245,6 +267,7 @@ class AppContainer:
         )
         return cls(
             settings=settings,
+            document=DocumentService(settings),
             maintenance=maintenance,
             restructure=restructure,
             domain_restructure=domain_restructure,

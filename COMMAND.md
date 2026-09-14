@@ -28,6 +28,7 @@ campfire workspace restructure domain rename --domain <id> --name <name> [--rena
 campfire workspace restructure domain move --domain <id> --target-path <path> [--parent-domain <id>] [--confirm]
 campfire workspace restructure domain rekey --domain <id> --new-id <id> [--confirm]
 campfire workspace project resolve --path "$PWD"
+campfire document upsert --path <workspace-relative-markdown> --type <type> --set <field=value> [--body-file <path>] [--confirm]
 campfire document inspect --path <file>
 campfire document type list
 campfire document profile list
