@@ -132,7 +132,8 @@ def apply_document(
 
     示例：campfire document apply --path "mynote/Python/混合编程" --type knowledge
 
-    创建时文件名可省略类型前缀；CLI 根据 --type 返回并写入最终 target。
+    创建或唯一更新时可省略 .md；创建时也可省略类型前缀。
+    CLI 在 normalization 中解释变换，并返回最终 target。
     已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。
     """
     values = parse_values(set_values or [])
