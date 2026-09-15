@@ -51,8 +51,23 @@ class DocumentApplyService:
 
     def apply(self, request: DocumentApplyRequest) -> DocumentApplyResult:
         source = safe_path(self._settings.vault_root, request.path)
-        if source.suffix.lower() != ".md":
-            raise ConfigurationError("document apply 目标必须是 Markdown 文件")
+        if source.is_dir():
+            raise ConfigurationError(
+                "document apply 目标不能是目录",
+                code="document-path-is-directory",
+                path=request.path,
+                hint="请提供目标文档名称；创建时可以省略 .md 和类型前缀",
+            )
+        if not source.suffix:
+            source = source.with_name(source.name + ".md")
+        elif source.suffix.lower() != ".md":
+            raise ConfigurationError(
+                "document apply 目标必须是 Markdown 文件",
+                code="document-extension-invalid",
+                path=request.path,
+                expected_suffix=".md",
+                hint="请删除其他扩展名；无扩展名时 CLI 会自动补充 .md",
+            )
         exists = source.is_file()
         original = source.read_text(encoding="utf-8") if exists else ""
         parsed = parse_document(original)
@@ -276,16 +291,24 @@ class DocumentApplyService:
 
     def _normalization(
         self, request: DocumentApplyRequest, target: str
-    ) -> dict[str, str] | None:
-        if target == request.path or request.document_type is None:
-            return None
-        return {
-            "reason": "document-type-prefix",
-            "document_type": request.document_type,
-            "required_prefix": self._settings.document_types["types"][request.document_type][
-                "prefix"
-            ],
-        }
+    ) -> list[dict[str, str]]:
+        actions: list[dict[str, str]] = []
+        requested = Path(request.path)
+        normalized_request = requested
+        if not requested.suffix:
+            normalized_request = requested.with_name(requested.name + ".md")
+            actions.append({"reason": "markdown-extension", "required_suffix": ".md"})
+        if request.document_type is not None and Path(target).name != normalized_request.name:
+            actions.append(
+                {
+                    "reason": "document-type-prefix",
+                    "document_type": request.document_type,
+                    "required_prefix": self._settings.document_types["types"][
+                        request.document_type
+                    ]["prefix"],
+                }
+            )
+        return actions
 
     def _follow_up(
         self,

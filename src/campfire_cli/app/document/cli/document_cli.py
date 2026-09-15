@@ -59,16 +59,19 @@ def kanban_check(ctx: typer.Context, path: str = typer.Option(..., "--path")) ->
 
 @document_cli.command("inspect")
 def inspect(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
-    """返回单篇文档的 Profile、领域、确定关系和问题上下文。"""
+    """返回单篇文档的 Profile、领域、确定关系和问题上下文。
+
+    示例：campfire document inspect --path "mywork/项目/记录-进展.md"
+    """
     invoke(lambda: service(ctx).inspect(path))
 
 
 @document_cli.command("list")
 def list_documents(
     ctx: typer.Context,
-    project: str | None = typer.Option(None, "--project"),
-    domain: str | None = typer.Option(None, "--domain"),
-    document_type: str | None = typer.Option(None, "--type"),
+    project: str | None = typer.Option(None, "--project", help="精确 Project id"),
+    domain: str | None = typer.Option(None, "--domain", help="精确 Domain id"),
+    document_type: str | None = typer.Option(None, "--type", help="精确文档类型"),
     lifecycle: str | None = typer.Option(None, "--lifecycle"),
     limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
@@ -87,7 +90,7 @@ def list_documents(
 @document_cli.command("format")
 def format_document(
     ctx: typer.Context,
-    path: str = typer.Option(..., "--path"),
+    path: str = typer.Option(..., "--path", help="现有 Markdown 文档路径"),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或执行一篇文档的 Frontmatter 字段排序。"""
@@ -112,7 +115,11 @@ def parse_values(items: list[str]) -> dict[str, str]:
 @document_cli.command("apply")
 def apply_document(
     ctx: typer.Context,
-    path: str = typer.Option(..., "--path"),
+    path: str = typer.Option(
+        ...,
+        "--path",
+        help="目标 Markdown 路径；创建或唯一更新时可省略 .md，类型前缀可省略",
+    ),
     document_type: str | None = typer.Option(None, "--type"),
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
     body_file: Path | None = typer.Option(None, "--body-file"),
@@ -122,6 +129,8 @@ def apply_document(
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或应用一篇 Profile 合法文档的创建、补丁与显式类型变更。
+
+    示例：campfire document apply --path "mynote/Python/混合编程" --type knowledge
 
     创建时文件名可省略类型前缀；CLI 根据 --type 返回并写入最终 target。
     已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。

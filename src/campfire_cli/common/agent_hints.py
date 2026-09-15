@@ -23,7 +23,8 @@ HINT_BODY = """## Campfire 文档治理
 4. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
 5. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
    契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
-   `document inspect` 后 apply，不从 `tree` 开始逐层探索。
+   `document inspect` 后 apply，不从 `tree` 开始逐层探索。创建或唯一更新时
+   `--path` 可省略 `.md` 和类型前缀，由 CLI 返回最终 target。
 6. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
    `AUTO-GENERATED` 标记区域只能由 CLI 修改；标记外 Markdown 正文可以直接
    使用文件工具编辑。CLI 写命令完成后只执行结果实际返回的

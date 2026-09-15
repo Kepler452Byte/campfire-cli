@@ -452,11 +452,13 @@ def test_document_apply_follow_up_normalizes_nested_directory_to_domain(
     assert result.exit_code == 0, result.output
     assert payload["target"] == "mywork/Project/任务/计划-下一版.md"
     assert payload["requested_path"] == "mywork/Project/任务/下一版.md"
-    assert payload["normalization"] == {
-        "reason": "document-type-prefix",
-        "document_type": "plan",
-        "required_prefix": "计划-",
-    }
+    assert payload["normalization"] == [
+        {
+            "reason": "document-type-prefix",
+            "document_type": "plan",
+            "required_prefix": "计划-",
+        }
+    ]
     assert follow_up["scope"] == "mywork/Project"
     assert synced.exit_code == 0, synced.output
     assert synced_payload["status"] == "synced"
@@ -2068,8 +2070,32 @@ def test_space_and_domain_format_preserve_human_and_generated_body(workspace: Pa
     formatted_domain = domain_marker.read_text(encoding="utf-8")
     assert formatted_space.endswith(space_body)
     assert formatted_domain.endswith(domain_body)
+    assert "# Frontmatter managed by Campfire CLI;" in formatted_space
+    assert "# Frontmatter managed by Campfire CLI;" in formatted_domain
     assert formatted_space.index("name:") < formatted_space.index("space_id:")
     assert formatted_domain.index("name:") < formatted_domain.index("domain_id:")
+
+
+def test_maintenance_check_includes_workspace_structure_issues(workspace: Path) -> None:
+    domain = workspace / "mynote/结构异常"
+    domain.mkdir()
+    (domain / "_领域.md").write_text(
+        "---\nname: 结构异常\ndomain_id: broken-domain\n"
+        "domain_type: knowledge-domain\nmoc: MOC-结构异常\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["maintenance", "check"])
+    payload = json.loads(result.output)
+
+    assert result.exit_code == 0, result.output
+    assert payload["status"] == "needs-review"
+    assert any(
+        issue["code"] == "domain-field-missing"
+        and issue["path"] == "mynote/结构异常/_领域.md"
+        and issue["detail"] == "governance"
+        for issue in payload["issues"]
+    )
 
 
 def test_document_commands_delegate_workspace_markers(workspace: Path) -> None:

@@ -87,6 +87,49 @@ def test_apply_derives_create_filename_from_type(workspace: Path) -> None:
     assert [item.scope for item in result.follow_up] == ["mywork/【Example】文档中心"]
 
 
+def test_apply_normalizes_missing_markdown_extension_and_type_prefix(
+    workspace: Path,
+) -> None:
+    domain = project_domain(workspace)
+    requested = "mywork/【Example】文档中心/下一版"
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path=requested,
+            document_type="plan",
+            values={"description": "发布计划", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    assert result.target == "mywork/【Example】文档中心/计划-下一版.md"
+    assert result.normalization == [
+        {"reason": "markdown-extension", "required_suffix": ".md"},
+        {
+            "reason": "document-type-prefix",
+            "document_type": "plan",
+            "required_prefix": "计划-",
+        },
+    ]
+    assert (domain / "计划-下一版.md").is_file()
+
+
+def test_apply_rejects_non_markdown_extension_with_hint(workspace: Path) -> None:
+    project_domain(workspace)
+
+    with pytest.raises(ConfigurationError) as caught:
+        service(workspace).apply(
+            DocumentApplyRequest(
+                path="mywork/【Example】文档中心/下一版.txt",
+                document_type="plan",
+            )
+        )
+
+    assert caught.value.payload()["code"] == "document-extension-invalid"
+    assert caught.value.payload()["expected_suffix"] == ".md"
+    assert "自动补充 .md" in caught.value.payload()["hint"]
+
+
 def test_every_configured_type_derives_and_replaces_filename_prefix(workspace: Path) -> None:
     config = WorkspaceSettings.load("test", workspace).document_types
 

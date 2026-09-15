@@ -23,7 +23,7 @@ def check(
     severity: str | None = typer.Option(None, "--severity", help="只显示指定严重级别"),
     summary: bool = typer.Option(False, "--summary", help="只输出统计，不展开问题列表"),
 ) -> None:
-    """检查当前受管文档并刷新 SQLite 当前状态。"""
+    """汇总 Workspace 结构与文档问题并刷新 SQLite 当前状态。"""
     emit(ctx.obj.maintenance.check(scope=scope, code=code, severity=severity, summary=summary))
 
 
@@ -33,7 +33,11 @@ def sync(
     dry_run: bool = typer.Option(False, "--dry-run"),
     scope: str | None = typer.Option(None, "--scope", help="只同步指定领域或治理根目录"),
 ) -> None:
-    """同步 MOC 等确定性派生内容。"""
+    """同步 MOC 等确定性派生内容。
+
+    Workspace 选择是根参数，例如：
+    campfire --workspace personal maintenance sync --scope "mywork/项目"
+    """
     emit(ctx.obj.maintenance.sync(dry_run, scope))
 
 

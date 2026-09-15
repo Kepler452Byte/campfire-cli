@@ -68,11 +68,14 @@ class MaintenanceService:
         summary: bool = False,
     ) -> MaintenanceResult:
         structure = DomainService(self._settings.vault_root, self._settings.state_root)
-        discovered_domains, _domain_issues = structure.discover()
+        discovered_domains, domain_issues = structure.discover()
         discovered_spaces, _space_issues = structure.spaces.discover()
         spaces, domains = self._topology_states(discovered_spaces, discovered_domains)
         documents: list[DocumentState] = []
         issues: list[Issue] = []
+        issues.extend(
+            Issue.model_validate(enrich_issue(item)) for item in domain_issues
+        )
         paths = self._iter_documents()
         for path in paths:
             documents.append(self._document_state(path))

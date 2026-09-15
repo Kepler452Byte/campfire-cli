@@ -26,7 +26,7 @@ class DocumentApplyResult(BaseModel):
     path: str
     requested_path: str
     target: str
-    normalization: dict[str, Any] | None = None
+    normalization: list[dict[str, Any]] = Field(default_factory=list)
     profile: str
     expected_hash: str
     write_performed: bool = False

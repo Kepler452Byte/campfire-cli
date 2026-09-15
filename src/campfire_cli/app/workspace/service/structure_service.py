@@ -28,6 +28,10 @@ from campfire_cli.config.defaults import config_section
 
 SPACE_MARKER = "_空间.md"
 DOMAIN_MARKER = "_领域.md"
+DECLARATION_MANAGED_COMMENT = (
+    "# Frontmatter managed by Campfire CLI; "
+    "edit Markdown outside generated regions freely."
+)
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 
 
@@ -65,6 +69,10 @@ def _format_declaration(
             status="blocked",
             path=relative,
             issues=[{"code": code, "path": relative} for code in errors],
+        )
+    if DECLARATION_MANAGED_COMMENT not in formatted:
+        formatted = formatted.replace(
+            "---\n", f"---\n{DECLARATION_MANAGED_COMMENT}\n", 1
         )
     changed = formatted != original
     if changed and confirm:
@@ -219,8 +227,7 @@ class SpaceService:
         return "".join(
             [
                 "---\n",
-                "# Frontmatter managed by Campfire CLI; "
-                "edit Markdown outside generated regions freely.\n",
+                f"{DECLARATION_MANAGED_COMMENT}\n",
                 f"name: {json.dumps(space.name, ensure_ascii=False)}\n",
                 f"space_id: {space.id}\nspace_type: {space.type}\n",
                 f"status: {space.status}\n---\n\n",
@@ -523,8 +530,7 @@ class DomainService:
         return "".join(
             [
                 "---\n",
-                "# Frontmatter managed by Campfire CLI; "
-                "edit Markdown outside generated regions freely.\n",
+                f"{DECLARATION_MANAGED_COMMENT}\n",
                 f"name: {json.dumps(domain.name, ensure_ascii=False)}\n",
                 f"domain_id: {domain.id}\ndomain_type: {domain.type}\n",
                 f"governance: {domain.governance}\n",
