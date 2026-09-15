@@ -78,7 +78,7 @@ campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 与相关文档页
 campfire maintenance archive check / apply       # 归档候选检查与执行
 
 campfire document inspect / check / format       # 单篇文档查看、校验、格式化
-campfire document apply / move                   # 单篇文档创建更新、跨 Domain 移动
+campfire document apply / move                   # 创建更新、类型转换、跨 Domain 移动
 campfire document profile list / show / resolve  # Frontmatter Profile 规则
 campfire document type list                      # 文档类型与前缀
 
@@ -123,12 +123,12 @@ campfire workspace restructure verify --batch move-001
 - **校验分工**：`maintenance check` 统一负责正式文档的 Schema 与枚举校验，并刷新可重建索引；结构声明由 `workspace space/domain check` 校验；`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
 - **Frontmatter Profile**：声明式一层继承（`base` 或 `base → knowledge/project-doc/task`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
 - **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，失败恢复到执行前。
-- **按需后续治理**：写入命令只在实际写入成功且派生内容可能变化时返回一个最小 scope 的 `maintenance sync`；预览和阻塞结果的 `follow_up` 为空。Skill 消费该结果，没有 follow-up 就结束，不固定追加 dry-run 或全量 check。
+- **按需后续治理**：写入命令只在实际写入成功且派生内容可能变化时返回零或一个、且可直接执行的最小 scope `maintenance sync`；预览和阻塞结果的 `follow_up` 为空。位于 Domain 内部的 scope 由 CLI 归一化为有效 Domain。Skill 消费该结果，没有 follow-up 就结束，不固定追加 dry-run 或全量 check。
 - **配置两层模型**：产品默认契约在包内 `resources/defaults/config.yml`（SSOT），用户只在 `~/.campfire/config.yml` 写覆盖项；Mapping 递归合并，`campfire workspace config check` 验证有效配置。
 
 ## Agent 协作
 
-全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：首次读写先 `workspace resolve` 并读取 Workspace 的 `AGENTS.md`；单文档用 `document apply/move`，批量结构调整用 `workspace restructure`，归档用 `maintenance archive`。有歧义的分类和重构进入 Decision，不由 Agent 擅自决定。
+全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：已给出唯一文件路径的正文读取或小改直接使用文件工具；新建文档、修改 Frontmatter/类型/归属或执行结构治理时才加载 bootstrap，并使用 `document apply/move` 等原子命令。批量结构调整用 `workspace restructure`，归档用 `maintenance archive`。有歧义的分类和重构进入 Decision，不由 Agent 擅自决定。
 
 ## 许可
 

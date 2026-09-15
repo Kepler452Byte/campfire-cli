@@ -118,7 +118,7 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 命令设计遵循以下约束：
 
 1. **对象域优先**：公共入口采用 `campfire <object-domain> <verb>`，例如 `document apply`、`maintenance check`；动词在所属业务对象内保持单义，不为同一行为保留多个别名。
-2. **意图原子、派生显式**：`document apply` 只创建或更新目标文档，`document move` 原子完成单文档移动、目标 Profile 对齐和确定性引用修复；命令只在 MOC、关系页或索引可能变化时返回一个最小 scope 的 `maintenance sync`。
+2. **意图原子、派生显式**：`document apply` 创建或更新文档，并在显式类型变化时将类型、文件名前缀和确定性引用作为同一变更提交；`document move` 原子完成单文档跨 Domain 移动、目标 Profile 对齐和确定性引用修复。命令只在 MOC、关系页或索引可能变化时返回零或一个可直接执行的最小 scope `maintenance sync`。
 3. **契约声明式，变更显式**：Profile 是字段、类型、枚举、顺序和条件必填的 SSOT。Agent 提交业务值，CLI 解析有效 Profile 并拒绝猜测；已有文档只修改明确给出的字段或正文操作。
 4. **写入先证明安全**：写命令默认预览，显式确认后才提交；提交时在锁内复核快照或期望哈希，多文件变更作为一个 ChangeSet 执行，失败回滚，避免静默覆盖和部分写入。
 5. **人类与 Agent 共用一个契约**：命令和结果只有一套语义。JSON 状态、issues、missing fields 与 follow-up 供 Agent 稳定消费，`tree` 和分层 `-h` 供人类与 Agent 渐进发现，不维护第二套参数目录。
@@ -128,7 +128,7 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 
 横切关注点与业务 SOP 不使用同一种复用手段。哈希复核、写锁、原子替换和失败恢复由显式 ChangeSet Executor 复用；写命令返回的 `follow_up` 由 Skill 消费。不为了复用 Maintenance 而引入 AOP 切面、命令总线、全局钩子或隐式中间件。
 
-因此，`document apply` 的准确含义是“对一个 Markdown 文档应用经 Profile 校验的显式意图”，不是“把完整声明持续调谐到某个服务端状态”。用户或 Agent 可以直接 edit 已有正文；无论通过 apply 还是 edit 写入，跨文档派生结果都由后续显式 Maintenance 收敛。
+因此，`document apply` 的准确含义是“对一个 Markdown 文档应用经 Profile 校验的显式意图”，不是“把完整声明持续调谐到某个服务端状态”。创建时文件名可省略类型前缀；显式变更类型时，CLI 负责同步类型、前缀和可确定引用。用户或 Agent 可以直接 edit 唯一路径下的已有正文；只有新建文档、修改 Frontmatter/类型/归属或需要派生治理时才进入 CLI 工作流。
 
 ## 5. SSOT 与派生数据
 

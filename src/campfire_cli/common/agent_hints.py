@@ -13,16 +13,18 @@ HINT_BODY = """## Campfire 文档治理
 本机装有 campfire CLI（`campfire --help`），Obsidian Vault 已注册为文档工作区。
 当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时：
 
-1. 当前 Session 首次读写 Campfire 文档前，加载并执行
-   `campfire-context-bootstrap`。
-2. 按用户意图加载对应的 Campfire 垂直 Skill。
-3. 创建正式文档或修改 Frontmatter 时，优先使用
+1. 用户已给出唯一存在路径，且只读取或小范围修改人工正文时，
+   直接使用文件工具；不加载 bootstrap，不调用 Campfire CLI。
+2. 新建、Frontmatter、文件名、归属、移动、归档、派生维护或结构治理
+   需要 Workspace、Project、Domain 或 Profile 上下文；当前 Session
+   首次进入这类治理流程时加载 `campfire-context-bootstrap`。
+3. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
+4. 创建正式文档或修改 Frontmatter 时，优先使用
    `campfire document apply`；不手写或猜测 Profile 字段和枚举。
-4. 只对已有文档的正文做小范围编辑时，可以使用文件编辑工具，
-   但不得编辑自动生成区域。CLI 写命令完成后只执行结果实际返回的
+5. 文件工具不得编辑自动生成区域。CLI 写命令完成后只执行结果实际返回的
    `follow_up`；正文编辑会影响关系计算时执行一次局部 `maintenance sync`。
    没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
-5. CLI 返回 `needs-input` 时补齐事实后重试，不为通过检查而猜测。
+6. CLI 返回 `needs-input` 时补齐事实后重试，不为通过检查而猜测。
 
 不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
 字段、枚举和顺序以 Campfire Profile 为唯一事实来源。

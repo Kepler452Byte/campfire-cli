@@ -107,7 +107,7 @@ Campfire 使用语义化版本：
 
 - SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
 - `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
-- 写命令只在实际写入成功且派生状态可能变化时返回一个 scoped `maintenance sync` follow-up；预览和阻塞结果必须返回空列表；
+- 写命令只在实际写入成功且派生状态可能变化时返回零或一个可直接执行的 scoped `maintenance sync` follow-up；Domain 内部路径必须归一化为对应 Domain，预览和阻塞结果必须返回空列表；
   调用方只执行实际返回的 follow-up，不固定追加 check 或全量扫描。
 - `workspace rebuild` 默认只预览；`--confirm` 后从 Manifest 和 Markdown 完整替换派生索引。
 

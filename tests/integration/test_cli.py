@@ -113,6 +113,22 @@ def test_short_help_is_available_at_every_command_level() -> None:
         assert "help" in result.output.lower()
 
 
+def test_golden_path_help_is_complete_at_narrow_terminal_width() -> None:
+    apply_help = runner.invoke(app, ["document", "apply", "-h"], terminal_width=80)
+    plan_help = runner.invoke(
+        app,
+        ["workspace", "restructure", "plan", "-h"],
+        terminal_width=80,
+    )
+
+    assert apply_help.exit_code == 0, apply_help.output
+    assert "文件名可省略类型前缀" in apply_help.output
+    assert "同步文件名和引用" in apply_help.output
+    assert plan_help.exit_code == 0, plan_help.output
+    assert "无 --spec 时只推断类型和文件名规范化" in plan_help.output
+    assert "根字段为 operations" in plan_help.output
+
+
 def test_public_selectors_keep_one_stable_golden_path(workspace: Path) -> None:
     def options(path: tuple[str, ...]) -> set[str]:
         command = get_command(app)
@@ -328,6 +344,53 @@ def test_document_apply_cli_creates_valid_document_without_hidden_sync(workspace
     ]
     checked = runner.invoke(app, ["document", "check", "--path", relative])
     assert json.loads(checked.output)["status"] == "ok"
+
+
+def test_document_apply_follow_up_normalizes_nested_directory_to_domain(
+    workspace: Path,
+) -> None:
+    domain = workspace / "mywork/Project"
+    write_domain_marker(domain, "project", "Project", project_id="example")
+    (domain / "任务").mkdir()
+    result = runner.invoke(
+        app,
+        [
+            "document",
+            "apply",
+            "--path",
+            "mywork/Project/任务/下一版.md",
+            "--type",
+            "plan",
+            "--set",
+            "description=发布计划",
+            "--set",
+            "lifecycle=proposed",
+            "--confirm",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    follow_up = payload["follow_up"][0]
+    synced = runner.invoke(
+        app,
+        [
+            "--workspace",
+            follow_up["workspace"],
+            "maintenance",
+            "sync",
+            "--scope",
+            follow_up["scope"],
+        ],
+    )
+    synced_payload = json.loads(synced.output)
+
+    assert result.exit_code == 0, result.output
+    assert payload["target"] == "mywork/Project/任务/计划-下一版.md"
+    assert follow_up["scope"] == "mywork/Project"
+    assert synced.exit_code == 0, synced.output
+    assert synced_payload["status"] == "synced"
+    assert synced_payload["domain_count"] == 1
+    assert synced_payload["indexed_document_count"] >= 1
 
 
 def test_setup_creates_manifest_without_overwriting_user_config(
@@ -1192,6 +1255,46 @@ def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: 
     assert "source-hash-changed" in result.output
 
 
+def test_restructure_plan_reports_up_to_date_when_nothing_is_inferred(workspace: Path) -> None:
+    (workspace / "mynote/知识-已规范.md").write_text(
+        "---\ntype: knowledge\n---\n# 已规范\n",
+        encoding="utf-8",
+    )
+    runner.invoke(
+        app,
+        [
+            "--workspace",
+            "test",
+            "workspace",
+            "restructure",
+            "inventory",
+            "--scope",
+            "mynote",
+            "--batch",
+            "already-normalized",
+        ],
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "test",
+            "workspace",
+            "restructure",
+            "plan",
+            "--batch",
+            "already-normalized",
+        ],
+    )
+    payload = json.loads(result.output)
+
+    assert result.exit_code == 0, result.output
+    assert payload["status"] == "up-to-date"
+    assert payload["inventory_count"] == 1
+    assert payload["planned_count"] == 0
+
+
 def test_restructure_confirm_never_partially_applies_unapproved_plan(workspace: Path) -> None:
     first = workspace / "mynote/知识-first.md"
     second = workspace / "mynote/知识-second.md"
@@ -1894,6 +1997,53 @@ def test_scoped_sync_ignores_structural_issue_outside_scope(workspace: Path) -> 
     assert payload["scope"] == "mywork/Healthy"
     assert payload["write_performed"] is True
     assert "记录-进展" in (healthy / "MOC-Healthy.md").read_text(encoding="utf-8")
+
+
+def test_scoped_sync_normalizes_domain_internal_path(workspace: Path) -> None:
+    domain = _create_domain(workspace, "Project", domain_id="project")
+    nested = domain / "任务"
+    nested.mkdir()
+    (nested / "记录-进展.md").write_text("# 进展\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["maintenance", "sync", "--scope", "mywork/Project/任务"],
+    )
+    payload = json.loads(result.output)
+
+    assert result.exit_code == 0, result.output
+    assert payload["status"] == "synced"
+    assert payload["scope"] == "mywork/Project"
+    assert payload["domain_count"] == 1
+    assert payload["indexed_document_count"] >= 1
+
+
+def test_scoped_sync_rejects_existing_unmanaged_directory(workspace: Path) -> None:
+    (workspace / "mywork/Loose").mkdir()
+
+    result = runner.invoke(
+        app,
+        ["maintenance", "sync", "--scope", "mywork/Loose"],
+    )
+    payload = json.loads(result.output)
+
+    assert result.exit_code == 0, result.output
+    assert payload["status"] == "blocked"
+    assert payload["issues"][0]["code"] == "scope-unmanaged"
+
+
+def test_scoped_sync_rejects_missing_path_inside_domain(workspace: Path) -> None:
+    domain = workspace / "mywork/Project"
+    write_domain_marker(domain, "project", "Project")
+
+    result = runner.invoke(
+        app,
+        ["maintenance", "sync", "--scope", "mywork/Project/不存在"],
+    )
+    payload = json.loads(result.output)
+
+    assert payload["status"] == "blocked"
+    assert payload["issues"][0]["code"] == "scope-missing"
 
 
 def test_scoped_sync_refreshes_index_without_scanning_unrelated_documents(

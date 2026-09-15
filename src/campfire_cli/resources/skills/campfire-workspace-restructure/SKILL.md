@@ -38,7 +38,7 @@ campfire workspace domain rekey --domain <id> --new-id <id> --confirm
 先运行不带 `--confirm` 的同一命令审查计划；用户已授权且没有 issues 时原样追加 `--confirm`。预览或阻塞结果的 `follow_up` 必须为空；只在确认命令实际写入成功后执行其返回的一个后续。`rename` 只修改领域显示名称，不隐式修改目录或 Project；`move` 只接收目标 Space/Domain 的稳定 ID，由 CLI 推导路径与父子关系。`merge` 一次完成内容迁移、直接子领域改挂和源领域移除；`delete` 只接受没有内容、附件、子领域、Project 绑定或人工声明正文的逻辑空领域。普通操作保持 `domain_id`；只有用户明确要求改变稳定身份时使用 `rekey`。
 
 1. 使用 `campfire workspace restructure inventory --scope <path> --batch <id>` 冻结明确范围。
-2. 使用 `workspace restructure plan --batch <id>` 生成推断计划。只有 Domain 原子命令无法表达的批量文档映射、领域拆分或 Frontmatter Patch 才写 YAML/JSON 意图规格；使用规格前读取[批量重构规格](references/restructure-spec.md)。
+2. 使用 `workspace restructure plan --batch <id>` 生成推断计划。无 spec 时只推断类型和文件名前缀规范化；返回 `up-to-date` 就结束。只有 Domain 原子命令无法表达的批量文档映射、领域拆分或 Frontmatter Patch 才写 YAML/JSON 意图规格；使用规格前读取[批量重构规格](references/restructure-spec.md)。
 3. 逐项审查 source、target、Frontmatter Patch、理由和审批状态。删除、合并、根领域拆分、冲突权威判定和无法逆推的语义必须由用户确认。
 4. 先运行不带 `--confirm` 的 `workspace restructure apply --batch <id>` 做执行前预检；计划已经明确审批且没有阻塞问题时才追加 `--confirm`。
 5. 执行 `workspace restructure verify --batch <id>`，再只执行命令实际返回的 `follow_up`，不自行追加重复预览或检查。

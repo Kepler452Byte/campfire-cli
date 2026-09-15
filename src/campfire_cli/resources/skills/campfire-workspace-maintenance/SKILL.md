@@ -18,13 +18,13 @@ campfire workspace rebuild --confirm
 
 目标是允许人类低成本记录，同时让 Agent 以可审阅、可重复执行的方式保持 Workspace 合规。
 
-首次读写先运行 `campfire workspace resolve` 获取目标 Workspace，再读取其 `AGENTS.md`。诊断配置、结构或文档问题时分别使用 `workspace config check`、`workspace space/domain check` 或 `maintenance check`；不要把全量检查当作每次写文档的固定步骤。检查不修改原始笔记，但可能刷新用户级索引和报告，不得直接编辑 `~/.campfire/`。
+进入需要 Workspace、Domain、Project 或 Profile 上下文的治理流程时，先加载 `campfire-context-bootstrap`。用户已给出唯一存在路径，且只读取或小范围修改人工正文时，直接使用文件工具，不启动 bootstrap。诊断配置、结构或文档问题时分别使用 `workspace config check`、`workspace space/domain check` 或 `maintenance check`；不要把全量检查当作每次写文档的固定步骤。
 
 ## 工作流
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
 2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。CLI 根据目标路径推导所属 Space 和最近父 Domain，嵌套 Domain 继承 governance/Project；只有根 Domain 才显式提供 governance/Project。默认先预览，用户确认后追加 `--confirm`。
-3. 创建正式文档、接管无 Frontmatter 的既有正文或修改 Frontmatter，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile 并返回所有缺失字段；Agent 补齐后对同一命令追加 `--confirm`。正文小改可直接 edit；格式顺序单独使用 `document format`。
+3. 创建正式文档、接管无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile，根据 type 推导文件名，并一次返回所有缺失字段。Agent 不手工同步 type 和文件名前缀。格式顺序单独使用 `document format`。
 4. 单篇文档改名或跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`；批量文档迁移使用 `workspace restructure`。不要让 Agent 拼目标目录，不要为单篇修改创建批次计划。
 5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
 6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页与本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
@@ -40,7 +40,8 @@ campfire workspace rebuild --confirm
    |      -> document apply --confirm -> 仅执行返回的 follow_up
    |
    +-- 只改正文
-   |      -> edit -> 若正文影响 MOC/关系则 sync --scope 一次
+   |      -> 已知唯一路径时直接 edit
+   |      -> 显式链接、生成视图或用户要求即时刷新时才 sync 一次
    |
    +-- 单篇文档改名或跨 Domain 移动
    |      -> document move 预览 -> 必要时 --set/--unset 补齐

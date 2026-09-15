@@ -21,11 +21,13 @@ class DocumentApplyRequest(BaseModel):
 class DocumentApplyResult(BaseModel):
     status: Literal["planned", "needs-input", "blocked", "applied"]
     workspace_id: str
-    action: Literal["create", "update"]
+    action: Literal["create", "update", "retype"]
     path: str
+    target: str
     profile: str
     expected_hash: str
     write_performed: bool = False
+    updated_references: list[str] = Field(default_factory=list)
     issues: list[dict[str, Any]] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
     follow_up: list[CommandFollowUp] = Field(default_factory=list)

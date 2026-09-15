@@ -153,14 +153,28 @@ class MaintenanceService:
             scope_path = (self._settings.vault_root / scope).resolve()
             if not self._is_within_workspace(scope_path):
                 return self._sync_blocked("scope-outside-workspace", scope, scope)
-            domains = [
+            exact = [domain for domain in domains if domain.path == scope_path]
+            if not exact and not scope_path.exists():
+                return self._sync_blocked("scope-missing", scope, scope)
+            containing = [domain for domain in domains if domain.path in scope_path.parents]
+            if exact:
+                scope_path = exact[0].path
+            elif containing:
+                scope_path = max(containing, key=lambda domain: len(domain.path.parts)).path
+                scope = scope_path.relative_to(self._settings.vault_root).as_posix()
+            descendants = [
                 domain
                 for domain in domains
                 if domain.path == scope_path or scope_path in domain.path.parents
             ]
+            space_marker = self._settings.governance.get("space_marker", "_空间.md")
+            empty_governance_root = scope_path == self._settings.vault_root or (
+                scope_path / space_marker
+            ).is_file()
+            if not descendants and not empty_governance_root:
+                return self._sync_blocked("scope-unmanaged", scope, scope)
+            domains = descendants
             issues = [issue for issue in issues if self._path_matches_scope(issue["path"], scope)]
-            if not domains and not scope_path.exists():
-                return self._sync_blocked("scope-missing", scope, scope)
         if issues:
             return MaintenanceResult(
                 status="blocked",

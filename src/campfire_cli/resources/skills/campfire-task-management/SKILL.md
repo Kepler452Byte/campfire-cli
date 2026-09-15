@@ -7,7 +7,7 @@ description: "创建、更新和完成 Campfire 任务文档；适用于用户�
 
 统一任务文档（`任务-` 前缀）的创建、状态更新与完成闭环。任务分两类：有项目任务（关联已注册 Project）与无项目任务（个人待办、跨项目事务）。两类任务都不得虚构归属：`project` 字段只在能唯一解析到已注册 Project 时填写。
 
-通用写入门禁（授权、对象唯一、事实核验）遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。首次读写 Campfire 文档的 Session 先运行 `campfire-context-bootstrap` 解析 Workspace 与 Project。
+通用写入门禁遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。任务归属和 Task Profile 需要治理上下文，进入本 Skill 前加载 `campfire-context-bootstrap`。
 
 ## 状态机
 
@@ -32,7 +32,7 @@ project list 关键词匹配
 项目文档中心  全局任务领域
    └────┬────┘
         ▼
-document inspect 取契约 → 写入 → check → sync → 回报路径
+document apply 取契约并写入 → 只执行返回的 follow_up → 回报路径
 ```
 
 ## 工作流
@@ -51,7 +51,7 @@ document inspect 取契约 → 写入 → check → sync → 回报路径
 
 ### 3. 契约获取与写入
 
-1. 文件名使用 `任务-<一句话标题>.md` 前缀，类型契约以 `campfire document type list` 为准。
+1. 只提交任务标题和 `--type task`；CLI 从 type 推导最终文件名，Agent 不手写前缀映射。
 2. 有项目任务落各自文档中心的任务子目录；已有 `任务/` 惯例的项目沿用，无先例时在文档中心根下创建并沿用同规则。
 3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 负责 Profile、枚举、字段顺序和 YAML 类型；Skill 不硬编码这些可演进契约。
 4. CLI 返回 `needs-input` 时，根据其一次性列出的必填字段与允许值补齐事实，不猜测。
@@ -64,12 +64,7 @@ document inspect 取契约 → 写入 → check → sync → 回报路径
 
 ### 5. 验证闭环
 
-```bash
-campfire --workspace personal document check --path "mywork/【某项目】文档中心/任务/任务-....md"
-campfire --workspace personal maintenance sync --scope "mywork/【某项目】文档中心"
-```
-
-`document apply` 与 edit 都只修改目标文档，不包含隐藏维护副作用。写入后依次执行上述 scoped sync 与 check。向用户回报写入路径、动作、验证结果与未决字段；验证不通过不得声称完成。
+`document apply` 成功即表示目标文档已通过当前 Task Profile。写入后只执行结果实际返回的 follow-up，不固定追加 `document check` 或全 Workspace 扫描。向用户回报最终写入路径、动作、验证结果与未决字段。
 
 ## 边界
 

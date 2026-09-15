@@ -102,7 +102,11 @@ def apply_document(
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
-    """预览或应用一篇 Profile 合法文档的创建与补丁。"""
+    """预览或应用一篇 Profile 合法文档的创建、补丁与显式类型变更。
+
+    创建时文件名可省略类型前缀；CLI 根据 --type 返回并写入最终 target。
+    已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。
+    """
     body = body_file.read_text(encoding="utf-8") if body_file else None
     invoke(
         lambda: service(ctx).apply(

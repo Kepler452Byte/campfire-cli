@@ -12,11 +12,13 @@ from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
 )
+from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.domain_context import (
+    DomainContext,
     DomainContextError,
     resolve_domain_context,
 )
@@ -42,14 +44,16 @@ class DocumentApplyService:
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def apply(self, request: DocumentApplyRequest) -> DocumentApplyResult:
-        path = safe_path(self._settings.vault_root, request.path)
-        if path.suffix.lower() != ".md":
+        source = safe_path(self._settings.vault_root, request.path)
+        if source.suffix.lower() != ".md":
             raise ConfigurationError("document apply 目标必须是 Markdown 文件")
-        exists = path.is_file()
-        original = path.read_text(encoding="utf-8") if exists else ""
+        exists = source.is_file()
+        original = source.read_text(encoding="utf-8") if exists else ""
         parsed = parse_document(original)
 
         current_type = parsed.frontmatter.get("type")
+        if "type" in request.values:
+            raise GovernanceBlockedError("文档类型只能通过 --type 表达")
         document_type = request.document_type or (
             current_type if isinstance(current_type, str) else None
         )
@@ -57,24 +61,25 @@ class DocumentApplyService:
             raise ConfigurationError("创建文档时必须提供 --type")
         if document_type not in self._settings.document_types.get("types", {}):
             raise ConfigurationError(f"未知文档类型：{document_type}")
-        if (
-            exists
-            and parsed.has_frontmatter
-            and request.document_type
-            and current_type != request.document_type
-        ):
-            raise GovernanceBlockedError("不允许通过 document apply 改变已有文档的 type")
 
-        expected_name = prefixed_name(path.name, document_type, self._settings.document_types)
-        if expected_name != path.name:
-            raise ConfigurationError(f"文件名应为：{expected_name}")
-        if request.values.get("type", document_type) != document_type:
-            raise GovernanceBlockedError("--set type 与有效文档类型不一致；请使用专用重构命令")
+        changes_type = (
+            exists and request.document_type is not None and current_type != document_type
+        )
+        action = "create" if not exists else "retype" if changes_type else "update"
+        target = (
+            source.with_name(
+                prefixed_name(source.name, document_type, self._settings.document_types)
+            )
+            if not exists or changes_type
+            else source
+        )
+        target_name = target.relative_to(self._settings.vault_root).as_posix()
+        context = self._domain_context(target)
 
         today = date.today().isoformat()
         frontmatter = dict(parsed.frontmatter)
         if not exists or not parsed.has_frontmatter:
-            frontmatter.update(self._creation_defaults(path, document_type, today))
+            frontmatter.update(self._creation_defaults(target, context, document_type, today))
         for key in ("project", "domain"):
             if key in request.values and request.values[key] != frontmatter.get(key):
                 raise GovernanceBlockedError(
@@ -83,15 +88,15 @@ class DocumentApplyService:
         frontmatter.update(request.values)
         frontmatter["type"] = document_type
         frontmatter["updated"] = today
-        profile = self._profiles.resolve(document_type, frontmatter, path)
-        actual_hash = file_sha256(path) if exists else "missing"
+        profile = self._profiles.resolve(document_type, frontmatter, target)
+        actual_hash = file_sha256(source) if exists else "missing"
 
         unknown = sorted(set(request.values) - set(profile.allowed))
         if unknown:
             return self._result(
                 request,
-                exists,
-                parsed.has_frontmatter,
+                target_name,
+                action,
                 profile.name,
                 actual_hash,
                 "blocked",
@@ -107,17 +112,20 @@ class DocumentApplyService:
 
         next_body = self._next_body(request, parsed.body, exists)
         if exists and parsed.has_frontmatter:
+            patch = {**request.values, "updated": today}
+            if changes_type:
+                patch["type"] = document_type
             rendered, render_errors = render_patch(
                 original,
-                {**request.values, "updated": today},
+                patch,
                 next_body,
                 list(profile.field_order),
             )
             if render_errors:
                 return self._result(
                     request,
-                    exists,
-                    parsed.has_frontmatter,
+                    target_name,
+                    action,
                     profile.name,
                     actual_hash,
                     "blocked",
@@ -125,7 +133,9 @@ class DocumentApplyService:
                 )
         else:
             rendered = render_document(frontmatter, next_body, list(profile.field_order))
-        issues = self._rules.check_content(self._settings.vault_root, path, rendered)
+        issues = self._rules.check_content(self._settings.vault_root, target, rendered)
+        if target != source and target.exists():
+            issues.insert(0, {"code": "target-exists", "path": target_name})
         missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
         for issue in issues:
             field = issue.get("field")
@@ -143,8 +153,8 @@ class DocumentApplyService:
         status = "needs-input" if missing else "blocked" if issues else "planned"
         result = self._result(
             request,
-            exists,
-            parsed.has_frontmatter,
+            target_name,
+            action,
             profile.name,
             actual_hash,
             status,
@@ -161,22 +171,44 @@ class DocumentApplyService:
                 }
             )
 
-        self._executor.execute(
-            FileChangeSet(
-                writes=(FileWrite(path, rendered),),
-                label="document apply",
-                expected={path: None if actual_hash == "missing" else actual_hash},
+        updated_references: list[str] = []
+        if exists and target != source:
+            writes, updated_references, expected = prepare_document_relocation(
+                self._settings.vault_root, source, target, rendered
             )
-        )
+            expected[source] = actual_hash
+            expected[target] = None
+            change_set = FileChangeSet(
+                writes=tuple(writes),
+                deletes=(source,),
+                label="document apply",
+                expected=expected,
+            )
+        else:
+            change_set = FileChangeSet(
+                writes=(FileWrite(target, rendered),),
+                label="document apply",
+                expected={target: None if not exists else actual_hash},
+            )
+        self._executor.execute(change_set)
         return result.model_copy(
             update={
                 "status": "applied",
                 "write_performed": True,
-                "follow_up": self._follow_up(request, exists, parsed.has_frontmatter),
+                "updated_references": updated_references,
+                "follow_up": self._follow_up(
+                    request, exists, parsed.has_frontmatter, context, changes_type
+                ),
             }
         )
 
-    def _creation_defaults(self, path: Path, document_type: str, today: str) -> dict[str, Any]:
+    def _creation_defaults(
+        self,
+        path: Path,
+        context: DomainContext,
+        document_type: str,
+        today: str,
+    ) -> dict[str, Any]:
         prefix = self._settings.document_types["types"][document_type]["prefix"]
         values: dict[str, Any] = {
             "name": path.stem[len(prefix) :] if path.stem.startswith(prefix) else path.stem,
@@ -186,16 +218,6 @@ class DocumentApplyService:
             "updated": today,
             "tags": [],
         }
-        try:
-            context = resolve_domain_context(
-                self._settings.vault_root,
-                path,
-                self._settings.governance.get("domain_marker", "_领域.md"),
-            )
-        except DomainContextError as exc:
-            raise ConfigurationError(
-                f"无法解析目标 Domain 上下文：{exc.code}: {exc.detail}"
-            ) from exc
         values["domain"] = context.domain_id
         if context.project_id:
             values["project"] = context.project_id
@@ -224,8 +246,8 @@ class DocumentApplyService:
     def _result(
         self,
         request: DocumentApplyRequest,
-        exists: bool,
-        had_frontmatter: bool,
+        target: str,
+        action: str,
         profile: str,
         expected_hash: str,
         status: str,
@@ -235,8 +257,9 @@ class DocumentApplyService:
         return DocumentApplyResult(
             status=status,
             workspace_id=self._settings.workspace_id,
-            action="update" if exists else "create",
+            action=action,
             path=request.path,
+            target=target,
             profile=profile,
             expected_hash=expected_hash,
             issues=issues,
@@ -248,16 +271,31 @@ class DocumentApplyService:
         request: DocumentApplyRequest,
         exists: bool,
         had_frontmatter: bool,
+        context: DomainContext,
+        changes_type: bool,
     ) -> list[CommandFollowUp]:
         derived_fields = {"name", "type", "status", "lifecycle", "domain", "project", "related"}
         needs_sync = not exists or not had_frontmatter
         needs_sync = needs_sync or bool(set(request.values) & derived_fields)
         needs_sync = needs_sync or request.body is not None
+        needs_sync = needs_sync or changes_type
         return (
             maintenance_sync_follow_up(
                 self._settings.workspace_id,
-                [Path(request.path).parent.as_posix()],
+                [context.root.relative_to(self._settings.vault_root).as_posix()],
             )
             if needs_sync
             else []
         )
+
+    def _domain_context(self, path: Path) -> DomainContext:
+        try:
+            return resolve_domain_context(
+                self._settings.vault_root,
+                path,
+                self._settings.governance.get("domain_marker", "_领域.md"),
+            )
+        except DomainContextError as exc:
+            raise ConfigurationError(
+                f"无法解析目标 Domain 上下文：{exc.code}: {exc.detail}"
+            ) from exc

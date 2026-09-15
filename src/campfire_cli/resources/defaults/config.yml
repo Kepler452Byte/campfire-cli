@@ -401,6 +401,9 @@ issues:
     scope-missing:
     - 指定范围内没有可同步的正式领域。
     - 检查 --scope 路径和领域声明后重试。
+    scope-unmanaged:
+    - 指定范围存在，但不属于任何受管 Domain，且范围内也没有 Domain。
+    - 使用 Domain 或其内部路径；需要接管的目录先执行 workspace domain adopt。
     scope-outside-workspace:
     - 指定范围超出当前 Workspace。
     - 使用当前 Workspace 内的相对路径。

@@ -1,11 +1,13 @@
 ---
 name: campfire-context-bootstrap
-description: "在 Agent 首次读写 Campfire 文档时解析 Workspace 和当前 Project，检查项目注册元信息及漂移；不负责写文档、执行任务或调度 Agent Session。"
+description: "在 Agent 进入需要 Workspace、Project、Domain 或 Profile 上下文的 Campfire 治理流程时解析当前环境并检查项目漂移；已知路径的正文读取和小改不加载。"
 ---
 
 # Campfire 上下文启动
 
-仅在当前 Session 首次需要读取或沉淀 Campfire 文档时运行一次。目标是向后续文档 Skill 提供可靠的 Workspace、Project、源码路径和文档中心，不把运行态 Session 信息写进 Project 元数据。
+仅在当前 Session 首次进入需要治理上下文的 Campfire 流程时运行一次。新建、Frontmatter、文件名、归属、移动、归档、派生维护和结构治理都需要该上下文。用户已给出唯一存在路径，且只读取或小范围修改人工正文时，直接使用文件工具，不加载本 Skill。
+
+目标是向后续文档 Skill 提供可靠的 Workspace、Project、源码路径和文档中心，不把运行态 Session 信息写进 Project 元数据。
 
 ## 状态机
 

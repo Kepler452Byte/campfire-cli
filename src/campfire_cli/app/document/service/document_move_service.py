@@ -3,18 +3,13 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.schema import DocumentMoveResult
+from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
-from campfire_cli.app.document.service.type_apply import (
-    rebase_markdown_links,
-    rewrite_markdown_links,
-    rewrite_wikilinks,
-)
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.domain_context import (
     DomainContext,
@@ -23,7 +18,7 @@ from campfire_cli.common.documents.domain_context import (
 )
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
+from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, safe_path
 from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -224,7 +219,9 @@ class DocumentMoveService:
         if issues or not confirm:
             return result
 
-        writes, updated_references, expected = self._prepare_writes(source, target, rendered)
+        writes, updated_references, expected = prepare_document_relocation(
+            self._settings.vault_root, source, target, rendered
+        )
         expected[source] = actual_hash
         expected[target] = None
         self._executor.execute(
@@ -243,36 +240,6 @@ class DocumentMoveService:
                 "follow_up": follow_up,
             }
         )
-
-    def _prepare_writes(
-        self, source: Path, target: Path, moved_text: str
-    ) -> tuple[list[FileWrite], list[str], dict[Path, str | None]]:
-        references = self._reference_files()
-        unique_stem = (
-            sum(path.stem == source.stem for path in references if path.suffix == ".md") == 1
-        )
-        source_relative = source.relative_to(self._settings.vault_root).as_posix()
-        target_relative = target.relative_to(self._settings.vault_root).as_posix()
-        writes: dict[Path, str] = {}
-        changed: list[str] = []
-        expected = {path: file_sha256(path) for path in references}
-        for reference in references:
-            text = moved_text if reference == source else reference.read_text(encoding="utf-8")
-            updated = text.replace(source_relative, target_relative).replace(
-                quote(source_relative), quote(target_relative)
-            )
-            if unique_stem and source.stem != target.stem:
-                updated = rewrite_wikilinks(updated, source.stem, target.stem)
-            if reference.suffix.lower() == ".md":
-                updated = rewrite_markdown_links(updated, reference, source, target)
-                if reference == source and source.parent != target.parent:
-                    updated = rebase_markdown_links(updated, source, target)
-            output = target if reference == source else reference
-            if reference == source or updated != text:
-                writes[output] = updated
-            if reference != source and updated != text:
-                changed.append(reference.relative_to(self._settings.vault_root).as_posix())
-        return [FileWrite(path, text) for path, text in writes.items()], changed, expected
 
     def _domain_context(self, path: Path) -> tuple[DomainContext | None, str | None]:
         try:
@@ -294,15 +261,3 @@ class DocumentMoveService:
             *self._settings.governance.get("project_reserved_directories", []),
         }
         return any(part in reserved or part.startswith(".") for part in relative.parts)
-
-    def _reference_files(self) -> list[Path]:
-        ignored = {".git", ".campfire"}
-        return sorted(
-            path
-            for path in self._settings.vault_root.rglob("*")
-            if path.is_file()
-            and path.suffix.lower() in {".md", ".canvas"}
-            and not any(
-                part in ignored for part in path.relative_to(self._settings.vault_root).parts
-            )
-        )

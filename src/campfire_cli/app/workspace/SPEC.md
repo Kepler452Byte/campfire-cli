@@ -10,9 +10,9 @@
 
 `workspace config check` 统一校验包内产品默认值和当前 Workspace 的有效治理契约，包括目录与 Space 冲突、文档类型前缀、Profile 引用和继承、归档策略以及托管资源列表。
 
-`workspace restructure` 负责原子命令无法表达的批量文档映射、领域拆分和 Frontmatter Patch：冻结范围、生成带内容哈希的审批计划、更新引用并验证迁移事实。Domain 的 rename/move/merge/delete/rekey 直接位于 `workspace domain`；move 使用目标 Space/Domain id 推导路径，merge 一次完成内容迁移和源领域移除，delete 只删除逻辑空领域。单篇文档移动属于 `document move`，以目标 Domain id 代替目标路径。纯移动不得重写文档内容；`verify` 只验证本批次 source/target 结果。该能力属于 Workspace Service，不设独立 App，也不用于日常增量维护。
+`workspace restructure` 负责原子命令无法表达的批量文档映射、领域拆分和 Frontmatter Patch：冻结范围、生成带内容哈希的审批计划、更新引用并验证迁移事实。Domain 的 rename/move/merge/delete/rekey 直接位于 `workspace domain`；move 使用目标 Space/Domain id 推导路径，merge 一次完成内容迁移和源领域移除，delete 只删除逻辑空领域。单篇文档移动属于 `document move`，以目标 Domain id 代替目标路径。无 `--spec` 时只推断可确定的文档类型与文件名前缀规范化；没有变化返回 `up-to-date`，任意路径映射或 Frontmatter Patch 必须使用已文档化的 spec。纯移动不得重写文档内容；`verify` 只验证本批次 source/target 结果。该能力属于 Workspace Service，不设独立 App，也不用于日常增量维护。
 
-Adoption、文档批量 Restructure 与 Domain Restructure 均使用共享 ChangeSet Executor 提交文件写入和路径移动，并在协调的 Repository 写入失败时补偿恢复。Workspace Service 不调用 Maintenance Service；实际写入成功的结果只在必要时以轻量 `follow_up` 返回一个 scoped `maintenance sync`，预览和阻塞结果不返回可执行后续。
+Adoption、文档批量 Restructure 与 Domain Restructure 均使用共享 ChangeSet Executor 提交文件写入和路径移动，并在协调的 Repository 写入失败时补偿恢复。Workspace Service 不调用 Maintenance Service；实际写入成功的结果只在必要时以轻量 `follow_up` 返回零或一个可直接执行的 scoped `maintenance sync`，预览和阻塞结果不返回可执行后续。
 
 Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space 并继承 governance。`_收件箱` 与 `治理视图` 是系统区域，不是 Space。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
 

@@ -6,6 +6,7 @@ import pytest
 
 from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.document_service import DocumentService
+from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.config.settings import WorkspaceSettings
@@ -52,6 +53,216 @@ def test_apply_creates_profile_valid_project_document(workspace: Path) -> None:
     assert parsed.frontmatter["domain"] == "project-example"
     assert parsed.frontmatter["tags"] == []
     assert service(workspace).check(relative)["status"] == "ok"
+
+
+def test_apply_derives_create_filename_from_type(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    requested = "mywork/【Example】文档中心/下一版.md"
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path=requested,
+            document_type="plan",
+            values={"description": "发布计划", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "applied"
+    assert result.action == "create"
+    assert result.path == requested
+    assert result.target == "mywork/【Example】文档中心/计划-下一版.md"
+    assert not (workspace / requested).exists()
+    assert (domain / "计划-下一版.md").is_file()
+    assert [item.scope for item in result.follow_up] == ["mywork/【Example】文档中心"]
+
+
+def test_every_configured_type_derives_and_replaces_filename_prefix(workspace: Path) -> None:
+    config = WorkspaceSettings.load("test", workspace).document_types
+
+    for document_type, item in config["types"].items():
+        prefix = item["prefix"]
+        assert prefixed_name("标题.md", document_type, config) == f"{prefix}标题.md"
+        assert prefixed_name("任务-标题.md", document_type, config) == f"{prefix}标题.md"
+
+
+def test_apply_retypes_and_renames_one_document_atomically(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    source = domain / "任务-发布.md"
+    source.write_text(
+        "---\nname: 发布\ndescription: 发布任务\ntype: task\ntask_id: TASK-1\n"
+        "project: example\ndomain: project-example\nstatus: current\nlifecycle: todo\n"
+        "task_source: personal\nassignee: [agent]\nrequires_human: false\n"
+        "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 发布\n",
+        encoding="utf-8",
+    )
+    reference = domain / "记录-引用.md"
+    reference.write_text("参考 [[任务-发布]]\n", encoding="utf-8")
+    document = service(workspace)
+
+    preview = document.apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/任务-发布.md",
+            document_type="plan",
+            values={"lifecycle": "proposed"},
+        )
+    )
+    result = document.apply(
+        DocumentApplyRequest(
+            path=preview.path,
+            document_type="plan",
+            values={"lifecycle": "proposed"},
+            expected_hash=preview.expected_hash,
+            confirm=True,
+        )
+    )
+
+    target = domain / "计划-发布.md"
+    assert preview.status == "planned"
+    assert preview.action == "retype"
+    assert preview.target == "mywork/【Example】文档中心/计划-发布.md"
+    assert result.status == "applied"
+    assert not source.exists()
+    assert parse_document(target.read_text(encoding="utf-8")).frontmatter["type"] == "plan"
+    assert "[[计划-发布]]" in reference.read_text(encoding="utf-8")
+    assert result.updated_references == [
+        "mywork/【Example】文档中心/记录-引用.md"
+    ]
+
+
+def test_apply_retypes_issue_to_record(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    source = domain / "问题-发布.md"
+    source.write_text(
+        "---\nname: 发布\ndescription: 发布问题\ntype: issue\n"
+        "project: example\ndomain: project-example\nstatus: current\n"
+        "lifecycle: proposed\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
+        "tags: []\n---\n# 发布\n",
+        encoding="utf-8",
+    )
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/问题-发布.md",
+            document_type="record",
+            confirm=True,
+        )
+    )
+
+    target = domain / "记录-发布.md"
+    assert result.status == "applied"
+    assert result.target == "mywork/【Example】文档中心/记录-发布.md"
+    assert not source.exists()
+    assert parse_document(target.read_text(encoding="utf-8")).frontmatter["type"] == "record"
+
+
+def test_apply_retype_rejects_stale_source_hash(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    source = domain / "问题-发布.md"
+    source.write_text(
+        "---\nname: 发布\ndescription: 发布问题\ntype: issue\n"
+        "project: example\ndomain: project-example\nstatus: current\n"
+        "lifecycle: proposed\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
+        "tags: []\n---\n# 发布\n",
+        encoding="utf-8",
+    )
+    document = service(workspace)
+    preview = document.apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/问题-发布.md",
+            document_type="record",
+        )
+    )
+    source.write_text(source.read_text(encoding="utf-8") + "外部变化\n", encoding="utf-8")
+
+    result = document.apply(
+        DocumentApplyRequest(
+            path=preview.path,
+            document_type="record",
+            expected_hash=preview.expected_hash,
+            confirm=True,
+        )
+    )
+
+    assert result.status == "blocked"
+    assert result.issues[0]["code"] == "concurrent-change"
+    assert source.is_file()
+    assert not (domain / "记录-发布.md").exists()
+
+
+def test_apply_retype_requires_target_profile_fields_before_moving(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    source = domain / "知识-发布.md"
+    source.write_text(
+        "---\nname: 发布\ndescription: 发布知识\ntype: knowledge\n"
+        "project: example\ndomain: project-example\nstatus: current\n"
+        "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 发布\n",
+        encoding="utf-8",
+    )
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/知识-发布.md",
+            document_type="task",
+            confirm=True,
+        )
+    )
+
+    assert result.status == "needs-input"
+    assert result.action == "retype"
+    assert result.target == "mywork/【Example】文档中心/任务-发布.md"
+    assert {
+        "task_id",
+        "lifecycle",
+        "task_source",
+        "assignee",
+        "requires_human",
+    } <= set(result.missing_fields)
+    assert source.is_file()
+    assert not (domain / "任务-发布.md").exists()
+    assert result.follow_up == []
+
+
+def test_apply_retype_blocks_existing_target_without_writing(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    source = domain / "任务-发布.md"
+    source.write_text(
+        "---\nname: 发布\ndescription: 发布任务\ntype: task\ntask_id: TASK-1\n"
+        "project: example\ndomain: project-example\nstatus: current\nlifecycle: todo\n"
+        "task_source: personal\nassignee: [agent]\nrequires_human: false\n"
+        "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 发布任务\n",
+        encoding="utf-8",
+    )
+    target = domain / "计划-发布.md"
+    target.write_text("目标内容不能覆盖\n", encoding="utf-8")
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/任务-发布.md",
+            document_type="plan",
+            values={"lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "blocked"
+    assert result.issues[0]["code"] == "target-exists"
+    assert source.is_file()
+    assert target.read_text(encoding="utf-8") == "目标内容不能覆盖\n"
+    assert result.follow_up == []
+
+
+def test_apply_rejects_type_inside_set_values(workspace: Path) -> None:
+    project_domain(workspace)
+
+    with pytest.raises(GovernanceBlockedError, match="只能通过 --type"):
+        service(workspace).apply(
+            DocumentApplyRequest(
+                path="mywork/【Example】文档中心/计划-发布.md",
+                document_type="plan",
+                values={"type": "task"},
+            )
+        )
 
 
 def test_apply_preview_does_not_return_actionable_follow_up(workspace: Path) -> None:
@@ -162,7 +373,8 @@ def test_apply_creates_all_golden_path_document_types(
     values: dict[str, str],
 ) -> None:
     project_domain(workspace)
-    relative = f"mywork/【Example】文档中心/{prefix}示例.md"
+    relative = "mywork/【Example】文档中心/示例.md"
+    target = f"mywork/【Example】文档中心/{prefix}示例.md"
 
     result = service(workspace).apply(
         DocumentApplyRequest(
@@ -175,7 +387,8 @@ def test_apply_creates_all_golden_path_document_types(
 
     assert not result.issues, result.issues
     assert result.status == "applied"
-    assert service(workspace).check(relative)["status"] == "ok"
+    assert result.target == target
+    assert service(workspace).check(target)["status"] == "ok"
 
 
 def test_apply_returns_all_missing_fields_without_writing(workspace: Path) -> None:

@@ -318,7 +318,7 @@ class RestructureService:
     ) -> RestructureResult:
         approved_count = sum(item.approved for item in items)
         return RestructureResult(
-            status="planned",
+            status="planned" if items else "up-to-date",
             batch=batch,
             item_count=len(items),
             inventory_count=inventory_count,
