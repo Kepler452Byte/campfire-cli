@@ -103,6 +103,7 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["document", "type", "-h"],
         ["document", "type", "list", "-h"],
         ["document", "check", "-h"],
+        ["document", "list", "-h"],
         ["document", "inspect", "-h"],
         ["document", "format", "-h"],
         ["document", "apply", "-h"],
@@ -396,6 +397,180 @@ def test_document_apply_follow_up_normalizes_nested_directory_to_domain(
     assert synced_payload["indexed_document_count"] >= 1
 
 
+def test_document_list_and_inspect_expose_reconciled_query_contract(
+    workspace: Path,
+) -> None:
+    left = workspace / "mywork/Project"
+    right = workspace / "mywork/Knowledge"
+    write_domain_marker(left, "project-example", "Project", project_id="example")
+    write_domain_marker(right, "knowledge-example", "Knowledge", governance="knowledge-docs")
+    task = left / "任务-Ship.md"
+    task.write_text(
+        "---\nname: Ship\ndescription: Ship\ntype: task\ntask_id: ship\n"
+        "project: example\nstatus: current\nlifecycle: todo\npriority: high\n"
+        "assignee: [agent]\ntask_source: personal\nrequires_human: false\n"
+        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
+        "---\n# Ship\nSee [[知识-Guide]].\n",
+        encoding="utf-8",
+    )
+    guide = right / "知识-Guide.md"
+    guide.write_text(
+        "---\nname: Guide\ndescription: Guide\ntype: knowledge\nstatus: current\n"
+        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
+        "---\n# Guide\n",
+        encoding="utf-8",
+    )
+
+    listed = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "test",
+            "document",
+            "list",
+            "--project",
+            "example",
+            "--type",
+            "task",
+        ],
+    )
+    listed_payload = json.loads(listed.output)
+    inspected = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "test",
+            "document",
+            "inspect",
+            "--path",
+            "mywork/Project/任务-Ship.md",
+        ],
+    )
+    inspected_payload = json.loads(inspected.output)
+
+    assert listed.exit_code == 0, listed.output
+    assert listed_payload["filters"] == {"project": "example", "type": "task"}
+    assert listed_payload["count"] == 1
+    assert listed_payload["items"][0]["path"] == "mywork/Project/任务-Ship.md"
+    assert inspected.exit_code == 0, inspected.output
+    assert inspected_payload["relations"]["outgoing"][0]["target"] == (
+        "mywork/Knowledge/知识-Guide.md"
+    )
+    assert inspected_payload["index_generation"] == listed_payload["index_generation"]
+
+    task.write_text(
+        task.read_text(encoding="utf-8").replace("lifecycle: todo", "lifecycle: blocked"),
+        encoding="utf-8",
+    )
+    refreshed = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "test",
+            "document",
+            "list",
+            "--type",
+            "task",
+            "--lifecycle",
+            "blocked",
+        ],
+    )
+    refreshed_payload = json.loads(refreshed.output)
+
+    assert refreshed.exit_code == 0, refreshed.output
+    assert refreshed_payload["count"] == 1
+    assert refreshed_payload["index_generation"] > listed_payload["index_generation"]
+
+
+def test_document_list_rejects_unknown_scope_with_json_error(workspace: Path) -> None:
+    write_domain_marker(
+        workspace / "mywork/Project", "project-example", "Project", project_id="example"
+    )
+
+    result = runner.invoke(
+        app,
+        ["--workspace", "test", "document", "list", "--domain", "missing"],
+    )
+
+    assert result.exit_code == 2
+    assert json.loads(result.output)["message"] == "未知 Domain：missing"
+
+
+def test_document_index_covers_multiple_projects_and_nested_domains(
+    workspace: Path,
+) -> None:
+    alpha = workspace / "mywork/Alpha"
+    alpha_child = alpha / "Design"
+    beta = workspace / "mywork/Beta"
+    write_domain_marker(alpha, "project-alpha", "Alpha", project_id="alpha")
+    write_domain_marker(
+        alpha_child,
+        "project-alpha-design",
+        "Alpha Design",
+        parent_domain="project-alpha",
+    )
+    write_domain_marker(beta, "project-beta", "Beta", project_id="beta")
+
+    def task(directory: Path, name: str, lifecycle: str) -> None:
+        (directory / f"任务-{name}.md").write_text(
+            "---\n"
+            f"name: {name}\ndescription: {name}\ntype: task\ntask_id: {name.lower()}\n"
+            f"project: stale-frontmatter\nstatus: current\nlifecycle: {lifecycle}\n"
+            "priority: medium\nassignee: [agent]\ntask_source: personal\n"
+            "requires_human: false\ncreated: 2026-09-15\nupdated: 2026-09-15\n"
+            "tags: []\n---\n"
+            f"# {name}\n",
+            encoding="utf-8",
+        )
+
+    task(alpha, "Todo", "todo")
+    task(alpha_child, "Blocked", "blocked")
+    task(beta, "Completed", "completed")
+    target = beta / "记录-Target.md"
+    target.write_text(
+        "---\nname: Target\ndescription: Target\ntype: record\nproject: beta\n"
+        "domain: project-beta\nstatus: current\nlifecycle: maintained\n"
+        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Target\n",
+        encoding="utf-8",
+    )
+    source = alpha_child / "计划-Source.md"
+    source.write_text(
+        "---\nname: Source\ndescription: Source\ntype: plan\nproject: alpha\n"
+        "domain: project-alpha-design\nstatus: current\nlifecycle: proposed\n"
+        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
+        "---\n# Source\nSee [[记录-Target]].\n",
+        encoding="utf-8",
+    )
+
+    all_tasks = json.loads(runner.invoke(app, ["document", "list", "--type", "task"]).output)
+    alpha_tasks = json.loads(
+        runner.invoke(
+            app,
+            ["document", "list", "--project", "alpha", "--type", "task"],
+        ).output
+    )
+    inspected = json.loads(
+        runner.invoke(
+            app,
+            ["document", "inspect", "--path", "mywork/Alpha/Design/计划-Source.md"],
+        ).output
+    )
+
+    assert all_tasks["count"] == 3
+    assert {item["lifecycle"] for item in all_tasks["items"]} == {
+        "todo",
+        "blocked",
+        "completed",
+    }
+    assert alpha_tasks["count"] == 2
+    assert all(item["project"] == "alpha" for item in alpha_tasks["items"])
+    outgoing = inspected["relations"]["outgoing"][0]
+    assert inspected["domain_id"] == "project-alpha-design"
+    assert outgoing["target"] == "mywork/Beta/记录-Target.md"
+    assert outgoing["project"] == "beta"
+    assert outgoing["domain"] == "project-beta"
+
+
 def test_setup_creates_manifest_without_overwriting_user_config(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -495,6 +670,59 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
     assert json.loads(bound.output)["project"]["local_path"] == str(repository)
     manifest_after = yaml.safe_load((workspace / ".campfire.yaml").read_text(encoding="utf-8"))
     assert "local_path" not in manifest_after["projects"][0]
+
+
+def test_new_device_rebuilds_equivalent_document_index_from_markdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "vault"
+    domain = workspace / "mywork/Knowledge"
+    domain.mkdir(parents=True)
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    write_domain_marker(domain, "knowledge", "Knowledge", governance="knowledge-docs")
+    source = domain / "知识-Source.md"
+    source.write_text(
+        "---\nname: Source\ndescription: Source\ntype: knowledge\nstatus: current\n"
+        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
+        "---\n# Source\nSee [[知识-Target]].\n",
+        encoding="utf-8",
+    )
+    target = domain / "知识-Target.md"
+    target.write_text(
+        "---\nname: Target\ndescription: Target\ntype: knowledge\nstatus: current\n"
+        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Target\n",
+        encoding="utf-8",
+    )
+    source_mtime = source.stat().st_mtime_ns
+
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-a"))
+    setup_a = runner.invoke(
+        app, ["setup", "--path", str(workspace), "--id", "portable", "--default"]
+    )
+    list_a = json.loads(runner.invoke(app, ["document", "list", "--domain", "knowledge"]).output)
+    inspect_a = json.loads(
+        runner.invoke(
+            app, ["document", "inspect", "--path", "mywork/Knowledge/知识-Source.md"]
+        ).output
+    )
+
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-b"))
+    setup_b = runner.invoke(app, ["setup", "--path", str(workspace), "--default"])
+    list_b = json.loads(runner.invoke(app, ["document", "list", "--domain", "knowledge"]).output)
+    inspect_b = json.loads(
+        runner.invoke(
+            app, ["document", "inspect", "--path", "mywork/Knowledge/知识-Source.md"]
+        ).output
+    )
+
+    assert setup_a.exit_code == 0, setup_a.output
+    assert setup_b.exit_code == 0, setup_b.output
+    assert list_a["items"] == list_b["items"]
+    assert inspect_a["relations"] == inspect_b["relations"]
+    assert source.stat().st_mtime_ns == source_mtime
 
 
 def test_multiple_registered_workspaces_can_be_selected(tmp_path: Path, monkeypatch) -> None:

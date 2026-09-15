@@ -53,7 +53,7 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 2. **对象**：项目、知识主题或任务必须唯一明确。使用 `campfire workspace space list` 和 `campfire workspace domain list` 获取候选归属；用户使用简称且可能指向多个项目时，运行 `campfire workspace project list`，仍有歧义必须询问，不凭名称相似度猜测。
 3. **资源**：列出形成可靠文档所需的对话、原始材料、现有文档、源码、配置、测试、日志或外部事实；能自行读取的先读取，只向用户询问真正缺失的资源。
 4. **现状**：写项目当前行为时，运行 `campfire workspace project show <id>` 获取文档领域和本地源码路径，读取项目 `AGENTS.md`、SPEC 或架构文档，并检查相关源码、配置和测试。无法访问源码时不得把讨论或计划写成当前实现。
-5. **目标文档**：搜索同主题文档，明确是创建、更新还是关联。没有合适 Domain 时先提议创建；用户确认后用 `workspace domain create`，不在 Space 根直接落正式文档。可能重复、冲突、覆盖或合并时必须确认。
+5. **目标文档**：搜索同主题文档，明确是创建、更新还是关联。需要判断某篇候选文档的显式关联和上下游时运行 `document inspect --path <path>`；它会自动对齐本地索引，不先跑 Maintenance。没有合适 Domain 时先提议创建；用户确认后用 `workspace domain create`，不在 Space 根直接落正式文档。可能重复、冲突、覆盖或合并时必须确认。
 
 向用户提问时说明已经确认的内容、缺失资源、缺失原因以及它会影响的结论；一次只集中询问会改变事实、归属或写入方式的关键问题。
 

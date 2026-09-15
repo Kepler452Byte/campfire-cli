@@ -86,10 +86,50 @@ class Document(Base):
     )
     path: Mapped[str] = mapped_column(Text, index=True)
     content_hash: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str | None] = mapped_column(String(240), nullable=True)
     document_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     domain_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(63), nullable=True)
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lifecycle: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    assignee_json: Mapped[str] = mapped_column(Text, default="[]")
+    due: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_updated: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_mtime_ns: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queryable: Mapped[bool] = mapped_column(Boolean, default=True)
     exists: Mapped[bool] = mapped_column(Boolean, default=True)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class DocumentEdge(Base):
+    __tablename__ = "document_edges"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    source_path: Mapped[str] = mapped_column(Text, index=True)
+    target_path: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    raw_target: Mapped[str] = mapped_column(Text)
+    relation_type: Mapped[str] = mapped_column(String(48))
+    resolution: Mapped[str] = mapped_column(String(24))
+    candidates_json: Mapped[str] = mapped_column(Text, default="[]")
+    line: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class DocumentIndexState(Base):
+    __tablename__ = "document_index_state"
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    schema_version: Mapped[int] = mapped_column(Integer)
+    parser_version: Mapped[str] = mapped_column(String(32))
+    config_hash: Mapped[str] = mapped_column(String(64))
+    topology_hash: Mapped[str] = mapped_column(String(64))
+    generation: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(24), default="ready")
+    rebuilt_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     indexed_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 

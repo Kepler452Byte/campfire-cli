@@ -4,14 +4,12 @@ from sqlalchemy import delete, or_
 from sqlalchemy.orm import Session
 
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
-    DocumentState,
     DomainState,
     Issue,
     MaintenanceRunRecord,
     SpaceState,
 )
 from campfire_cli.common.database.models import (
-    Document,
     GovernanceIssue,
     MaintenanceRun,
     WorkspaceDomain,
@@ -26,12 +24,10 @@ class SqliteMaintenanceRepository:
 
     def replace_current_state(
         self,
-        documents: list[DocumentState],
         issues: list[Issue],
         spaces: list[SpaceState],
         domains: list[DomainState],
     ) -> None:
-        self._session.execute(delete(Document).where(Document.workspace_id == self._workspace_id))
         self._session.execute(
             delete(GovernanceIssue).where(GovernanceIssue.workspace_id == self._workspace_id)
         )
@@ -51,19 +47,6 @@ class SqliteMaintenanceRepository:
             [
                 WorkspaceDomain(workspace_id=self._workspace_id, **item.model_dump())
                 for item in domains
-            ]
-        )
-        self._session.add_all(
-            [
-                Document(
-                    workspace_id=self._workspace_id,
-                    path=item.path,
-                    content_hash=item.content_hash,
-                    document_type=item.document_type,
-                    domain_id=item.domain_id,
-                    status=item.status,
-                )
-                for item in documents
             ]
         )
         self._session.add_all(
@@ -97,11 +80,10 @@ class SqliteMaintenanceRepository:
     def replace_scope_index(
         self,
         scope: str,
-        documents: list[DocumentState],
         domains: list[DomainState],
     ) -> None:
         normalized = scope.strip("/")
-        for model in (Document, WorkspaceDomain):
+        for model in (WorkspaceDomain,):
             selection = model.workspace_id == self._workspace_id
             if normalized not in {"", "."}:
                 selection = selection & or_(
@@ -113,19 +95,6 @@ class SqliteMaintenanceRepository:
             [
                 WorkspaceDomain(workspace_id=self._workspace_id, **item.model_dump())
                 for item in domains
-            ]
-        )
-        self._session.add_all(
-            [
-                Document(
-                    workspace_id=self._workspace_id,
-                    path=item.path,
-                    content_hash=item.content_hash,
-                    document_type=item.document_type,
-                    domain_id=item.domain_id,
-                    status=item.status,
-                )
-                for item in documents
             ]
         )
         try:

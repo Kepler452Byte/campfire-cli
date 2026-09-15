@@ -53,6 +53,8 @@ description: "在 Agent 进入需要 Workspace、Project、Domain 或 Profile �
 6. Project 已注册但发生漂移时，区分定位信息与稳定身份。local path、同仓库 remote 或默认分支变化可以建议 `project update --id <id>`，只传需要修改的字段；文档中心变更使用 `--domain <domain-id>`。Project id、Workspace、文档中心、合并关系或归档状态必须明确确认。
 7. 写入后重新运行 `project check`。只有结果为 `ok`，或已向用户明确说明不影响当前文档工作的剩余问题，才把上下文交给后续 Skill。
 
+新设备首次 `setup` 会从 Markdown 自动建立文档查询索引。不要让 Agent 手工初始化 SQLite，也不要把 `maintenance check/sync` 固定放在 `document list/inspect` 前；读取命令会自行 reconcile。
+
 ## 当前 Project 元信息
 
 CLI 维护：稳定 `id`、`workspace_id`、显示 `name`、Vault 内 `document_domain`、`git_remote_url`、本机 `local_path`、`default_branch` 和 `status`。合法状态以 CLI 为准；本 Skill 不复制枚举。

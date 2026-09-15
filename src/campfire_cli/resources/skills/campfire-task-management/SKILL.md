@@ -1,13 +1,13 @@
 ---
 name: campfire-task-management
-description: "创建、更新和完成 Campfire 任务文档；适用于用户要求为某项目或个人新建/更新/完成任务时定位归属、按 Profile 契约写入并验证，不负责执行任务、改代码或 Agent Session 调度。"
+description: "查询、创建、更新和完成 Campfire 任务文档；适用于用户要求查看任务集合，或为某项目或个人维护任务时按结构化字段定位并依 Profile 写入，不负责执行任务、改代码或 Agent Session 调度。"
 ---
 
 # Campfire 任务管理
 
 统一任务文档（`任务-` 前缀）的创建、状态更新与完成闭环。任务分两类：有项目任务（关联已注册 Project）与无项目任务（个人待办、跨项目事务）。两类任务都不得虚构归属：`project` 字段只在能唯一解析到已注册 Project 时填写。
 
-通用写入门禁遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。任务归属和 Task Profile 需要治理上下文，进入本 Skill 前加载 `campfire-context-bootstrap`。
+通用写入门禁遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。只查询任务集合时直接使用 `document list`，不加载完整 Project bootstrap。创建、修改 Frontmatter、文件名或归属时才加载 `campfire-context-bootstrap`。
 
 ## 状态机
 
@@ -36,6 +36,13 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 ```
 
 ## 工作流
+
+### 0. 任务发现
+
+- 查看当前 Workspace 全部任务时运行 `campfire document list --type task`，不隐式排除 completed、blocked 或其他 lifecycle。
+- 用户明确了 Project、Domain 或 lifecycle 时追加对应筛选；多个筛选条件是 AND 关系。用户语义不明确时先澄清，不把 mtime、文件名或正文措辞解释成业务状态。
+- CLI 会在查询前自动 reconcile 本地索引，不先跑 `maintenance check/sync`。需要阅读详情时只读取返回路径对应的正文；需要判断单篇任务的上下游时使用 `document inspect --path <path>`。
+- `document list` 不做正文关键词或模糊检索。无法用结构化字段表达的内容检索暂时使用 Agent 自带文件搜索，并以 Markdown 正文为准。
 
 ### 1. 归属定位
 

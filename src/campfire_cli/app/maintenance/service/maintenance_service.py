@@ -17,6 +17,7 @@ from campfire_cli.app.maintenance.schema.maintenance_schema import (
 from campfire_cli.app.maintenance.service import archive_service as project_archive
 from campfire_cli.app.maintenance.service import moc_service as governance_sync
 from campfire_cli.app.maintenance.service.maintenance_protocol import (
+    DocumentIndexMaintainerProtocol,
     MaintenanceRepositoryProtocol,
 )
 from campfire_cli.app.workspace.service.structure_service import DomainService
@@ -47,10 +48,14 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 class MaintenanceService:
     def __init__(
-        self, settings: WorkspaceSettings, repository: MaintenanceRepositoryProtocol
+        self,
+        settings: WorkspaceSettings,
+        repository: MaintenanceRepositoryProtocol,
+        document_index: DocumentIndexMaintainerProtocol,
     ) -> None:
         self._settings = settings
         self._repository = repository
+        self._document_index = document_index
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
@@ -113,7 +118,8 @@ class MaintenanceService:
         ) as changed:
             if changed:
                 return self._concurrent_result(changed)
-            self._repository.replace_current_state(documents, issues, spaces, domains)
+            self._repository.replace_current_state(issues, spaces, domains)
+            self._document_index.rebuild()
             self._repository.save_run(run)
             self._export_current_report(result, completed_at)
         selected = filter_issues(
@@ -168,9 +174,9 @@ class MaintenanceService:
                 if domain.path == scope_path or scope_path in domain.path.parents
             ]
             space_marker = self._settings.governance.get("space_marker", "_空间.md")
-            empty_governance_root = scope_path == self._settings.vault_root or (
-                scope_path / space_marker
-            ).is_file()
+            empty_governance_root = (
+                scope_path == self._settings.vault_root or (scope_path / space_marker).is_file()
+            )
             if not descendants and not empty_governance_root:
                 return self._sync_blocked("scope-unmanaged", scope, scope)
             domains = descendants
@@ -297,19 +303,9 @@ class MaintenanceService:
             )
             try:
                 with self._executor.transaction(change_set):
-                    indexed_documents = [
-                        self._document_state(path)
-                        for path in iter_documents(
-                            self._settings.vault_root,
-                            self._settings.document_types,
-                            (domain.path for domain in domains),
-                        )
-                    ]
                     domain_states = self._topology_states([], domains)[1]
-                    self._repository.replace_scope_index(
-                        scope or ".", indexed_documents, domain_states
-                    )
-                    indexed_document_count = len(indexed_documents)
+                    self._repository.replace_scope_index(scope or ".", domain_states)
+                    indexed_document_count = self._document_index.reconcile().document_count
             except GovernanceBlockedError as exc:
                 return self._sync_blocked("concurrent-change", str(exc), scope)
         return MaintenanceResult(

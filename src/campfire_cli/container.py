@@ -11,6 +11,10 @@ from campfire_cli.app.decision.service.decision_projection_service import (
     DecisionProjectionService,
 )
 from campfire_cli.app.decision.service.decision_service import DecisionService
+from campfire_cli.app.document.repository.document_index_repository import (
+    SqliteDocumentIndexRepository,
+)
+from campfire_cli.app.document.service.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.document_service import DocumentService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
@@ -214,26 +218,33 @@ class AppContainer:
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:
         governance_root = campfire_home()
-        resolution = WorkspaceService(
-            governance_root, SqliteWorkspaceRepository(governance_root)
-        ).resolve(str(workspace) if workspace is not None else None, safe_cwd())
+        workspace_repository = SqliteWorkspaceRepository(governance_root)
+        resolution = WorkspaceService(governance_root, workspace_repository).resolve(
+            str(workspace) if workspace is not None else None, safe_cwd()
+        )
         settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
         database_path = governance_root / "campfire.db"
         upgrade_database(database_path)
         engine = create_sqlite_engine(database_path)
         session = open_session(engine)
+        document_index = DocumentIndexService(
+            settings,
+            SqliteDocumentIndexRepository(session, resolution.workspace_id),
+            {
+                project.id: project.document_domain
+                for project in workspace_repository.list_projects(resolution.workspace_id)
+            },
+        )
         maintenance_repository = SqliteMaintenanceRepository(session, resolution.workspace_id)
-        maintenance = MaintenanceService(settings, maintenance_repository)
+        maintenance = MaintenanceService(settings, maintenance_repository, document_index)
         restructure_repository = SqliteRestructureRepository(
             session, settings.state_root, resolution.workspace_id
         )
         restructure = RestructureService(settings, restructure_repository)
-        domain_restructure = DomainRestructureService(
-            settings, SqliteWorkspaceRepository(governance_root)
-        )
+        domain_restructure = DomainRestructureService(settings, workspace_repository)
         adoption = AdoptionService(
             settings,
-            SqliteWorkspaceRepository(governance_root),
+            workspace_repository,
         )
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())
@@ -243,7 +254,7 @@ class AppContainer:
         )
         return cls(
             settings=settings,
-            document=DocumentService(settings),
+            document=DocumentService(settings, document_index),
             maintenance=maintenance,
             restructure=restructure,
             domain_restructure=domain_restructure,

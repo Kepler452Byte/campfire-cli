@@ -10,10 +10,11 @@ from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.config.settings import WorkspaceSettings
+from campfire_cli.container import AppContainer
 
 
 def service(workspace: Path) -> DocumentService:
-    return DocumentService(WorkspaceSettings.load("test", workspace))
+    return AppContainer.build("test").document
 
 
 def project_domain(workspace: Path) -> Path:
@@ -125,9 +126,7 @@ def test_apply_retypes_and_renames_one_document_atomically(workspace: Path) -> N
     assert not source.exists()
     assert parse_document(target.read_text(encoding="utf-8")).frontmatter["type"] == "plan"
     assert "[[计划-发布]]" in reference.read_text(encoding="utf-8")
-    assert result.updated_references == [
-        "mywork/【Example】文档中心/记录-引用.md"
-    ]
+    assert result.updated_references == ["mywork/【Example】文档中心/记录-引用.md"]
 
 
 def test_apply_retypes_issue_to_record(workspace: Path) -> None:

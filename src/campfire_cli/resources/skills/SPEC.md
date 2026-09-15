@@ -16,6 +16,8 @@ conversation-router → 已知路径的正文小改 → edit
 - CLI Profile 负责字段、枚举、类型、顺序和条件必填；Skill 不复制这些契约。
 - 已知唯一存在路径的正文读取和小改直接使用文件工具，不启动 bootstrap。
 - 创建正式文档、修改 Frontmatter 或显式变更类型使用 `document apply`。
+- 发现结构化文档集合使用 `document list`，理解单篇文档的确定关系使用 `document inspect`；两者自行 reconcile，不先运行 Maintenance。
+- `document list` 不承担正文关键词、模糊匹配或相关性排序；需要正文内容时由 Agent 按返回路径读取或使用文件搜索。
 - 写入命令保持原子性；Skill 只执行命令实际返回的 scoped `maintenance sync`，诊断或发布验收时再显式 `check`。
 - 已存在的 Workspace、Space、Domain 和 Project 使用稳定 ID 选择；路径只用于新位置、具体文件、外部输入和显式扫描范围。
 

@@ -13,11 +13,7 @@ from campfire_cli.app.document.cli.profile_cli import profile_cli
 from campfire_cli.app.document.cli.type_cli import type_cli
 from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.document_service import DocumentService
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
-from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.exceptions import AppError
-from campfire_cli.common.filesystem.cwd import safe_cwd
-from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
 document_cli = typer.Typer(
     help="创建、检查和维护文档及其规则",
@@ -28,13 +24,10 @@ document_cli.add_typer(type_cli, name="type")
 
 
 def service(ctx: typer.Context) -> DocumentService:
+    from campfire_cli.container import AppContainer
+
     selector = ctx.find_root().params.get("workspace")
-    root = campfire_home()
-    resolution = WorkspaceService(root, SqliteWorkspaceRepository(root)).resolve(
-        selector, safe_cwd()
-    )
-    settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
-    return DocumentService(settings)
+    return AppContainer.build(selector).document
 
 
 def invoke(operation: Callable[[], dict[str, Any] | BaseModel]) -> None:
@@ -61,8 +54,27 @@ def kanban_check(ctx: typer.Context, path: str = typer.Option(..., "--path")) ->
 
 @document_cli.command("inspect")
 def inspect(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
-    """返回 Agent 治理单篇文档所需的类型、Profile、领域和问题上下文。"""
+    """返回单篇文档的 Profile、领域、确定关系和问题上下文。"""
     invoke(lambda: service(ctx).inspect(path))
+
+
+@document_cli.command("list")
+def list_documents(
+    ctx: typer.Context,
+    project: str | None = typer.Option(None, "--project"),
+    domain: str | None = typer.Option(None, "--domain"),
+    document_type: str | None = typer.Option(None, "--type"),
+    lifecycle: str | None = typer.Option(None, "--lifecycle"),
+) -> None:
+    """按 Project、Domain、类型和生命周期列出受管内容文档。"""
+    invoke(
+        lambda: service(ctx).list(
+            project=project,
+            domain=domain,
+            document_type=document_type,
+            lifecycle=lifecycle,
+        )
+    )
 
 
 @document_cli.command("format")

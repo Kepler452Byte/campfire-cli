@@ -12,6 +12,7 @@ class MarkdownDocument:
     frontmatter: dict[str, Any]
     body: str
     has_frontmatter: bool
+    body_start_line: int = 1
 
 
 def parse_document(text: str) -> MarkdownDocument:
@@ -27,7 +28,13 @@ def parse_document(text: str) -> MarkdownDocument:
         value = _parse_lenient_scalars(raw)
     if not isinstance(value, dict):
         return MarkdownDocument({}, text, False)
-    return MarkdownDocument(value, text[end + 5 :], True)
+    body_start = end + 5
+    return MarkdownDocument(
+        value,
+        text[body_start:],
+        True,
+        text[:body_start].count("\n") + 1,
+    )
 
 
 def _parse_lenient_scalars(raw: str) -> dict[str, Any]:

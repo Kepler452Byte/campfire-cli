@@ -6,9 +6,12 @@ from typing import Any
 from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
+    DocumentIndexResult,
+    DocumentListResult,
     DocumentMoveResult,
 )
 from campfire_cli.app.document.service.document_apply_service import DocumentApplyService
+from campfire_cli.app.document.service.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.document_move_service import DocumentMoveService
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import exempt_document
@@ -27,8 +30,9 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 
 class DocumentService:
-    def __init__(self, settings: WorkspaceSettings) -> None:
+    def __init__(self, settings: WorkspaceSettings, index: DocumentIndexService) -> None:
         self._settings = settings
+        self._index = index
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
         self._application = DocumentApplyService(settings, self._rules, self._profiles)
@@ -61,6 +65,7 @@ class DocumentService:
         path = self._document_path(relative_path)
         if self._is_exempt(path):
             return self._not_applicable(relative_path, path)
+        normalized = path.relative_to(self._settings.vault_root).as_posix()
         parsed = parse_document(path.read_text(encoding="utf-8"))
         document_type = parsed.frontmatter.get("type")
         profile = self._profiles.resolve(document_type, parsed.frontmatter, path)
@@ -78,15 +83,45 @@ class DocumentService:
                 break
             current = current.parent
         issues = self._rules.check_document(self._settings.vault_root, path)
+        generation, relations = self._index.relations(normalized)
+        issues.extend(
+            {
+                "code": f"document-reference-{item['resolution']}",
+                "path": normalized,
+                "detail": item["raw_target"],
+                "actual": item["candidates"],
+            }
+            for item in relations["unresolved"]
+        )
         return {
             "status": "ok" if not issues else "needs-review",
             "workspace_id": self._settings.workspace_id,
-            "path": relative_path,
+            "path": normalized,
             "domain_id": domain_id,
             "type": document_type if isinstance(document_type, str) else None,
             "profile": profile.model_dump(),
+            "index_generation": generation,
+            "relations": relations,
             "issues": issues,
         }
+
+    def list(
+        self,
+        *,
+        project: str | None = None,
+        domain: str | None = None,
+        document_type: str | None = None,
+        lifecycle: str | None = None,
+    ) -> DocumentListResult:
+        return self._index.list_documents(
+            project=project,
+            domain=domain,
+            document_type=document_type,
+            lifecycle=lifecycle,
+        )
+
+    def rebuild_index(self) -> DocumentIndexResult:
+        return self._index.rebuild()
 
     def format(self, relative_path: str, confirm: bool = False) -> dict[str, Any]:
         path = self._document_path(relative_path)

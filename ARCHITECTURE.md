@@ -78,6 +78,8 @@ Decision 以 SQLite 当前快照和追加事件为 SSOT。全部状态在 `_协�
 
 Document App 是所有面向用户和 Agent 的文档命令入口；Profile、类型命名、Frontmatter 和文档规则是其内部能力。Maintenance 只编排跨文档批量维护，Workspace 的 Restructure 用例只处理存量结构重构；两者调用 Document Service，不再从 `common/` 获取文档业务流程。
 
+Document App 同时拥有设备本地的文档查询投影。Indexer 从 Markdown、Domain 声明、Project 文档根映射和显式链接生成文档记录与确定关系；Repository 只负责按 `workspace_id` 持久化完整快照。组合根从 Workspace Registry 提供当前 Project 映射，Document App 不直接读取 Workspace Repository，也不把每篇文档中可能漂移的重复字段当作物理归属。`document list` 和 `document inspect` 查询前自行轻量 reconcile，不要求 Agent 先运行 Maintenance。Maintenance 只在全量检查或可见生成物同步时触发索引校正，不拥有索引规则，也不是读取命令的前置步骤。
+
 Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`knowledge`、`project-doc`、`task` 只允许一层继承。Profile Loader 将配置编译为完整 EffectiveProfile，Resolver 根据文档类型和领域上下文选择 Profile，Validator 与 Formatter 共同消费该结果。字段规则不使用每种文档一个 Python 子类，也不在 Skill 中复制。
 
 ### CLI 设计理念：治理原语 + Skill SOP
@@ -139,9 +141,20 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 | 治理规则 | 包内 `config.yml` + `~/.campfire/config.yml` 覆盖 | 校验结果与执行计划 |
 | Workspace、Project 注册关系 | `~/.campfire/campfire.db` | JSON 导入导出备份 |
 | Campfire Skills | Python 包内 `resources/skills/` | 全局 Agent Skill 目录 |
-| 文档索引、结构重构和维护状态 | `~/.campfire/campfire.db`，按 `workspace_id` 隔离 | JSON 当前快照、有限变更日志 |
+| 文档查询索引 | Workspace Markdown、结构声明与有效治理契约 | `~/.campfire/campfire.db` 中按 `workspace_id` 隔离的可重建投影 |
+| Decision、结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；当前不能仅从 Workspace 重建 |
 
 SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索引可以从 Markdown 重建；SQLite 不是知识内容的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
+
+### 文档查询投影
+
+文档索引 v1 保存列表查询需要的结构化字段、内容哈希、源文件 stat，以及显式 Frontmatter 关联、WikiLink、Markdown Link、Embed 形成的确定关系。它不复制正文，不保存相似度建议，也不把文件 mtime 解释为任务时间。
+
+每次 `document list` 或 `document inspect` 先对账文件清单、size、mtime、有效配置哈希和 Space/Domain 拓扑哈希。stat 只用于筛选变化候选，内容哈希才表示内容版本；新增、修改和删除会在查询前自动 reconcile。候选快照在内存中完成后，通过单个 SQLite 事务替换文档、关系和 generation，中断不能暴露半套新索引。
+
+`document list` 只做结构化精确枚举与 AND 筛选；未来正文关键词、模糊匹配、相关性排序或混合检索使用独立 `document search`。`document inspect.relations` 只返回可证明的 declared、outgoing、incoming 和 unresolved；相似文档属于未来独立 suggestions，不能混入确定关系。
+
+索引新鲜度是 CLI 内部读取保障，不生成让 Agent 手工执行的 index follow-up。MOC、关系页等 Workspace 内可见生成物仍由成功写命令按需返回 scoped `maintenance sync`。
 
 ### 设备本地与跨设备边界
 
@@ -155,7 +168,7 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
                 ▼ 新设备 attach
 每台设备独立维护
   Project local_path
-  SQLite 索引与运行记录
+  SQLite 查询投影与运行记录
   Decision 与事件
   Skills 安装路径、锁、缓存和报告
 ```
@@ -207,7 +220,7 @@ Human / Browser  ──> HTTP Adapter ──┘                           │
 3. 规则集中在配置契约和规则引擎，Skill、模板、CLI 不复制枚举定义。
 4. MOC、Base、关系和报告能生成就不手工维护。
 5. 有歧义的分类和结构重构进入待确认，不由 Agent 擅自决定。
-6. Markdown 内容可脱离 Campfire 阅读和迁移；SQLite 丢失后可以重建。
+6. Markdown 内容可脱离 Campfire 阅读和迁移；文档查询投影在 SQLite 丢失后可以重建，Decision 与未完成批次等工作流状态不作此承诺。
 7. 只有一个用户级 SQLite；所有 Workspace 业务表必须携带 `workspace_id`，Repository 查询不得越界。
 8. 正式文档必须归入 Domain；Space 不直接替代 Domain，系统区域不伪装成 Space。
 
