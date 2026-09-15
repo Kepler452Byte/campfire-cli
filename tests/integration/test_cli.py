@@ -146,8 +146,9 @@ def test_golden_path_help_is_complete_at_narrow_terminal_width() -> None:
     )
 
     assert apply_help.exit_code == 0, apply_help.output
-    assert "文件名可省略类型前缀" in apply_help.output
-    assert "同步文件名和引用" in apply_help.output
+    apply_output = strip_ansi(apply_help.output)
+    assert "创建时也可省略类型前缀" in apply_output
+    assert "同步文件名和引用" in apply_output
     assert plan_help.exit_code == 0, plan_help.output
     plan_output = strip_ansi(plan_help.output)
     assert "无 --spec" in plan_output
