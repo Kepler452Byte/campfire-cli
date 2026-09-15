@@ -114,8 +114,17 @@ def test_short_help_is_available_at_every_command_level() -> None:
 
 
 def test_public_selectors_keep_one_stable_golden_path(workspace: Path) -> None:
-    root_help = runner.invoke(app, ["-h"]).output
-    assert "--workspace" in root_help
+    def options(path: tuple[str, ...]) -> set[str]:
+        command = get_command(app)
+        for name in path:
+            command = command.commands[name]
+        return {
+            option
+            for parameter in command.params
+            for option in (*parameter.opts, *parameter.secondary_opts)
+        }
+
+    assert "--workspace" in options(())
 
     contracts = {
         ("document", "move"): (
@@ -140,9 +149,9 @@ def test_public_selectors_keep_one_stable_golden_path(workspace: Path) -> None:
         ),
     }
     for command, (required, forbidden) in contracts.items():
-        output = runner.invoke(app, [*command, "-h"]).output
-        assert all(option in output for option in required), command
-        assert all(option not in output for option in forbidden), command
+        public_options = options(command)
+        assert required <= public_options, command
+        assert forbidden.isdisjoint(public_options), command
 
     rejected = runner.invoke(
         app,
