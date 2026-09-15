@@ -6,6 +6,10 @@ from typing import Any
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.schema import DocumentMoveResult
+from campfire_cli.app.document.service.document_patch_values import (
+    decode_patch_values,
+    enrich_profile_issues,
+)
 from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
@@ -44,7 +48,7 @@ class DocumentMoveService:
         source_name: str,
         target_name: str,
         *,
-        values: dict[str, Any],
+        values: dict[str, str],
         unset_fields: tuple[str, ...],
         expected_hash: str | None = None,
         confirm: bool = False,
@@ -124,25 +128,25 @@ class DocumentMoveService:
         frontmatter_changes: dict[str, Any] = {}
         missing_fields: list[str] = []
         if not issues and target_domain is not None:
-            patch = dict(values)
             removed = set(unset_fields)
+            structural_patch: dict[str, Any] = {}
             if parsed.frontmatter.get("domain") != target_domain.domain_id:
-                patch["domain"] = target_domain.domain_id
+                structural_patch["domain"] = target_domain.domain_id
             if (
                 target_domain.project_id
                 and parsed.frontmatter.get("project") != target_domain.project_id
             ):
-                patch["project"] = target_domain.project_id
+                structural_patch["project"] = target_domain.project_id
             elif not target_domain.project_id and "project" in parsed.frontmatter:
                 removed.add("project")
             if source_domain != target_domain or values or unset_fields:
-                patch["updated"] = date.today().isoformat()
+                structural_patch["updated"] = date.today().isoformat()
 
-            next_frontmatter = dict(parsed.frontmatter)
+            profile_frontmatter = dict(parsed.frontmatter)
             for field in removed:
-                next_frontmatter.pop(field, None)
-            next_frontmatter.update(patch)
-            profile = self._profiles.resolve(document_type, next_frontmatter, target)
+                profile_frontmatter.pop(field, None)
+            profile_frontmatter.update(structural_patch)
+            profile = self._profiles.resolve(document_type, profile_frontmatter, target)
             profile_name = profile.name
             unknown = sorted(set(values) - set(profile.allowed))
             if unknown:
@@ -154,35 +158,33 @@ class DocumentMoveService:
                     }
                     for field in unknown
                 )
-            rendered, render_errors = (
-                render_patch(
-                    original,
-                    patch,
-                    parsed.body,
-                    list(profile.field_order),
-                    tuple(sorted(removed)),
+            decoded: dict[str, Any] = {}
+            if not unknown:
+                decoded, input_issues = decode_patch_values(profile, values, target_name)
+                issues.extend(input_issues)
+            patch = {**decoded, **structural_patch}
+            next_frontmatter = dict(profile_frontmatter)
+            next_frontmatter.update(decoded)
+            render_errors: list[str] = []
+            if not issues:
+                rendered, render_errors = (
+                    render_patch(
+                        original,
+                        patch,
+                        parsed.body,
+                        list(profile.field_order),
+                        tuple(sorted(removed)),
+                    )
+                    if patch or removed
+                    else (original, [])
                 )
-                if patch or removed
-                else (original, [])
-            )
             issues.extend({"code": code, "path": target_name} for code in render_errors)
-            if not render_errors and not unknown:
+            if not issues:
                 issues.extend(
-                    self._rules.check_content(self._settings.vault_root, target, rendered)
+                    self._rules.check_content(self._settings.vault_root, target, rendered, profile)
                 )
+            enrich_profile_issues(issues, profile)
             missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
-            for issue in issues:
-                field = issue.get("field")
-                if issue["code"] not in missing_codes or not isinstance(field, str):
-                    continue
-                if field in profile.enums:
-                    issue["allowed"] = list(profile.enums[field])
-                elif field in profile.lists:
-                    issue["allowed"] = ["list"]
-                elif field in profile.dates:
-                    issue["allowed"] = ["YYYY-MM-DD"]
-                elif field in profile.value_types:
-                    issue["allowed"] = [profile.value_types[field]]
             missing_fields = [
                 str(item.get("field") or item.get("detail"))
                 for item in issues

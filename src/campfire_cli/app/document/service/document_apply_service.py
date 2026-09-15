@@ -12,6 +12,10 @@ from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
 )
+from campfire_cli.app.document.service.document_patch_values import (
+    decode_patch_values,
+    enrich_profile_issues,
+)
 from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
@@ -80,17 +84,8 @@ class DocumentApplyService:
         frontmatter = dict(parsed.frontmatter)
         if not exists or not parsed.has_frontmatter:
             frontmatter.update(self._creation_defaults(target, context, document_type, today))
-        for key in ("project", "domain"):
-            if key in request.values and request.values[key] != frontmatter.get(key):
-                raise GovernanceBlockedError(
-                    f"--set {key} 与目标 Domain 上下文不一致；请使用专用重构命令"
-                )
-        frontmatter.update(request.values)
-        frontmatter["type"] = document_type
-        frontmatter["updated"] = today
         profile = self._profiles.resolve(document_type, frontmatter, target)
         actual_hash = file_sha256(source) if exists else "missing"
-
         unknown = sorted(set(request.values) - set(profile.allowed))
         if unknown:
             return self._result(
@@ -110,9 +105,29 @@ class DocumentApplyService:
                 ],
             )
 
+        values, input_issues = decode_patch_values(profile, request.values, request.path)
+        if input_issues:
+            return self._result(
+                request,
+                target_name,
+                action,
+                profile.name,
+                actual_hash,
+                "blocked",
+                input_issues,
+            )
+        for key in ("project", "domain"):
+            if key in values and values[key] != frontmatter.get(key):
+                raise GovernanceBlockedError(
+                    f"--set {key} 与目标 Domain 上下文不一致；请使用专用重构命令"
+                )
+        frontmatter.update(values)
+        frontmatter["type"] = document_type
+        frontmatter["updated"] = today
+
         next_body = self._next_body(request, parsed.body, exists)
         if exists and parsed.has_frontmatter:
-            patch = {**request.values, "updated": today}
+            patch = {**values, "updated": today}
             if changes_type:
                 patch["type"] = document_type
             rendered, render_errors = render_patch(
@@ -133,22 +148,11 @@ class DocumentApplyService:
                 )
         else:
             rendered = render_document(frontmatter, next_body, list(profile.field_order))
-        issues = self._rules.check_content(self._settings.vault_root, target, rendered)
+        issues = self._rules.check_content(self._settings.vault_root, target, rendered, profile)
         if target != source and target.exists():
             issues.insert(0, {"code": "target-exists", "path": target_name})
+        enrich_profile_issues(issues, profile)
         missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
-        for issue in issues:
-            field = issue.get("field")
-            if issue["code"] not in missing_codes or not isinstance(field, str):
-                continue
-            if field in profile.enums:
-                issue["allowed"] = list(profile.enums[field])
-            elif field in profile.lists:
-                issue["allowed"] = ["list"]
-            elif field in profile.dates:
-                issue["allowed"] = ["YYYY-MM-DD"]
-            elif field in profile.value_types:
-                issue["allowed"] = [profile.value_types[field]]
         missing = [item for item in issues if item["code"] in missing_codes]
         status = "needs-input" if missing else "blocked" if issues else "planned"
         result = self._result(

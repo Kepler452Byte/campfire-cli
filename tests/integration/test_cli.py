@@ -270,6 +270,45 @@ def test_tree_discovers_registered_commands_without_a_parallel_catalog() -> None
     assert "run" not in result.output
 
 
+def test_document_set_help_describes_one_deterministic_value_contract() -> None:
+    for command in (["document", "apply", "-h"], ["document", "move", "-h"]):
+        result = runner.invoke(app, command)
+        assert result.exit_code == 0, result.output
+        assert "field=value" in result.output
+        assert "JSON" in result.output
+        assert 'tags=["tag1","tag2"]' in result.output
+        assert "--set-json" not in result.output
+
+
+def test_document_set_rejects_duplicate_fields_before_dispatch() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "document",
+            "apply",
+            "--path",
+            "mynote/知识-示例.md",
+            "--set",
+            "status=current",
+            "--set",
+            "status=draft",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--set 字段重复：status" in result.output
+
+
+def test_document_set_rejects_an_empty_field_before_dispatch() -> None:
+    result = runner.invoke(
+        app,
+        ["document", "apply", "--path", "mynote/知识-示例.md", "--set", "=value"],
+    )
+
+    assert result.exit_code != 0
+    assert "--set 字段名不能为空" in result.output
+
+
 def test_project_is_not_exposed_as_a_top_level_command() -> None:
     result = runner.invoke(app, ["project", "-h"])
     assert result.exit_code != 0

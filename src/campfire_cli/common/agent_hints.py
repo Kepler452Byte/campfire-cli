@@ -21,12 +21,15 @@ HINT_BODY = """## Campfire 文档治理
 3. 发现文档集合使用 `campfire document list`，理解单篇文档的确定关系使用
    `campfire document inspect`；两者不要求预先运行 Maintenance。
 4. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
-5. 创建正式文档或修改 Frontmatter 时，优先使用
-   `campfire document apply`；不手写或猜测 Profile 字段和枚举。
+5. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
+   契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
+   `document inspect` 后 apply，不从 `tree` 开始逐层探索。
 6. 文件工具不得编辑自动生成区域。CLI 写命令完成后只执行结果实际返回的
    `follow_up`；正文编辑会影响关系计算时执行一次局部 `maintenance sync`。
    没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
-7. CLI 返回 `needs-input` 时补齐事实后重试，不为通过检查而猜测。
+7. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
+   CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
+   不为通过检查而猜测。
 
 不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
 字段、枚举和顺序以 Campfire Profile 为唯一事实来源。

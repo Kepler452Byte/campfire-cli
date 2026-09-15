@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from campfire_cli.app.document.service.frontmatter_formatter import ordered_keys
-from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.app.document.service.profile_registry import EffectiveProfile, ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.markdown import parse_document
 
@@ -23,7 +23,13 @@ class DocumentRuleService:
     def check_document(self, root: Path, path: Path) -> list[dict[str, Any]]:
         return self.check_content(root, path, path.read_text(encoding="utf-8"))
 
-    def check_content(self, root: Path, path: Path, text: str) -> list[dict[str, Any]]:
+    def check_content(
+        self,
+        root: Path,
+        path: Path,
+        text: str,
+        profile: EffectiveProfile | None = None,
+    ) -> list[dict[str, Any]]:
         """Validate proposed Markdown without requiring it to exist on disk."""
         relative = path.relative_to(root).as_posix()
         parsed = parse_document(text)
@@ -77,7 +83,7 @@ class DocumentRuleService:
                     "allowed": [prefixed_name(path.name, document_type, self._type_config)],
                 }
             )
-        rules = self._rules(document_type, path, frontmatter)
+        rules = (profile or self._profiles.resolve(document_type, frontmatter, path)).model_dump()
         actual_order = list(frontmatter)
         expected_order = ordered_keys(
             [(key, []) for key in actual_order], list(rules["field_order"])
@@ -250,9 +256,7 @@ class DocumentRuleService:
     def known_fields(self) -> set[str]:
         return self._profiles.known_fields()
 
-    def field_order_for(
-        self, frontmatter: dict[str, Any], path: Path | None = None
-    ) -> list[str]:
+    def field_order_for(self, frontmatter: dict[str, Any], path: Path | None = None) -> list[str]:
         """返回文档在当前治理契约下的有效 Profile 字段序。
 
         写入口修改 frontmatter 后必须按此序插入新增字段，否则文档立即产生

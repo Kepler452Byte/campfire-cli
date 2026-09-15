@@ -29,6 +29,9 @@ SQLite / Filesystem Implementation
 - CLI 不直接实现业务规则；Service 不依赖 Typer。
 - 字段、枚举和跨字段不变量统一由 DocumentRuleService 解释；Maintenance 与 Workspace Restructure 不得复制规则值。
 - Frontmatter Profile 只允许一层 `base` 配置继承；Profile Loader 编译完整规则，Validator 与 Formatter 共用同一个 EffectiveProfile。
+- 公共接口不得依赖调用方猜测未声明契约。参数类型与复杂输入格式必须能从当前命令帮助获得；错误必须同时提供稳定机器字段和可操作的修复信息，但不得为此复制 Profile 枚举或新增平行命令。
+- `tree` 只用于未知能力发现，不是 Agent 执行已知文档操作的固定前置步骤；Skill 必须把已知正文编辑、契约已知的 Frontmatter 写入和契约未知的 `inspect → apply` 分流清楚。
+- 命令不得读取“最近一次操作”等隐式 Session 状态推导对象或作用域；跨命令后续动作只使用当前结果显式返回的结构化 `follow_up`。
 - 所有写入默认预检，语义计划默认未审批。
 - 写入用例必须在治理锁内复核生成计划时的内容哈希，发现外部变化时拒绝覆盖。
 
@@ -38,6 +41,7 @@ SQLite / Filesystem Implementation
 
 - 正常输出 indent JSON；错误输出单行 JSON 并写 stderr，退出码非 0。
 - `status` 字段是 Agent 依赖的公共契约，只允许复用既有词汇，不得发明近义词。命令级词汇：ok、error、blocked、needs-input、needs-review、dry-run、synced、planned、ready、applied、issues-found、formatted、archived、up-to-date。文档、领域与 Decision 各有自己的字段词汇表。需要新状态先在本节登记。
+- 可恢复的输入错误必须包含稳定 `code`、对应字段和机器可读的期望类型；当正确序列化方式不直观时，同时返回示例值或修复提示。自然语言 message 与示例可以演进，不作为调用方分支判断依据。
 - 前置条件缺失时优先降级执行：能完成的部分照常完成，输出 `needs-input` 并以 `skipped` 字段显式列出被跳过的步骤，而非整体报错退出。
 
 ## 升级语义

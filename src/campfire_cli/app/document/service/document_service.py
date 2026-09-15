@@ -176,7 +176,7 @@ class DocumentService:
         target_domain: str,
         *,
         name: str | None = None,
-        values: dict[str, Any] | None = None,
+        values: dict[str, str] | None = None,
         unset_fields: tuple[str, ...] = (),
         expected_hash: str | None = None,
         confirm: bool = False,

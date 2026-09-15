@@ -26,7 +26,7 @@ campfire workspace rebuild --confirm
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
 2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。CLI 根据目标路径推导所属 Space 和最近父 Domain，嵌套 Domain 继承 governance/Project；只有根 Domain 才显式提供 governance/Project。默认先预览，用户确认后追加 `--confirm`。
-3. 创建正式文档、接管无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile，根据 type 推导文件名，并一次返回所有缺失字段。Agent 不手工同步 type 和文件名前缀。格式顺序单独使用 `document format`。
+3. 创建正式文档、接管无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile，根据 type 推导文件名，并一次返回所有缺失字段。契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type 和文件名前缀。格式顺序单独使用 `document format`。
 4. 单篇文档改名或跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`；批量文档迁移使用 `workspace restructure`。不要让 Agent 拼目标目录，不要为单篇修改创建批次计划。
 5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
 6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页并校正本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。

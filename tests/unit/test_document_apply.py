@@ -418,6 +418,7 @@ def test_apply_returns_all_missing_fields_without_writing(workspace: Path) -> No
     ]
     assert constraints["assignee"] == ["list"]
     assert constraints["requires_human"] == ["boolean"]
+    assert all("argument_example" not in issue for issue in result.issues)
     assert not (workspace / relative).exists()
 
 
@@ -430,16 +431,22 @@ def test_apply_creates_task_without_skill_owned_enum_defaults(workspace: Path) -
             document_type="task",
             values={
                 "description": "验证任务创建",
-                "task_id": "TASK-001",
+                "task_id": "001",
                 "lifecycle": "todo",
                 "task_source": "assigned",
-                "assignee": ["codex"],
-                "requires_human": False,
+                "assignee": '["codex"]',
+                "requires_human": "false",
+                "due": "2026-09-15",
             },
             confirm=True,
         )
     )
     assert result.status == "applied"
+    parsed = parse_document((workspace / relative).read_text(encoding="utf-8"))
+    assert parsed.frontmatter["task_id"] == "001"
+    assert parsed.frontmatter["assignee"] == ["codex"]
+    assert parsed.frontmatter["requires_human"] is False
+    assert str(parsed.frontmatter["due"]) == "2026-09-15"
     assert service(workspace).check(relative)["status"] == "ok"
 
 
@@ -472,8 +479,8 @@ def test_apply_rejects_invalid_scalar_type_before_writing(workspace: Path) -> No
                 "task_id": "TASK-001",
                 "lifecycle": "todo",
                 "task_source": "assigned",
-                "assignee": ["codex"],
-                "requires_human": "false",
+                "assignee": '["codex"]',
+                "requires_human": "no",
             },
             confirm=True,
         )
@@ -483,6 +490,36 @@ def test_apply_rejects_invalid_scalar_type_before_writing(workspace: Path) -> No
     issue = next(item for item in result.issues if item["code"] == "frontmatter-type-invalid")
     assert issue["field"] == "requires_human"
     assert issue["allowed"] == ["boolean"]
+    assert issue["argument_example"] == {"--set": "requires_human=true"}
+    assert not (workspace / relative).exists()
+
+
+def test_apply_rejects_non_json_list_with_direct_retry_example(workspace: Path) -> None:
+    project_domain(workspace)
+    relative = "mywork/【Example】文档中心/知识-示例.md"
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path=relative,
+            document_type="knowledge",
+            values={"description": "验证列表输入", "tags": "campfire,cli"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "blocked"
+    assert result.issues == [
+        {
+            "code": "frontmatter-list-invalid",
+            "path": relative,
+            "detail": "tags",
+            "field": "tags",
+            "actual": "campfire,cli",
+            "expected_type": "list",
+            "allowed": ["list"],
+            "argument_example": {"--set": 'tags=["item1","item2"]'},
+        }
+    ]
     assert not (workspace / relative).exists()
 
 
@@ -493,7 +530,7 @@ def test_apply_rejects_explicit_unknown_field(workspace: Path) -> None:
         DocumentApplyRequest(
             path=relative,
             document_type="plan",
-            values={"description": "发布计划", "lifecycle": "proposed", "typo": True},
+            values={"description": "发布计划", "lifecycle": "proposed", "typo": "true"},
             confirm=True,
         )
     )
@@ -824,6 +861,49 @@ def test_move_rejects_new_field_outside_target_profile(workspace: Path) -> None:
         }
     ]
     assert (workspace / source).is_file()
+
+
+def test_move_uses_the_same_profile_driven_value_decoder(workspace: Path) -> None:
+    project_domain(workspace)
+    source = "mywork/【Example】文档中心/任务-旧名称.md"
+    target = "mywork/【Example】文档中心/任务-新名称.md"
+    document = service(workspace)
+    document.apply(
+        DocumentApplyRequest(
+            path=source,
+            document_type="task",
+            values={
+                "description": "移动任务",
+                "task_id": "001",
+                "lifecycle": "todo",
+                "task_source": "assigned",
+                "assignee": '["codex"]',
+                "requires_human": "false",
+            },
+            confirm=True,
+        )
+    )
+
+    preview = document.move(
+        source,
+        "project-example",
+        name="任务-新名称.md",
+        values={"assignee": '["human"]', "requires_human": "true"},
+    )
+    result = document.move(
+        source,
+        "project-example",
+        name="任务-新名称.md",
+        values={"assignee": '["human"]', "requires_human": "true"},
+        expected_hash=preview.expected_hash,
+        confirm=True,
+    )
+
+    assert result.status == "moved"
+    parsed = parse_document((workspace / target).read_text(encoding="utf-8"))
+    assert parsed.frontmatter["task_id"] == "001"
+    assert parsed.frontmatter["assignee"] == ["human"]
+    assert parsed.frontmatter["requires_human"] is True
 
 
 def test_move_rejects_target_name_with_directory_components(workspace: Path) -> None:

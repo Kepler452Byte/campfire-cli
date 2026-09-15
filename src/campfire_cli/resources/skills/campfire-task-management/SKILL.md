@@ -60,12 +60,12 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 
 1. 只提交任务标题和 `--type task`；CLI 从 type 推导最终文件名，Agent 不手写前缀映射。
 2. 有项目任务落各自文档中心的任务子目录；已有 `任务/` 惯例的项目沿用，无先例时在文档中心根下创建并沿用同规则。
-3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 负责 Profile、枚举、字段顺序和 YAML 类型；Skill 不硬编码这些可演进契约。
+3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 根据有效 Profile 确定字段类型、枚举和顺序；列表使用严格 JSON 数组。Skill 不硬编码这些可演进契约。
 4. CLI 返回 `needs-input` 时，根据其一次性列出的必填字段与允许值补齐事实，不猜测。
 
 ### 4. 状态流转
 
-- 更新任务：Frontmatter 补丁使用 `document apply --set`，进展记录使用 `document apply --append-section`；只修正文的小范围改动可使用 edit。
+- 更新任务：Frontmatter 契约已知时直接使用 `document apply --set`；字段类型或合法值未知时先对该文档执行一次 `document inspect`，再 apply，不从 `tree` 或逐层 help 开始。进展记录使用 `document apply --append-section`；只修正文的小范围改动可使用 edit。
 - 完成或取消任务时，以 CLI 返回的当前 Task Profile 为准补齐状态、结果与验证信息，不在 Skill 中复制枚举。
 - 用户口头报进度时主动提议同步对应任务文档；一次汇报合并提议，不逐条打断。
 

@@ -7,7 +7,7 @@
 - **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，多会话并发不会互相覆盖。
 - **本地优先**：不绑定云服务、不内置账号；Obsidian Vault 是当前首个存储适配器，Workspace 才是顶层概念。
 
-产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，命令全景用 `campfire tree` 渐进发现。
+产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。不知道 Campfire 是否具有某项能力时用 `campfire tree` 发现命令；已知文档操作不把 tree 作为固定前置步骤。
 
 ## 安装
 
@@ -130,7 +130,7 @@ campfire workspace restructure verify --batch move-001
 
 ## Agent 协作
 
-全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：已给出唯一文件路径的正文读取或小改直接使用文件工具；新建文档、修改 Frontmatter/类型/归属或执行结构治理时才加载 bootstrap，并使用 `document apply/move` 等原子命令。批量结构调整用 `workspace restructure`，归档用 `maintenance archive`。有歧义的分类和重构进入 Decision，不由 Agent 擅自决定。
+全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：已给出唯一文件路径的正文读取或小改直接使用文件工具；新建文档、修改 Frontmatter/类型/归属或执行结构治理时才加载 bootstrap，并使用 `document apply/move` 等原子命令。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply。批量结构调整用 `workspace restructure`，归档用 `maintenance archive`。有歧义的分类和重构进入 Decision，不由 Agent 擅自决定。
 
 ## 许可
 

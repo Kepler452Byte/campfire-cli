@@ -60,6 +60,15 @@ Markdown 是内容与关系事实源，SQLite 是按 Workspace 隔离的查询�
 
 Profile 只允许一层 `base` 继承。Service 将声明配置编译为完整 `EffectiveProfile`；Validator、Formatter 和 CLI 必须消费同一结果，不得复制字段、枚举与值类型。`value_types` 声明不能由 YAML 形状可靠推断的标量类型，当前支持 `string` 和 `boolean`。
 
+Document 写入接口不得要求 Agent 猜测 Frontmatter 输入契约：
+
+- `--set` 是统一的显式字段补丁入口。CLI Adapter 只拆分首个 `=`、拒绝空字段名和重复字段，并保留原始 value；它不解释 Profile，也不使用 YAML 隐式类型推断。
+- Document App 解析一次目标 EffectiveProfile，并由 apply 与 move 共用的值解码器转换补丁：enum、string 和 date 保留原始字符串，boolean 只接受明确的 `true` 或 `false`，list 只接受严格 JSON 数组。
+- Profile 与 Rule Service 继续拥有字段类型、合法值和业务校验，不保存命令行字符串。命令帮助负责 Shell 展示方式，并为列表值给出 `--set 'tags=["tag1","tag2"]'` 形式的最小例子。
+- 输入错误统一返回稳定错误码、字段、实际值、期望类型和可直接照抄的参数示例；apply 与 move 不得分别构造两套解码或诊断。
+- 不因输入格式不直观而增加 `--tags`、`--sources` 等字段专用参数，也不把逗号字符串静默猜成列表。
+- 现有文档的有效 Profile 已由 `document inspect` 返回。Skill 只在字段契约未知时安排一次 `inspect → apply`；契约已知的补丁直接 apply，正文小改不进入本接口。
+
 标准字段用于格式化、补全和校验。默认 `unknown_fields: preserve`：已有业务扩展字段不参与标准排序但必须原样保留，不因尚未建立专属 Profile 而制造全库噪声；确需封闭字段集合的 Profile 可显式设为 `report`。
 
 Document 不维护配置副本，也不提供契约同步命令。升级 Python 包会更新默认契约；用户自定义类型和 Profile 只写入 `~/.campfire/config.yml`，并通过 `workspace config check` 验证。

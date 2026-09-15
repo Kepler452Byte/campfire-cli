@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import typer
-import yaml
 from pydantic import BaseModel
 
 from campfire_cli.app.document.cli.profile_cli import profile_cli
@@ -21,6 +20,12 @@ document_cli = typer.Typer(
 )
 document_cli.add_typer(profile_cli, name="profile")
 document_cli.add_typer(type_cli, name="type")
+
+SET_OPTION_HELP = (
+    "设置 Frontmatter 字段，格式 field=value，可重复使用。"
+    "值类型由有效 Profile 决定；列表使用严格 JSON，例如 "
+    '--set \'tags=["tag1","tag2"]\'。'
+)
 
 
 def service(ctx: typer.Context) -> DocumentService:
@@ -87,8 +92,8 @@ def format_document(
     invoke(lambda: service(ctx).format(path, confirm))
 
 
-def parse_values(items: list[str]) -> dict[str, Any]:
-    values: dict[str, Any] = {}
+def parse_values(items: list[str]) -> dict[str, str]:
+    values: dict[str, str] = {}
     for item in items:
         if "=" not in item:
             raise typer.BadParameter(f"--set 必须使用 field=value：{item}")
@@ -98,7 +103,7 @@ def parse_values(items: list[str]) -> dict[str, Any]:
         key = key.strip()
         if key in values:
             raise typer.BadParameter(f"--set 字段重复：{key}")
-        values[key] = yaml.safe_load(raw)
+        values[key] = raw
     return values
 
 
@@ -107,7 +112,7 @@ def apply_document(
     ctx: typer.Context,
     path: str = typer.Option(..., "--path"),
     document_type: str | None = typer.Option(None, "--type"),
-    set_values: list[str] | None = typer.Option(None, "--set"),
+    set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
     body_file: Path | None = typer.Option(None, "--body-file"),
     append_section: str | None = typer.Option(None, "--append-section"),
     replace_body: bool = typer.Option(False, "--replace-body"),
@@ -142,7 +147,7 @@ def move_document(
     source: str = typer.Option(..., "--path", help="源文档的 Workspace 相对路径"),
     target_domain: str = typer.Option(..., "--domain", help="目标 Domain 的稳定 id"),
     name: str | None = typer.Option(None, "--name", help="可选的新文件名；省略时保持原文件名"),
-    set_values: list[str] | None = typer.Option(None, "--set"),
+    set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
     unset_fields: list[str] | None = typer.Option(None, "--unset"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     confirm: bool = typer.Option(False, "--confirm"),
