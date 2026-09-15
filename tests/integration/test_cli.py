@@ -24,6 +24,11 @@ from campfire_cli.common.package_version import InstallMethod
 from campfire_cli.main import app
 
 runner = CliRunner()
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def strip_ansi(value: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", value)
 
 
 def write_user_config(workspace: Path, payload: dict) -> Path:
@@ -127,7 +132,7 @@ def test_golden_path_help_is_complete_at_narrow_terminal_width() -> None:
     assert "文件名可省略类型前缀" in apply_help.output
     assert "同步文件名和引用" in apply_help.output
     assert plan_help.exit_code == 0, plan_help.output
-    plan_output = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", plan_help.output)
+    plan_output = strip_ansi(plan_help.output)
     assert "无 --spec" in plan_output
     assert "只规范化类型与文件名" in plan_output
     assert "operations spec" in plan_output
@@ -296,7 +301,7 @@ def test_document_set_rejects_duplicate_fields_before_dispatch() -> None:
     )
 
     assert result.exit_code != 0
-    assert "--set 字段重复：status" in result.output
+    assert "--set 字段重复：status" in strip_ansi(result.output)
 
 
 def test_document_set_rejects_an_empty_field_before_dispatch() -> None:
@@ -306,7 +311,7 @@ def test_document_set_rejects_an_empty_field_before_dispatch() -> None:
     )
 
     assert result.exit_code != 0
-    assert "--set 字段名不能为空" in result.output
+    assert "--set 字段名不能为空" in strip_ansi(result.output)
 
 
 def test_project_is_not_exposed_as_a_top_level_command() -> None:
