@@ -34,8 +34,13 @@ class WorkspaceManifestRepository:
 
     @staticmethod
     def render(manifest: WorkspaceManifest) -> str:
-        return yaml.safe_dump(
-            manifest.model_dump(mode="json", exclude_none=True),
-            allow_unicode=True,
-            sort_keys=False,
+        return "".join(
+            [
+                "# Managed by Campfire CLI. Use `campfire workspace ...`; do not edit directly.\n",
+                yaml.safe_dump(
+                    manifest.model_dump(mode="json", exclude_none=True),
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+            ]
         )

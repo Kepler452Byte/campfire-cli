@@ -50,7 +50,7 @@ campfire workspace domain rekey --domain <id> --new-id <id> --confirm
 - 不用 Restructure 处理普通增量维护，也不绕过批次计划直接移动受管文档。
 - 写入返回 `concurrent-change`、`source-hash-changed` 或 `restructure-config-changed` 时停止，重新 inventory 和 plan。
 - 一篇文档只有一个主目标位置；跨领域关系使用链接和自动索引表达。
-- 领域路径变化必须联动 Project `document_domain`、`.campfire.yaml`、路径引用和子领域解析；不得手工分别维护。
+- Project 只通过 `.campfire.yaml` 的稳定根 Domain id 建立绑定。领域改名和移动不修改 Project 元数据；merge 或 rekey 改变稳定 id 时由同一事务更新绑定、路径引用和子领域解析，不得手工分别维护。
 - 不手工删除 `_领域.md`、MOC 或领域目录；合并使用 `domain merge`，删除使用 `domain delete`。
 - `domain_id` 是稳定身份；`rekey` 必须更新直接子领域的 `parent_domain`，且必须显式确认。
 - 目标冲突、来源缺失、链接歧义或语义不明确时保持未执行并请求确认。

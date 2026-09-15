@@ -41,10 +41,12 @@ class DocumentApplyService:
         settings: WorkspaceSettings,
         rules: DocumentRuleService,
         profiles: ProfileRegistry,
+        project_roots: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._rules = rules
         self._profiles = profiles
+        self._project_roots = project_roots or {}
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def apply(self, request: DocumentApplyRequest) -> DocumentApplyResult:
@@ -263,12 +265,27 @@ class DocumentApplyService:
             workspace_id=self._settings.workspace_id,
             action=action,
             path=request.path,
+            requested_path=request.path,
             target=target,
+            normalization=self._normalization(request, target),
             profile=profile,
             expected_hash=expected_hash,
             issues=issues,
             missing_fields=missing_fields or [],
         )
+
+    def _normalization(
+        self, request: DocumentApplyRequest, target: str
+    ) -> dict[str, str] | None:
+        if target == request.path or request.document_type is None:
+            return None
+        return {
+            "reason": "document-type-prefix",
+            "document_type": request.document_type,
+            "required_prefix": self._settings.document_types["types"][request.document_type][
+                "prefix"
+            ],
+        }
 
     def _follow_up(
         self,
@@ -297,9 +314,8 @@ class DocumentApplyService:
             return resolve_domain_context(
                 self._settings.vault_root,
                 path,
+                self._project_roots,
                 self._settings.governance.get("domain_marker", "_领域.md"),
             )
         except DomainContextError as exc:
-            raise ConfigurationError(
-                f"无法解析目标 Domain 上下文：{exc.code}: {exc.detail}"
-            ) from exc
+            raise exc

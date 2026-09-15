@@ -70,7 +70,7 @@ class SqliteWorkspaceRepository:
                 session.add(row)
             row.workspace_id = project.workspace_id
             row.name = project.name
-            row.document_domain = project.document_domain
+            row.document_domain_id = project.document_domain_id
             row.git_remote_url = project.git_remote_url
             row.local_path = project.local_path
             row.default_branch = project.default_branch
@@ -86,11 +86,28 @@ class SqliteWorkspaceRepository:
                     session.add(row)
                 row.workspace_id = project.workspace_id
                 row.name = project.name
-                row.document_domain = project.document_domain
+                row.document_domain_id = project.document_domain_id
                 row.git_remote_url = project.git_remote_url
                 row.local_path = project.local_path
                 row.default_branch = project.default_branch
                 row.status = project.status
+
+    def replace_projects(self, workspace_id: str, projects: list[ProjectEntry]) -> None:
+        with open_session(self._engine) as session, session.begin():
+            session.execute(delete(Project).where(Project.workspace_id == workspace_id))
+            for project in projects:
+                session.add(
+                    Project(
+                        id=project.id,
+                        workspace_id=project.workspace_id,
+                        name=project.name,
+                        document_domain_id=project.document_domain_id,
+                        git_remote_url=project.git_remote_url,
+                        local_path=project.local_path,
+                        default_branch=project.default_branch,
+                        status=project.status,
+                    )
+                )
 
     def replace_registry(self, registry: WorkspaceRegistry, projects: list[ProjectEntry]) -> None:
         with open_session(self._engine) as session, session.begin():
@@ -112,7 +129,7 @@ class SqliteWorkspaceRepository:
                         id=project.id,
                         workspace_id=project.workspace_id,
                         name=project.name,
-                        document_domain=project.document_domain,
+                        document_domain_id=project.document_domain_id,
                         git_remote_url=project.git_remote_url,
                         local_path=project.local_path,
                         default_branch=project.default_branch,
@@ -132,7 +149,7 @@ class SqliteWorkspaceRepository:
             id=row.id,
             workspace_id=row.workspace_id,
             name=row.name,
-            document_domain=row.document_domain,
+            document_domain_id=row.document_domain_id,
             git_remote_url=row.git_remote_url,
             local_path=row.local_path,
             default_branch=row.default_branch,

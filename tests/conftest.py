@@ -31,6 +31,11 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         encoding="utf-8",
     )
     (tmp_path / "_收件箱").mkdir()
+    (tmp_path / ".campfire.yaml").write_text(
+        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "  governance_version: 1\nprojects: []\n",
+        encoding="utf-8",
+    )
     SqliteWorkspaceRepository(campfire_home).save_registry(
         WorkspaceRegistry(
             default_workspace="test",

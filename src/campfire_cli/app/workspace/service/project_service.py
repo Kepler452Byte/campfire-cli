@@ -62,11 +62,13 @@ class ProjectService:
         structure = DomainService(
             Path(self._repository.load_registry().workspaces[project.workspace_id].path), self._root
         )
-        self._owning_space_id(structure.spaces, project.document_domain)
+        if request.document_domain_path is None:
+            raise ConfigurationError("创建 Project 必须提供项目根 Domain 路径")
+        self._owning_space_id(structure.spaces, request.document_domain_path)
         domain_plan = structure.create(
-            domain_id=f"project-{project.id}",
+            domain_id=project.document_domain_id,
             name=project.name,
-            path=project.document_domain,
+            path=request.document_domain_path,
             domain_type="project-domain",
             governance="project-docs",
             project_id=project.id,
@@ -81,9 +83,9 @@ class ProjectService:
                 operations=operations,
             )
         structure.create(
-            domain_id=f"project-{project.id}",
+            domain_id=project.document_domain_id,
             name=project.name,
-            path=project.document_domain,
+            path=request.document_domain_path,
             domain_type="project-domain",
             governance="project-docs",
             project_id=project.id,
@@ -231,13 +233,22 @@ class ProjectService:
                     "actual": observed_branch,
                 }
             )
-        domain_path = (
-            Path(workspace.path) / project.document_domain if workspace is not None else None
-        )
+        domain_path = None
+        if workspace is not None:
+            try:
+                domain = DomainService(Path(workspace.path), self._root).show(
+                    project.document_domain_id
+                )
+                domain_path = Path(workspace.path) / domain.path
+            except ConfigurationError:
+                issues.append(
+                    {
+                        "code": "project-document-domain-missing",
+                        "domain_id": project.document_domain_id,
+                    }
+                )
         if workspace is None:
             issues.append({"code": "project-workspace-missing", "path": project.workspace_id})
-        elif not domain_path.is_dir():
-            issues.append({"code": "project-document-domain-missing", "path": str(domain_path)})
         return ProjectCheckResult(
             status="ok" if not issues else "needs-review",
             project=project,
@@ -312,10 +323,29 @@ class ProjectService:
         workspace = registry.workspaces.get(request.workspace_id)
         if not workspace:
             raise ConfigurationError(f"Workspace 未注册：{request.workspace_id}")
-        domain = self._validate_domain(request.document_domain)
-        domain_path = Path(workspace.path) / domain
-        if require_domain and not domain_path.is_dir():
-            raise ConfigurationError(f"项目文档领域不存在：{domain_path}")
+        self._validate_id(request.document_domain_id)
+        duplicate = next(
+            (
+                project
+                for project in self._repository.list_projects(request.workspace_id)
+                if project.id != request.project_id
+                and project.status == "active"
+                and project.document_domain_id == request.document_domain_id
+            ),
+            None,
+        )
+        if duplicate:
+            raise ConfigurationError(
+                f"Domain 已被 active Project 绑定：{duplicate.id}"
+            )
+        domains = DomainService(Path(workspace.path), self._root)
+        if require_domain:
+            domain_path = Path(workspace.path) / domains.show(request.document_domain_id).path
+        elif request.document_domain_path is not None:
+            relative = self._validate_domain(request.document_domain_path)
+            domain_path = Path(workspace.path) / relative
+        else:
+            raise ConfigurationError("创建 Project 必须提供项目根 Domain 路径")
         local_path = request.local_path.expanduser().resolve() if request.local_path else None
         if local_path and not local_path.is_dir():
             raise ConfigurationError(f"项目本地路径不存在：{local_path}")
@@ -330,7 +360,7 @@ class ProjectService:
             id=request.project_id,
             workspace_id=request.workspace_id,
             name=request.name.strip(),
-            document_domain=domain,
+            document_domain_id=request.document_domain_id,
             git_remote_url=remote,
             local_path=str(local_path) if local_path else None,
             default_branch=branch,

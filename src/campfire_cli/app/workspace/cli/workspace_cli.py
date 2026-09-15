@@ -42,7 +42,7 @@ def invoke[ResultT: BaseModel](operation: Callable[[], ResultT]) -> ResultT:
         return operation()
     except AppError as exc:
         typer.echo(
-            json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False), err=True
+            json.dumps(exc.payload(), ensure_ascii=False), err=True
         )
         raise typer.Exit(exc.exit_code) from exc
 

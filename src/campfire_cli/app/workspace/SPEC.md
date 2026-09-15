@@ -1,12 +1,12 @@
 # Workspace App SPEC
 
-本模块管理 Workspace、Space、Domain、Project 注册表和 Workspace 初始化。Workspace id 与 Project id 是本机治理状态的稳定键；路径只是可变定位信息。用户级 `CAMPFIRE_HOME/campfire.db` 是唯一数据库，保存注册数据、文档索引和工作流状态；每个 Workspace 只保留配置与人类可审阅的运行产物，不再拥有独立数据库。所有工具状态均位于 `CAMPFIRE_HOME`，不得向目标 Workspace 创建工具状态目录。
+本模块管理 Workspace、Space、Domain、Project 注册表和 Workspace 初始化。`.campfire.yaml` 保存可移植的 Workspace、Project 身份和 Project 到根 Domain 的稳定绑定；`CAMPFIRE_HOME/campfire.db` 保存本机路径及其查询投影，不得反向覆盖 Manifest。路径只是可变定位信息。每个 Workspace 只保留配置与人类可审阅的运行产物，不拥有独立数据库。所有工具状态均位于 `CAMPFIRE_HOME`，不得向目标 Workspace 创建工具状态目录。
 
 解析优先级为根级显式 `--workspace <id>`、当前目录所属的已注册 Workspace、默认 Workspace。显式值只接受稳定 Workspace id，不接受路径；叶命令不得重复暴露 Workspace 选择器。写操作仍由具体业务模块执行。
 
 `campfire setup --path <path>` 根据 Manifest 接入已有 Workspace；缺少 Manifest 时必须提供 `--id` 以创建首份 Manifest。`workspace create` 要求目标路径不存在，并创建全局收件箱、带 `_空间.md` 的知识/工作 Space 和治理视图基础目录。两者写入全局 SQLite 注册表，不向 Workspace 写工具状态。
 
-`workspace space/domain create` 只创建不存在的新目录；`space adopt` 原地纳管已有 Space，`domain adopt` 可原地声明或把一个 Vault 内外已有目录接管到明确目标。Domain 所属 Space 和最近父 Domain 从目标路径唯一推导，嵌套 Domain 继承 governance/Project；外部来源始终保留。命令默认只输出计划，追加 `--confirm` 才写入。
+`workspace space/domain create` 只创建不存在的新目录；`space adopt` 原地纳管已有 Space，`domain adopt` 可原地声明或把一个 Vault 内外已有目录接管到明确目标。Domain 所属 Space 和最近父 Domain 从目标路径唯一推导；Project 从 Manifest 绑定的根 Domain id 与祖先拓扑推导，Domain 声明不保存 Project。外部来源始终保留。命令默认只输出计划，追加 `--confirm` 才写入。
 
 `workspace config check` 统一校验包内产品默认值和当前 Workspace 的有效治理契约，包括目录与 Space 冲突、文档类型前缀、Profile 引用和继承、归档策略以及托管资源列表。
 

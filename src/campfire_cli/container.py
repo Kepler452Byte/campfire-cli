@@ -144,11 +144,15 @@ class AppContainer:
                 ),
             }
         workspaces = []
-        for workspace_id in SqliteWorkspaceRepository(home).load_registry().workspaces:
+        workspace_repository = SqliteWorkspaceRepository(home)
+        workspace_service = WorkspaceService(home, workspace_repository)
+        for workspace_id in workspace_repository.load_registry().workspaces:
+            project_sync = workspace_service.sync_projects_from_manifest(workspace_id)
             container = cls.build(workspace_id)
             workspaces.append(
                 {
                     "workspace_id": workspace_id,
+                    "projects": project_sync,
                     "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
                 }
             )
@@ -227,13 +231,14 @@ class AppContainer:
         upgrade_database(database_path)
         engine = create_sqlite_engine(database_path)
         session = open_session(engine)
+        project_roots = {
+            project.document_domain_id: project.id
+            for project in workspace_repository.list_projects(resolution.workspace_id)
+        }
         document_index = DocumentIndexService(
             settings,
             SqliteDocumentIndexRepository(session, resolution.workspace_id),
-            {
-                project.id: project.document_domain
-                for project in workspace_repository.list_projects(resolution.workspace_id)
-            },
+            project_roots,
         )
         maintenance_repository = SqliteMaintenanceRepository(session, resolution.workspace_id)
         maintenance = MaintenanceService(settings, maintenance_repository, document_index)
@@ -254,7 +259,7 @@ class AppContainer:
         )
         return cls(
             settings=settings,
-            document=DocumentService(settings, document_index),
+            document=DocumentService(settings, document_index, project_roots),
             maintenance=maintenance,
             restructure=restructure,
             domain_restructure=domain_restructure,

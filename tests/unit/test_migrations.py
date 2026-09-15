@@ -28,7 +28,7 @@ def test_upgrade_removes_obsolete_adoption_batch_state(tmp_path: Path) -> None:
         adoption_table = connection.execute(
             "select name from sqlite_master where type = 'table' and name = 'adoption_batches'"
         ).fetchone()
-    assert version == ("009",)
+    assert version == ("010",)
     assert adoption_table is None
 
     with sqlite3.connect(database) as connection:

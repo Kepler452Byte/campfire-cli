@@ -50,9 +50,9 @@ document/
 
 Document Service 可以被 Workspace Restructure 编排，但不得反向依赖 Maintenance。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
 
-Markdown 是内容与关系事实源，SQLite 是按 Workspace 隔离的查询投影。Document Index Repository 不解析 Markdown、Profile 或 Domain，只原子持久化文档、关系和 generation 快照。索引不得复制正文；相似度、全文关键词和相关性排序不属于 v1，未来只能以独立 suggestions/search 契约扩展。
+Markdown 是内容与关系事实源，SQLite 是按 Workspace 隔离的查询投影。Document Index Repository 不解析 Markdown、Profile 或 Domain，只原子持久化文档、关系和 generation 快照。索引不得复制正文；相似度、全文关键词和相关性排序不属于当前契约，未来只能以独立 suggestions/search 契约扩展。
 
-`list` 与 `inspect` 自行保障查询新鲜度，不返回索引维护 follow-up。文件 size/mtime 只用于发现变化候选，content hash 表示内容版本；Space/Domain 声明、Project 文档根映射或有效治理配置变化必须触发完整重建。Project 归属优先来自 Domain 继承，其次来自组合根注入的已注册 Project 文档根，不信任每篇 Frontmatter 的重复值。MOC 与其他生成文档不作为普通内容节点。
+`list` 与 `inspect` 自行保障查询新鲜度，不返回索引维护 follow-up。文件 size/mtime 只用于发现变化候选，content hash 表示内容版本；Space/Domain 声明、Project 根 Domain 映射或有效治理配置变化必须触发完整重建。Project 归属只从 Manifest 的稳定根 Domain id 与 Domain 祖先拓扑解析，不读取 Domain 声明或文档 Frontmatter 中的重复值。MOC 与其他生成文档不作为普通内容节点。
 
 `apply` 与 `move` 只保证目标文档操作自身有效，不触发 Maintenance。结果只在派生状态可能变化时返回一个最小 scope 的 `maintenance sync`；调用方不得固定追加 check。所有写入先生成完整 ChangeSet，再经共享 Executor 在乐观锁内提交；多文件操作失败时恢复提交前内容。
 

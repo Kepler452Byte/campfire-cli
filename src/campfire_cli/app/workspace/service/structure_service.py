@@ -5,6 +5,7 @@ import re
 from datetime import date
 from pathlib import Path, PurePosixPath
 
+from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
     Domain,
     DomainCheckResult,
@@ -176,6 +177,7 @@ class SpaceService:
         return "".join(
             [
                 "---\n",
+                "# Managed by Campfire CLI; do not edit this declaration directly.\n",
                 f"name: {json.dumps(space.name, ensure_ascii=False)}\n",
                 f"space_id: {space.id}\nspace_type: {space.type}\n",
                 f"status: {space.status}\n---\n\n",
@@ -190,6 +192,19 @@ class DomainService:
         self.root = workspace_root.resolve()
         self.lock_root = lock_root
         self.spaces = SpaceService(workspace_root, lock_root)
+
+    def project_roots(self) -> dict[str, str]:
+        manifest = WorkspaceManifestRepository().load(self.root)
+        if manifest is None:
+            return {}
+        roots: dict[str, str] = {}
+        for project in manifest.projects:
+            if project.document_domain_id in roots:
+                raise ConfigurationError(
+                    f"Project 根 Domain 被重复绑定：{project.document_domain_id}"
+                )
+            roots[project.document_domain_id] = project.id
+        return roots
 
     def discover(self) -> tuple[list[Domain], list[dict[str, str]]]:
         spaces, issues = self.spaces.discover()
@@ -226,6 +241,15 @@ class DomainService:
                     continue
                 meta = parse_marker(marker)
                 relative = marker.relative_to(self.root).as_posix()
+                for field in ("project", "project_id"):
+                    if field in meta:
+                        issues.append(
+                            {
+                                "code": "domain-field-prohibited",
+                                "path": relative,
+                                "detail": field,
+                            }
+                        )
                 required = ("name", "domain_id", "domain_type", "governance", "moc", "status")
                 for field in required:
                     if not meta.get(field):
@@ -248,14 +272,16 @@ class DomainService:
                         governance=meta.get("governance", ""),
                         moc=meta.get("moc", "").replace("[[", "").replace("]]", ""),
                         parent_domain=meta.get("parent_domain") or None,
-                        project_id=meta.get("project_id") or None,
                         status=meta.get("status", "active"),
                     )
                 )
+        project_roots = self.project_roots()
         resolved_domains: list[Domain] = []
         for item in domains:
             try:
-                context = resolve_domain_context(self.root, item.path / "__context__.md")
+                context = resolve_domain_context(
+                    self.root, item.path / "__context__.md", project_roots
+                )
                 resolved_domains.append(item.model_copy(update={"project_id": context.project_id}))
             except DomainContextError as exc:
                 issues.append(
@@ -302,13 +328,16 @@ class DomainService:
                 )
         return domains, issues
 
-    def list(self, space_id: str | None = None) -> DomainListResult:
+    def list(
+        self, space_id: str | None = None, project_id: str | None = None
+    ) -> DomainListResult:
         domains = self.discover()[0]
         return DomainListResult(
             domains=[
                 self._external(item)
                 for item in domains
-                if not space_id or item.space_id == space_id
+                if (not space_id or item.space_id == space_id)
+                and (not project_id or item.project_id == project_id)
             ]
         )
 
@@ -389,8 +418,6 @@ class DomainService:
             project_id = parent.project_id or project_id
         elif not governance:
             raise ConfigurationError("根 Domain 必须提供 governance")
-        if governance == "project-docs" and not project_id:
-            raise ConfigurationError("project-docs Domain 必须绑定 Project id")
         moc = f"_总览/MOC-{name}总览"
         domain = Domain(
             id=domain_id,
@@ -432,10 +459,10 @@ class DomainService:
     @staticmethod
     def render_marker(domain: Domain) -> str:
         optional = f"parent_domain: {domain.parent_domain}\n" if domain.parent_domain else ""
-        optional += f"project_id: {domain.project_id}\n" if domain.project_id else ""
         return "".join(
             [
                 "---\n",
+                "# Managed by Campfire CLI; do not edit this declaration directly.\n",
                 f"name: {json.dumps(domain.name, ensure_ascii=False)}\n",
                 f"domain_id: {domain.id}\ndomain_type: {domain.type}\n",
                 f"governance: {domain.governance}\n",

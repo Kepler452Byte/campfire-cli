@@ -37,6 +37,16 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
     assert bootstrapped.exit_code == 0, bootstrapped.output
     for index in range(5):
         project_dir = tmp_path_factory.mktemp(f"project-{index}")
+        domain_id = f"perf-domain-{index}"
+        domain_dir = workspace / "mywork" / domain_id
+        domain_dir.mkdir()
+        (domain_dir / "_领域.md").write_text(
+            "---\n"
+            f"name: {domain_id}\ndomain_id: {domain_id}\n"
+            "domain_type: project-domain\ngovernance: project-docs\n"
+            f'moc: "[[MOC-{domain_id}]]"\nstatus: active\n---\n',
+            encoding="utf-8",
+        )
         registered = runner.invoke(
             app,
             [
@@ -50,7 +60,7 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
                 "--name",
                 f"perf-{index}",
                 "--domain",
-                "perf-domain",
+                domain_id,
                 "--local-path",
                 str(project_dir),
             ],

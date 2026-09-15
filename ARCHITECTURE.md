@@ -151,7 +151,8 @@ Campfire 不把“调用方能够猜对未声明契约”作为可靠性前提�
 | 正文、知识、项目、任务 | Workspace 中的 Markdown | SQLite 索引、MOC、Base、报告 |
 | Space、Domain 结构 | Workspace 中的 `_空间.md`、`_领域.md` | CLI 发现结果、MOC |
 | 治理规则 | 包内 `config.yml` + `~/.campfire/config.yml` 覆盖 | 校验结果与执行计划 |
-| Workspace、Project 注册关系 | `~/.campfire/campfire.db` | JSON 导入导出备份 |
+| Workspace、Project 可移植身份与 Project 根 Domain 绑定 | Vault 根 `.campfire.yaml` | Git 或文件同步 |
+| Workspace、Project 本机路径绑定 | `~/.campfire/campfire.db` | 本机 CLI 命令 |
 | Campfire Skills | Python 包内 `resources/skills/` | 全局 Agent Skill 目录 |
 | 文档查询索引 | Workspace Markdown、结构声明与有效治理契约 | `~/.campfire/campfire.db` 中按 `workspace_id` 隔离的可重建投影 |
 | Decision、结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；当前不能仅从 Workspace 重建 |
@@ -160,7 +161,7 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
 
 ### 文档查询投影
 
-文档索引 v1 保存列表查询需要的结构化字段、内容哈希、源文件 stat，以及显式 Frontmatter 关联、WikiLink、Markdown Link、Embed 形成的确定关系。它不复制正文，不保存相似度建议，也不把文件 mtime 解释为任务时间。
+文档索引保存列表查询需要的结构化字段、内容哈希、源文件 stat，以及显式 Frontmatter 关联、WikiLink、Markdown Link、Embed 形成的确定关系。它不复制正文，不保存相似度建议，也不把文件 mtime 解释为任务时间。
 
 每次 `document list` 或 `document inspect` 先对账文件清单、size、mtime、有效配置哈希和 Space/Domain 拓扑哈希。stat 只用于筛选变化候选，内容哈希才表示内容版本；新增、修改和删除会在查询前自动 reconcile。候选快照在内存中完成后，通过单个 SQLite 事务替换文档、关系和 generation，中断不能暴露半套新索引。
 
@@ -187,7 +188,7 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
 
 Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器绑定：同一个 Project 在不同电脑上可以位于不同目录，也可以在某台电脑上尚未克隆。新设备通过稳定 Project id 和 `git_remote_url` 识别代码仓库，自动探测失败时由用户或 Agent 在本机显式绑定路径。
 
-可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、文档领域、Git remote、默认分支和状态，明确禁止 `local_path`。现有 `_空间.md` 与 `_领域.md` 继续分别承载 Space 和 Domain 事实，避免在 Manifest 重复维护。Decision 当前保持本地，不属于该 Manifest。
+可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、根 `document_domain_id`、Git remote、默认分支和状态，明确禁止 `local_path`。`projects[].document_domain_id` 是 Project–Domain 绑定的唯一事实；`_领域.md` 不保存 Project 字段。现有 `_空间.md` 与 `_领域.md` 分别承载 Space 和 Domain 自身事实。Decision 当前保持本地，不属于该 Manifest。
 
 新设备执行 `campfire setup --path <vault>`：读取 Manifest、注册本机路径、恢复 Project 逻辑元数据、同步类型/Profile/Skills/Bases 并执行健康检查。已注册 Workspace 只通过根级 `campfire --workspace <id> ...` 显式选择。无法自动确定的项目源码路径显示为 `unbound_projects`，再用 `campfire workspace project bind` 完成本机绑定。整个流程可重复执行。
 
@@ -201,7 +202,7 @@ name       人类可读名称，通过 domain rename 修改
 path       Workspace 内物理位置，通过 domain move 修改
 ```
 
-`domain rename`、`domain move`、`domain merge`、`domain delete` 和高风险的 `domain rekey` 是领域级意图原子事务，不应拆成大量逐文件迁移。路径变化必须联动 `_领域.md`、Project `document_domain`、`.campfire.yaml` 和路径引用；`rekey` 必须联动直接子领域的 `parent_domain`。`merge` 把源 Domain 的受管内容迁入目标 Domain，并在不变量满足时移除源 Domain；`delete` 只删除没有内容、附件、子 Domain 或 Project 绑定的逻辑空 Domain。它们不是跨业务聚合入口，内部必须复用同一 ChangeSet、快照复核和失败恢复边界。所有命令默认预览，显式 `--confirm` 后执行。
+`domain rename`、`domain move`、`domain merge`、`domain delete` 和高风险的 `domain rekey` 是领域级意图原子事务，不应拆成大量逐文件迁移。Project 通过 `.campfire.yaml` 中的稳定根 Domain id 单向绑定领域；普通路径变化不修改 Project 元数据，`merge` 或 `rekey` 改变稳定 id 时才在同一事务更新绑定。`rekey` 必须联动直接子领域的 `parent_domain`。`merge` 把源 Domain 的受管内容迁入目标 Domain，并在不变量满足时移除源 Domain；`delete` 只删除没有内容、附件、子 Domain 或 Project 绑定的逻辑空 Domain。它们不是跨业务聚合入口，内部必须复用同一 ChangeSet、快照复核和失败恢复边界。所有命令默认预览，显式 `--confirm` 后执行。
 
 SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不是新的事实源。`setup`、`maintenance check` 和领域重构会自动从 `.campfire.yaml`、`_空间.md`、`_领域.md` 与内容文档刷新这些表；`workspace rebuild --confirm` 只提供低频的完整恢复入口。
 

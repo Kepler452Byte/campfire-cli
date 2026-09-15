@@ -44,11 +44,9 @@ def write_domain_marker(
     name: str,
     *,
     governance: str = "project-docs",
-    project_id: str | None = None,
     parent_domain: str | None = None,
 ) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    project = f"project_id: {project_id}\n" if project_id else ""
     parent = f"parent_domain: {parent_domain}\n" if parent_domain else ""
     (directory / "_领域.md").write_text(
         "---\n"
@@ -58,7 +56,6 @@ def write_domain_marker(
         f"governance: {governance}\n"
         f"moc: '[[MOC-{name}]]'\n"
         f"{parent}"
-        f"{project}"
         "status: active\n"
         "---\n",
         encoding="utf-8",
@@ -68,6 +65,24 @@ def write_domain_marker(
         "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n",
         encoding="utf-8",
     )
+
+
+def register_project(project_id: str, domain_id: str, name: str = "Example") -> None:
+    result = runner.invoke(
+        app,
+        [
+            "workspace",
+            "project",
+            "adopt",
+            "--id",
+            project_id,
+            "--name",
+            name,
+            "--domain",
+            domain_id,
+        ],
+    )
+    assert result.exit_code == 0, result.output
 
 
 def test_short_help_is_available_at_every_command_level() -> None:
@@ -353,11 +368,10 @@ def test_document_apply_cli_creates_valid_document_without_hidden_sync(workspace
         "project-domain",
         "--governance",
         "project-docs",
-        "--project",
-        "example",
         "--confirm",
     ]
     assert runner.invoke(app, domain_args).exit_code == 0
+    register_project("example", "project-example")
     body = workspace / "body.md"
     body.write_text("# 发布计划\n", encoding="utf-8")
     relative = "mywork/【Example】文档中心/计划-发布.md"
@@ -398,7 +412,8 @@ def test_document_apply_follow_up_normalizes_nested_directory_to_domain(
     workspace: Path,
 ) -> None:
     domain = workspace / "mywork/Project"
-    write_domain_marker(domain, "project", "Project", project_id="example")
+    write_domain_marker(domain, "project", "Project")
+    register_project("example", "project")
     (domain / "任务").mkdir()
     result = runner.invoke(
         app,
@@ -434,6 +449,12 @@ def test_document_apply_follow_up_normalizes_nested_directory_to_domain(
 
     assert result.exit_code == 0, result.output
     assert payload["target"] == "mywork/Project/任务/计划-下一版.md"
+    assert payload["requested_path"] == "mywork/Project/任务/下一版.md"
+    assert payload["normalization"] == {
+        "reason": "document-type-prefix",
+        "document_type": "plan",
+        "required_prefix": "计划-",
+    }
     assert follow_up["scope"] == "mywork/Project"
     assert synced.exit_code == 0, synced.output
     assert synced_payload["status"] == "synced"
@@ -446,8 +467,9 @@ def test_document_list_and_inspect_expose_reconciled_query_contract(
 ) -> None:
     left = workspace / "mywork/Project"
     right = workspace / "mywork/Knowledge"
-    write_domain_marker(left, "project-example", "Project", project_id="example")
+    write_domain_marker(left, "project-example", "Project")
     write_domain_marker(right, "knowledge-example", "Knowledge", governance="knowledge-docs")
+    register_project("example", "project-example")
     task = left / "任务-Ship.md"
     task.write_text(
         "---\nname: Ship\ndescription: Ship\ntype: task\ntask_id: ship\n"
@@ -495,12 +517,30 @@ def test_document_list_and_inspect_expose_reconciled_query_contract(
     assert listed.exit_code == 0, listed.output
     assert listed_payload["filters"] == {"project": "example", "type": "task"}
     assert listed_payload["count"] == 1
+    assert listed_payload["total"] == 1
+    assert listed_payload["returned"] == 1
+    assert listed_payload["truncated"] is False
     assert listed_payload["items"][0]["path"] == "mywork/Project/任务-Ship.md"
     assert inspected.exit_code == 0, inspected.output
     assert inspected_payload["relations"]["outgoing"][0]["target"] == (
         "mywork/Knowledge/知识-Guide.md"
     )
     assert inspected_payload["index_generation"] == listed_payload["index_generation"]
+
+    limited = json.loads(
+        runner.invoke(app, ["document", "list", "--limit", "1"]).output
+    )
+    assert limited["total"] == 4
+    assert limited["returned"] == 1
+    assert limited["truncated"] is True
+
+    project_domains = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "domain", "list", "--project", "example"],
+        ).output
+    )
+    assert [item["id"] for item in project_domains["domains"]] == ["project-example"]
 
     task.write_text(
         task.read_text(encoding="utf-8").replace("lifecycle: todo", "lifecycle: blocked"),
@@ -528,7 +568,7 @@ def test_document_list_and_inspect_expose_reconciled_query_contract(
 
 def test_document_list_rejects_unknown_scope_with_json_error(workspace: Path) -> None:
     write_domain_marker(
-        workspace / "mywork/Project", "project-example", "Project", project_id="example"
+        workspace / "mywork/Project", "project-example", "Project"
     )
 
     result = runner.invoke(
@@ -546,14 +586,16 @@ def test_document_index_covers_multiple_projects_and_nested_domains(
     alpha = workspace / "mywork/Alpha"
     alpha_child = alpha / "Design"
     beta = workspace / "mywork/Beta"
-    write_domain_marker(alpha, "project-alpha", "Alpha", project_id="alpha")
+    write_domain_marker(alpha, "project-alpha", "Alpha")
     write_domain_marker(
         alpha_child,
         "project-alpha-design",
         "Alpha Design",
         parent_domain="project-alpha",
     )
-    write_domain_marker(beta, "project-beta", "Beta", project_id="beta")
+    write_domain_marker(beta, "project-beta", "Beta")
+    register_project("alpha", "project-alpha", "Alpha")
+    register_project("beta", "project-beta", "Beta")
 
     def task(directory: Path, name: str, lifecycle: str) -> None:
         (directory / f"任务-{name}.md").write_text(
@@ -661,7 +703,7 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
         "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
         encoding="utf-8",
     )
-    write_domain_marker(domain, "project-example", "Example", project_id="example")
+    write_domain_marker(domain, "project-example", "Example")
     repository = tmp_path / "repository"
     repository.mkdir()
     subprocess.run(
@@ -995,7 +1037,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
         "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
         encoding="utf-8",
     )
-    write_domain_marker(domain, "project-example", "Example", project_id="example")
+    write_domain_marker(domain, "project-example", "Example")
     repository.mkdir()
     subprocess.run(
         ["git", "init", "--initial-branch", "main", str(repository)],
@@ -1037,7 +1079,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     listed = json.loads(runner.invoke(app, ["workspace", "project", "list"]).output)
     assert [item["id"] for item in listed["projects"]] == ["example"]
     shown = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert shown["document_domain"] == "mywork/【Example】文档中心"
+    assert shown["document_domain_id"] == "project-example"
     resolved = json.loads(
         runner.invoke(
             app,
@@ -1098,7 +1140,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     )
     updated_payload = json.loads(updated.output)
     assert updated_payload["name"] == "Example"
-    assert updated_payload["document_domain"] == "mywork/【Example】文档中心"
+    assert updated_payload["document_domain_id"] == "project-example"
     assert updated_payload["local_path"] == str(repository)
     assert updated_payload["default_branch"] == "main"
     assert updated_payload["git_remote_url"] == "git@example.com:example/renamed.git"
@@ -1942,7 +1984,13 @@ def test_maintenance_discovers_every_declared_space(workspace: Path) -> None:
 
 
 def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> None:
-    note = workspace / "mynote/知识-空字段.md"
+    write_domain_marker(
+        workspace / "mynote/基础知识",
+        "knowledge-basics",
+        "基础知识",
+        governance="knowledge-base",
+    )
+    note = workspace / "mynote/基础知识/知识-空字段.md"
     note.write_text(
         "---\nname: 空字段\ndescription: \ntype: knowledge\nstatus: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
@@ -1951,7 +1999,14 @@ def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> Non
 
     result = runner.invoke(
         app,
-        ["--workspace", "test", "document", "inspect", "--path", "mynote/知识-空字段.md"],
+        [
+            "--workspace",
+            "test",
+            "document",
+            "inspect",
+            "--path",
+            "mynote/基础知识/知识-空字段.md",
+        ],
     )
     payload = json.loads(result.output)
 
@@ -2478,7 +2533,7 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
     assert parse_yaml_frontmatter(root / "_领域.md")["domain_id"] == "project-old"
     project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
     assert project["name"] == "Old Project"
-    assert project["document_domain"] == "mywork/【Old】文档中心"
+    assert project["document_domain_id"] == "project-old"
 
     rekeyed = runner.invoke(
         app,
@@ -2517,31 +2572,21 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
         "--target",
         "project-destination",
     ]
-    real_save_projects = SqliteWorkspaceRepository.save_projects
     calls = 0
 
-    def fail_once(repository, projects) -> None:
+    def fail_if_called(repository, projects) -> None:
         nonlocal calls
         calls += 1
-        if calls == 1:
-            raise OSError("injected project registry failure")
-        real_save_projects(repository, projects)
+        raise AssertionError("Domain move must not rewrite the stable Project root reference")
 
-    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_once)
-    failed = runner.invoke(app, [*move_command, "--confirm"])
-    assert failed.exit_code != 0
-    assert root.is_dir()
-    assert not (destination / root.name).exists()
-    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["document_domain"] == "mywork/【Old】文档中心"
-
-    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", real_save_projects)
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_if_called)
     moved = runner.invoke(app, [*move_command, "--confirm"])
     assert moved.exit_code == 0, moved.output
+    assert calls == 0
     moved_root = destination / root.name
     assert (moved_root / "_领域.md").is_file()
     project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["document_domain"] == "mywork/Destination/【Old】文档中心"
+    assert project["document_domain_id"] == "project-new"
 
 
 def test_domain_merge_moves_content_reparents_children_and_removes_source(
@@ -2615,8 +2660,8 @@ def test_domain_merge_rebinds_project_root_atomically(
 ) -> None:
     source = workspace / "mywork/Source"
     target = workspace / "mywork/Target"
-    write_domain_marker(source, "source", "Source", project_id="example")
-    write_domain_marker(target, "target", "Target", project_id="example")
+    write_domain_marker(source, "source", "Source")
+    write_domain_marker(target, "target", "Target")
     note = source / "记录-迁移.md"
     note.write_text("# 迁移\n", encoding="utf-8")
     (workspace / ".campfire.yaml").write_text(
@@ -2664,20 +2709,21 @@ def test_domain_merge_rebinds_project_root_atomically(
 
     monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_once)
     failed = runner.invoke(app, [*command, "--confirm"])
+    assert calls == 2, failed.output
     assert failed.exit_code != 0
     assert source.is_dir()
     assert not (target / note.name).exists()
     project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["document_domain"] == "mywork/Source"
+    assert project["document_domain_id"] == "source"
 
     monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", real_save_projects)
     applied = runner.invoke(app, [*command, "--confirm"])
     assert applied.exit_code == 0, applied.output
     assert (target / note.name).is_file()
     project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["document_domain"] == "mywork/Target"
+    assert project["document_domain_id"] == "target"
     manifest = yaml.safe_load((workspace / ".campfire.yaml").read_text(encoding="utf-8"))
-    assert manifest["projects"][0]["document_domain"] == "mywork/Target"
+    assert manifest["projects"][0]["document_domain_id"] == "target"
 
 
 def test_domain_merge_blocks_a_concurrent_source_change(
@@ -2769,8 +2815,10 @@ def test_domain_merge_rejects_cycles_and_project_conflicts(workspace: Path) -> N
 
     left = workspace / "mywork/Left"
     right = workspace / "mywork/Right"
-    write_domain_marker(left, "left", "Left", project_id="left-project")
-    write_domain_marker(right, "right", "Right", project_id="right-project")
+    write_domain_marker(left, "left", "Left")
+    write_domain_marker(right, "right", "Right")
+    register_project("left-project", "left", "Left")
+    register_project("right-project", "right", "Right")
     conflict = json.loads(
         runner.invoke(
             app,
@@ -3244,7 +3292,6 @@ def test_project_resolve_does_not_match_by_shared_remote_alone(tmp_path: Path, m
         domain_dir,
         "project-registered-app",
         "Registered App",
-        project_id="registered-app",
     )
     added = runner.invoke(
         app,

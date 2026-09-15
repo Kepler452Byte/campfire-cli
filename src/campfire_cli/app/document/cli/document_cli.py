@@ -41,7 +41,7 @@ def invoke(operation: Callable[[], dict[str, Any] | BaseModel]) -> None:
         payload = result.model_dump(mode="json") if isinstance(result, BaseModel) else result
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     except AppError as exc:
-        typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
+        typer.echo(json.dumps(exc.payload(), ensure_ascii=False))
         raise typer.Exit(exc.exit_code) from exc
 
 
@@ -70,6 +70,7 @@ def list_documents(
     domain: str | None = typer.Option(None, "--domain"),
     document_type: str | None = typer.Option(None, "--type"),
     lifecycle: str | None = typer.Option(None, "--lifecycle"),
+    limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
     """按 Project、Domain、类型和生命周期列出受管内容文档。"""
     invoke(
@@ -78,6 +79,7 @@ def list_documents(
             domain=domain,
             document_type=document_type,
             lifecycle=lifecycle,
+            limit=limit,
         )
     )
 

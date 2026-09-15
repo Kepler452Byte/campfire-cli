@@ -47,8 +47,8 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 ### 1. 归属定位
 
 1. 从用户表述提取项目关键词（项目名、简称、仓库名、路径片段）。
-2. 运行 `campfire workspace project list`，在 id、name、git_remote_url、local_path、document_domain 中做子串匹配。
-3. 唯一命中即定位该项目及其 `document_domain`；多候选或无候选时向用户列出候选并询问，不凭名称相似度猜测。
+2. 运行 `campfire workspace project list`，在 id、name、git_remote_url、local_path、document_domain_id 中做子串匹配。
+3. 唯一命中即定位该项目及其 `document_domain_id`；多候选或无候选时向用户列出候选并询问，不凭名称相似度猜测。
 4. 用户明确表示任务不关联项目（个人待办、跨项目事务）时归入无项目任务。
 
 ### 2. 无项目任务归属

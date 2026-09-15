@@ -101,7 +101,8 @@ Campfire 使用语义化版本：
 - `domain_id`、`name` 和 `path` 分别表示稳定身份、显示名称和物理位置，不得隐式绑定。
 - 普通 rename 和 move 不得改变 `domain_id`；只有显式 `domain rekey` 可以修改稳定身份。
 - 修改领域名称不得修改 Project 名称；Project 展示名称只能由 `workspace project update --name` 显式修改。
-- 领域路径变化必须同步 Project `document_domain`、`.campfire.yaml` 和路径引用。
+- `.campfire.yaml` 的 `projects[].document_domain_id` 是 Project 到根 Domain 绑定的唯一事实；Domain 声明不保存 Project 字段。
+- 领域改名和移动不修改 Project 元数据；merge 或 rekey 改变稳定 Domain id 时必须在同一事务更新 Project 绑定、路径引用和子领域解析。
 - `rekey` 必须同步直接子领域的 `parent_domain`。
 - `move` 的目标必须使用 Space 或 Domain 稳定 id；`merge` 和 `delete` 不得退化为 Agent 手工移动、删除声明与清理索引。
 - 已受管对象使用稳定 id，路径参数只用于新位置、具体文件、外部输入与扫描范围；不得同时要求可推导的 id、路径和父级关系。

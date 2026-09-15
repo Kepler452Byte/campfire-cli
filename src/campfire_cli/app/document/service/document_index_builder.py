@@ -18,7 +18,6 @@ from campfire_cli.common.documents.links import (
     stem_index,
 )
 from campfire_cli.common.documents.markdown import MarkdownDocument, parse_document
-from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.config.settings import WorkspaceSettings
 
 DECLARED_FIELDS = {
@@ -33,13 +32,10 @@ class DocumentIndexBuilder:
     def __init__(
         self,
         settings: WorkspaceSettings,
-        project_domains: dict[str, str] | None = None,
+        project_roots: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
-        self._project_domains = {
-            project_id: domain.replace("\\", "/").strip("/")
-            for project_id, domain in (project_domains or {}).items()
-        }
+        self._project_roots = dict(project_roots or {})
         self.config_hash = self._effective_config_hash()
 
     def record(self, path: Path, text: str, parsed: MarkdownDocument) -> DocumentIndexRecord:
@@ -111,7 +107,7 @@ class DocumentIndexBuilder:
         digest = hashlib.sha256()
         digest.update(
             json.dumps(
-                self._project_domains,
+                self._project_roots,
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
@@ -137,16 +133,12 @@ class DocumentIndexBuilder:
     def known_scope_ids(self) -> tuple[set[str], set[str]]:
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
         domains: set[str] = set()
-        projects: set[str] = set()
         for marker in self._settings.vault_root.rglob(marker_name):
             frontmatter = parse_document(marker.read_text(encoding="utf-8")).frontmatter
             domain = self._string(frontmatter.get("domain_id"))
-            project = self._string(frontmatter.get("project_id") or frontmatter.get("project"))
             if domain:
                 domains.add(domain)
-            if project:
-                projects.add(project)
-        return domains, projects | set(self._project_domains)
+        return domains, set(self._project_roots.values())
 
     def _declared_edges(
         self,
@@ -198,42 +190,15 @@ class DocumentIndexBuilder:
 
     def _domain_context(self, path: Path) -> tuple[str | None, str | None]:
         try:
-            context = resolve_domain_context(self._settings.vault_root, path)
+            context = resolve_domain_context(
+                self._settings.vault_root, path, self._project_roots
+            )
             return context.domain_id, context.project_id
         except DomainContextError:
             return None, None
 
     def _project_id(self, path: Path, context: tuple[str | None, str | None]) -> str | None:
-        if context[1] is not None:
-            return context[1]
-        relative = path.relative_to(self._settings.vault_root).as_posix()
-        domain_matches = [
-            project_id
-            for project_id, domain in self._project_domains.items()
-            if context[0] is not None and domain == context[0]
-        ]
-        if len(domain_matches) == 1:
-            return domain_matches[0]
-        if len(domain_matches) > 1:
-            raise ConfigurationError(
-                f"文档 Project 归属不唯一：{relative}；projects={sorted(domain_matches)}"
-            )
-        path_matches = [
-            (domain, project_id)
-            for project_id, domain in self._project_domains.items()
-            if relative == domain or relative.startswith(f"{domain}/")
-        ]
-        if not path_matches:
-            return None
-        deepest = max(len(Path(domain).parts) for domain, _project_id in path_matches)
-        project_matches = sorted(
-            project_id for domain, project_id in path_matches if len(Path(domain).parts) == deepest
-        )
-        if len(project_matches) != 1:
-            raise ConfigurationError(
-                f"文档 Project 归属不唯一：{relative}；projects={project_matches}"
-            )
-        return project_matches[0]
+        return context[1]
 
     def _effective_config_hash(self) -> str:
         payload = {

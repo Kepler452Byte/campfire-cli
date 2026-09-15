@@ -92,7 +92,13 @@ class DomainRestructureService:
                 raise ConfigurationError("Domain 不能移动到自身或自己的子 Domain")
             if parent.governance != domain.governance:
                 raise ConfigurationError("移动后的子 Domain 必须继承父 Domain governance")
-            if parent.project_id != domain.project_id:
+            is_project_root = any(
+                project.document_domain_id == domain.id
+                for project in self._workspaces.list_projects(self._settings.workspace_id)
+            )
+            if parent.project_id != domain.project_id and not (
+                is_project_root and parent.project_id is None
+            ):
                 raise ConfigurationError("移动后的 Domain 与目标父 Domain Project 不一致")
             target = parent.path / domain.path.name
             parent_domain = parent.id
@@ -134,15 +140,13 @@ class DomainRestructureService:
         source = self._domain(source_domain)
         target = self._domain(target_domain)
         issues = self._merge_issues(source, target)
-        source_relative = source.path.relative_to(self._settings.vault_root).as_posix()
-        target_relative = target.path.relative_to(self._settings.vault_root).as_posix()
         projects = [
             project
             for project in self._workspaces.list_projects(self._settings.workspace_id)
-            if project.document_domain == source_relative
+            if project.document_domain_id == source.id
         ]
         updated_projects = [
-            project.model_copy(update={"document_domain": target_relative}) for project in projects
+            project.model_copy(update={"document_domain_id": target.id}) for project in projects
         ]
         files = sorted(path for path in source.path.rglob("*") if path.is_file())
         source_moc = source.path / f"{source.moc}.md"
@@ -271,7 +275,7 @@ class DomainRestructureService:
         projects = [
             project
             for project in self._workspaces.list_projects(self._settings.workspace_id)
-            if project.document_domain == relative
+            if project.document_domain_id == domain.id
         ]
         content = [path for path in files if path not in {marker, moc}]
         issues: list[dict[str, object]] = []
@@ -368,7 +372,7 @@ class DomainRestructureService:
         projects = [
             project
             for project in self._workspaces.list_projects(self._settings.workspace_id)
-            if project.document_domain == old_relative
+            if project.document_domain_id == domain.id and new_id != domain.id
         ]
         operations: list[dict[str, str]] = []
         if target != domain.path:
@@ -399,7 +403,7 @@ class DomainRestructureService:
         updated_projects = [
             project.model_copy(
                 update={
-                    "document_domain": new_relative,
+                    "document_domain_id": new_id,
                 }
             )
             for project in projects
@@ -474,7 +478,13 @@ class DomainRestructureService:
                     "target": target.governance,
                 }
             )
-        if source.project_id != target.project_id:
+        source_is_project_root = any(
+            project.document_domain_id == source.id
+            for project in self._workspaces.list_projects(self._settings.workspace_id)
+        )
+        if source.project_id != target.project_id and not (
+            source_is_project_root and target.project_id is None
+        ):
             issues.append(
                 {
                     "code": "domain-merge-project-conflict",

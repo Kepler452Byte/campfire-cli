@@ -6,10 +6,12 @@ import pytest
 
 from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.document_service import DocumentService
+from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
-from campfire_cli.config.settings import WorkspaceSettings
+from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 from campfire_cli.container import AppContainer
 
 
@@ -27,10 +29,17 @@ def project_domain(workspace: Path) -> Path:
         "domain_type: project-domain\n"
         "governance: project-docs\n"
         "moc: MOC-Example\n"
-        "project_id: example\n"
         "status: active\n"
         "---\n",
         encoding="utf-8",
+    )
+    SqliteWorkspaceRepository(campfire_home()).save_project(
+        ProjectEntry(
+            id="example",
+            workspace_id="test",
+            name="Example",
+            document_domain_id="project-example",
+        )
     )
     return domain
 

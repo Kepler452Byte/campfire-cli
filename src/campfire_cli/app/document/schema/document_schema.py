@@ -24,7 +24,9 @@ class DocumentApplyResult(BaseModel):
     workspace_id: str
     action: Literal["create", "update", "retype"]
     path: str
+    requested_path: str
     target: str
+    normalization: dict[str, Any] | None = None
     profile: str
     expected_hash: str
     write_performed: bool = False
@@ -127,4 +129,7 @@ class DocumentListResult(BaseModel):
     index_generation: int
     filters: dict[str, str] = Field(default_factory=dict)
     count: int
+    total: int
+    returned: int
+    truncated: bool
     items: list[DocumentListItem] = Field(default_factory=list)

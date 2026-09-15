@@ -11,6 +11,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import (
 )
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.config.settings import campfire_home
 from campfire_cli.container import AppContainer
 
 
@@ -24,10 +25,17 @@ def write_project_domain(workspace: Path) -> Path:
         "domain_type: project-domain\n"
         "governance: project-docs\n"
         "moc: MOC-Project\n"
-        "project_id: example\n"
         "status: active\n"
         "---\n",
         encoding="utf-8",
+    )
+    SqliteWorkspaceRepository(campfire_home()).save_project(
+        ProjectEntry(
+            id="example",
+            workspace_id="test",
+            name="Example",
+            document_domain_id="project-example",
+        )
     )
     (domain / "MOC-Project.md").write_text(
         "---\nname: Project\ndescription: Index\ntype: moc\nstatus: current\n"
@@ -323,7 +331,7 @@ def test_project_registry_root_supplies_legacy_domain_context(workspace: Path) -
             id="legacy",
             workspace_id="test",
             name="Legacy",
-            document_domain="mywork/Legacy",
+            document_domain_id="project-legacy",
         )
     )
 

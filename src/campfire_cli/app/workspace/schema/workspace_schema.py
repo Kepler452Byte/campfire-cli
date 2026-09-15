@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorkspaceEntry(BaseModel):
@@ -61,15 +61,19 @@ class ManifestWorkspace(BaseModel):
 
 
 class ManifestProject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     name: str
-    document_domain: str
+    document_domain_id: str
     git_remote_url: str | None = None
     default_branch: str | None = None
     status: str = "active"
 
 
 class WorkspaceManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     schema_version: int = 1
     workspace: ManifestWorkspace
     projects: list[ManifestProject] = Field(default_factory=list)
@@ -149,7 +153,7 @@ class ProjectEntry(BaseModel):
     id: str
     workspace_id: str
     name: str
-    document_domain: str
+    document_domain_id: str
     git_remote_url: str | None = None
     local_path: str | None = None
     default_branch: str | None = None
@@ -160,7 +164,8 @@ class ProjectRegistrationRequest(BaseModel):
     project_id: str
     workspace_id: str
     name: str
-    document_domain: str
+    document_domain_id: str
+    document_domain_path: str | None = None
     git_remote_url: str | None = None
     local_path: Path | None = None
     default_branch: str | None = None

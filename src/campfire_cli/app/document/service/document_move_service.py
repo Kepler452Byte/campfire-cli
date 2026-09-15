@@ -37,10 +37,12 @@ class DocumentMoveService:
         settings: WorkspaceSettings,
         rules: DocumentRuleService,
         profiles: ProfileRegistry,
+        project_roots: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._rules = rules
         self._profiles = profiles
+        self._project_roots = project_roots or {}
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def move(
@@ -249,6 +251,7 @@ class DocumentMoveService:
                 resolve_domain_context(
                     self._settings.vault_root,
                     path,
+                    self._project_roots,
                     self._settings.governance.get("domain_marker", "_领域.md"),
                 ),
                 None,

@@ -123,6 +123,27 @@ class WorkspaceService:
             unbound_projects=unbound,
         )
 
+    def sync_projects_from_manifest(self, workspace_id: str) -> dict[str, object]:
+        registry = self._repository.load_registry()
+        workspace = registry.workspaces.get(workspace_id)
+        if workspace is None:
+            raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
+        root = Path(workspace.path).expanduser().resolve()
+        manifest = self._manifests.load(root)
+        if manifest is None:
+            raise ConfigurationError(f"Workspace 缺少 .campfire.yaml：{root}")
+        current = {item.id: item for item in self._repository.list_projects(workspace_id)}
+        projects = [
+            ProjectEntry(
+                **portable.model_dump(),
+                workspace_id=workspace_id,
+                local_path=current.get(portable.id).local_path if portable.id in current else None,
+            )
+            for portable in manifest.projects
+        ]
+        self._repository.replace_projects(workspace_id, projects)
+        return {"status": "synced", "project_count": len(projects)}
+
     def list(self) -> WorkspaceListResult:
         registry = self._repository.load_registry()
         return WorkspaceListResult(**registry.model_dump())

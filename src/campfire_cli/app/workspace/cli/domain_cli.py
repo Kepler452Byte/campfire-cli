@@ -27,8 +27,9 @@ def applications(ctx: typer.Context) -> AppContainer:
 def list_domains(
     ctx: typer.Context,
     space: str | None = typer.Option(None, "--space"),
+    project: str | None = typer.Option(None, "--project"),
 ) -> None:
-    emit(invoke(lambda: service(ctx).list(space)))
+    emit(invoke(lambda: service(ctx).list(space, project)))
 
 
 @domain_cli.command("show")
@@ -51,9 +52,6 @@ def create(
     governance: str | None = typer.Option(
         None, "--governance", help="根 Domain 必填；嵌套 Domain 自动继承"
     ),
-    project: str | None = typer.Option(
-        None, "--project", help="根 project-docs Domain 必填；嵌套 Domain 自动继承"
-    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(
@@ -64,7 +62,7 @@ def create(
                 path=path,
                 domain_type=domain_type,
                 governance=governance,
-                project_id=project,
+                project_id=None,
                 confirm=confirm,
             )
         )
@@ -84,9 +82,6 @@ def adopt(
     governance: str | None = typer.Option(
         None, "--governance", help="根 Domain 必填；嵌套 Domain 自动继承"
     ),
-    project: str | None = typer.Option(
-        None, "--project", help="根 project-docs Domain 必填；嵌套 Domain 自动继承"
-    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(
@@ -98,7 +93,7 @@ def adopt(
                 target_path=target_path,
                 domain_type=domain_type,
                 governance=governance,
-                project_id=project,
+                project_id=None,
                 confirm=confirm,
             )
         )

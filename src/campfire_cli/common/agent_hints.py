@@ -31,6 +31,10 @@ HINT_BODY = """## Campfire 文档治理
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
    不为通过检查而猜测。
 
+`.campfire.yaml`、`_空间.md`、`_领域.md`、MOC 自动区域、Base、关系页和
+SQLite 是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；
+缺少对应命令时停止并报告能力缺口，不直接编辑文件或数据库。
+
 不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
 字段、枚举和顺序以 Campfire Profile 为唯一事实来源。
 

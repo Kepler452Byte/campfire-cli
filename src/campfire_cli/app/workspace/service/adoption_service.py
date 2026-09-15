@@ -138,7 +138,7 @@ class AdoptionService:
             original_project = self._workspaces.get_project(project_id)
             if original_project:
                 updated_project = original_project.model_copy(
-                    update={"document_domain": target_path}
+                    update={"document_domain_id": domain_id}
                 )
                 manifest_path, manifest_content = self._manifest_update(updated_project)
                 writes.append(FileWrite(manifest_path, manifest_content))

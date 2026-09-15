@@ -21,7 +21,11 @@ from campfire_cli.app.document.service.kanban_service import (
     renderability_result,
 )
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
-from campfire_cli.common.documents.domain_context import DomainContextError, resolve_domain_by_id
+from campfire_cli.common.documents.domain_context import (
+    DomainContextError,
+    resolve_domain_by_id,
+    resolve_domain_context,
+)
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
@@ -30,13 +34,21 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 
 class DocumentService:
-    def __init__(self, settings: WorkspaceSettings, index: DocumentIndexService) -> None:
+    def __init__(
+        self,
+        settings: WorkspaceSettings,
+        index: DocumentIndexService,
+        project_roots: dict[str, str],
+    ) -> None:
         self._settings = settings
         self._index = index
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
-        self._application = DocumentApplyService(settings, self._rules, self._profiles)
-        self._movement = DocumentMoveService(settings, self._rules, self._profiles)
+        self._project_roots = project_roots
+        self._application = DocumentApplyService(
+            settings, self._rules, self._profiles, project_roots
+        )
+        self._movement = DocumentMoveService(settings, self._rules, self._profiles, project_roots)
 
     def check(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
@@ -69,19 +81,12 @@ class DocumentService:
         parsed = parse_document(path.read_text(encoding="utf-8"))
         document_type = parsed.frontmatter.get("type")
         profile = self._profiles.resolve(document_type, parsed.frontmatter, path)
-        domain_id: str | None = None
-        current = path.parent
-        while current == self._settings.vault_root or self._settings.vault_root in current.parents:
-            marker = current / "_领域.md"
-            if marker.is_file():
-                value = parse_document(marker.read_text(encoding="utf-8")).frontmatter.get(
-                    "domain_id"
-                )
-                domain_id = value if isinstance(value, str) else None
-                break
-            if current == self._settings.vault_root:
-                break
-            current = current.parent
+        context = resolve_domain_context(
+            self._settings.vault_root,
+            path,
+            self._project_roots,
+            self._settings.governance.get("domain_marker", "_领域.md"),
+        )
         issues = self._rules.check_document(self._settings.vault_root, path)
         generation, relations = self._index.relations(normalized)
         issues.extend(
@@ -97,7 +102,8 @@ class DocumentService:
             "status": "ok" if not issues else "needs-review",
             "workspace_id": self._settings.workspace_id,
             "path": normalized,
-            "domain_id": domain_id,
+            "domain_id": context.domain_id,
+            "project_id": context.project_id,
             "type": document_type if isinstance(document_type, str) else None,
             "profile": profile.model_dump(),
             "index_generation": generation,
@@ -112,12 +118,14 @@ class DocumentService:
         domain: str | None = None,
         document_type: str | None = None,
         lifecycle: str | None = None,
+        limit: int | None = None,
     ) -> DocumentListResult:
         return self._index.list_documents(
             project=project,
             domain=domain,
             document_type=document_type,
             lifecycle=lifecycle,
+            limit=limit,
         )
 
     def rebuild_index(self) -> DocumentIndexResult:
@@ -186,9 +194,11 @@ class DocumentService:
         if Path(target_name).name != target_name or not target_name.endswith(".md"):
             raise ConfigurationError("document move 的 --name 必须是 Markdown 文件名")
         try:
-            domain = resolve_domain_by_id(self._settings.vault_root, target_domain)
+            domain = resolve_domain_by_id(
+                self._settings.vault_root, target_domain, self._project_roots
+            )
         except DomainContextError as exc:
-            raise ConfigurationError(f"目标 Domain 不存在或不唯一：{exc.detail}") from exc
+            raise exc
         target = (domain.root / target_name).relative_to(self._settings.vault_root).as_posix()
         return self._movement.move(
             source,

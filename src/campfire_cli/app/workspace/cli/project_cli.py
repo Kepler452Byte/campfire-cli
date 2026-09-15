@@ -8,7 +8,6 @@ from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolutio
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectRegistrationRequest
 from campfire_cli.app.workspace.service.project_service import ProjectService
-from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import campfire_home
@@ -28,28 +27,24 @@ def request(
     project_id: str,
     workspace_id: str,
     name: str,
-    document_domain: str,
+    document_domain_id: str,
     local_path: Path | None,
     git_remote_url: str | None,
     default_branch: str | None,
     status: str,
+    document_domain_path: str | None = None,
 ) -> ProjectRegistrationRequest:
     return ProjectRegistrationRequest(
         project_id=project_id,
         workspace_id=workspace_id,
         name=name,
-        document_domain=document_domain,
+        document_domain_id=document_domain_id,
+        document_domain_path=document_domain_path,
         local_path=local_path,
         git_remote_url=git_remote_url,
         default_branch=default_branch,
         status=status,
     )
-
-
-def document_domain(workspace: str, domain_id: str) -> str:
-    domain = DomainService(Path(workspace), campfire_home()).show(domain_id)
-    return domain.path.as_posix()
-
 
 @project_cli.command("adopt")
 def adopt(
@@ -70,7 +65,7 @@ def adopt(
             project_id,
             resolved.workspace_id,
             name,
-            document_domain(resolved.workspace, domain_id),
+            domain_id,
             local_path,
             git_remote_url,
             default_branch,
@@ -110,11 +105,7 @@ def update(
             project_id,
             current.workspace_id,
             name if name is not None else current.name,
-            (
-                document_domain(resolved.workspace, domain_id)
-                if domain_id
-                else current.document_domain
-            ),
+            domain_id or current.document_domain_id,
             local_path if local_path is not None else current_local_path,
             git_remote_url if git_remote_url is not None else current.git_remote_url,
             default_branch if default_branch is not None else current.default_branch,
@@ -145,11 +136,12 @@ def create(
             project_id,
             workspace_id,
             name,
-            path,
+            f"project-{project_id}",
             local_path,
             git_remote_url,
             default_branch,
             status,
+            path,
         )
         return service().create(payload, confirm)
 

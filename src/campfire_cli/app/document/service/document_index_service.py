@@ -34,11 +34,11 @@ class DocumentIndexService:
         self,
         settings: WorkspaceSettings,
         repository: DocumentIndexRepositoryProtocol,
-        project_domains: dict[str, str] | None = None,
+        project_roots: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._repository = repository
-        self._builder = DocumentIndexBuilder(settings, project_domains)
+        self._builder = DocumentIndexBuilder(settings, project_roots)
 
     def rebuild(self) -> DocumentIndexResult:
         return self._reconcile(force=True)
@@ -53,6 +53,7 @@ class DocumentIndexService:
         domain: str | None = None,
         document_type: str | None = None,
         lifecycle: str | None = None,
+        limit: int | None = None,
     ) -> DocumentListResult:
         index = self.reconcile()
         self._validate_filters(project, domain, document_type, lifecycle)
@@ -75,12 +76,16 @@ class DocumentIndexService:
             records = [item for item in records if item.document_type == document_type]
         if lifecycle is not None:
             records = [item for item in records if item.lifecycle == lifecycle]
-        items = [self._list_item(item) for item in sorted(records, key=self._record_sort_key)]
+        all_items = [self._list_item(item) for item in sorted(records, key=self._record_sort_key)]
+        items = all_items[:limit] if limit is not None else all_items
         return DocumentListResult(
             workspace_id=self._settings.workspace_id,
             index_generation=index.generation,
             filters=filters,
             count=len(items),
+            total=len(all_items),
+            returned=len(items),
+            truncated=len(items) < len(all_items),
             items=items,
         )
 

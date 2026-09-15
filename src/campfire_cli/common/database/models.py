@@ -31,7 +31,7 @@ class Project(Base):
         ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(160))
-    document_domain: Mapped[str] = mapped_column(Text)
+    document_domain_id: Mapped[str] = mapped_column(String(128))
     git_remote_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     local_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     default_branch: Mapped[str | None] = mapped_column(String(160), nullable=True)
