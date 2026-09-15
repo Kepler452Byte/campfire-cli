@@ -125,8 +125,9 @@ def test_golden_path_help_is_complete_at_narrow_terminal_width() -> None:
     assert "文件名可省略类型前缀" in apply_help.output
     assert "同步文件名和引用" in apply_help.output
     assert plan_help.exit_code == 0, plan_help.output
-    assert "无 --spec 时只推断类型和文件名规范化" in plan_help.output
-    assert "根字段为 operations" in plan_help.output
+    assert "无 --spec" in plan_help.output
+    assert "只规范化类型与文件名" in plan_help.output
+    assert "operations spec" in plan_help.output
 
 
 def test_public_selectors_keep_one_stable_golden_path(workspace: Path) -> None:

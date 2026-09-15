@@ -47,8 +47,9 @@ def plan(
 ) -> None:
     """生成带源哈希且默认未审批的逐文件计划。
 
-    无 --spec 时只推断类型和文件名规范化。任意移动或 Frontmatter Patch
-    使用 YAML/JSON，根字段为 operations。完整格式见 Restructure Skill reference。
+    无 --spec：只规范化类型与文件名。
+    移动或 Frontmatter Patch：使用 operations spec。
+    完整格式见 Restructure Skill reference。
     """
     emit(invoke(lambda: service(ctx).plan(batch, spec)))
 
