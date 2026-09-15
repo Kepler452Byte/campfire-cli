@@ -12,7 +12,6 @@ from campfire_cli.app.document.service.document_patch_values import (
 )
 from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
-from campfire_cli.app.document.service.frontmatter_formatter import render_patch
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.domain_context import (
@@ -20,6 +19,7 @@ from campfire_cli.common.documents.domain_context import (
     DomainContextError,
     resolve_domain_context,
 )
+from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, safe_path

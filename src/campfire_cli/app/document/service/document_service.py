@@ -15,7 +15,6 @@ from campfire_cli.app.document.service.document_index_service import DocumentInd
 from campfire_cli.app.document.service.document_move_service import DocumentMoveService
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import exempt_document
-from campfire_cli.app.document.service.frontmatter_formatter import format_text
 from campfire_cli.app.document.service.kanban_service import (
     check_kanban_renderability,
     renderability_result,
@@ -26,6 +25,7 @@ from campfire_cli.common.documents.domain_context import (
     resolve_domain_by_id,
     resolve_domain_context,
 )
+from campfire_cli.common.documents.frontmatter_format import format_text
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path

@@ -143,6 +143,14 @@ class DomainCreateResult(BaseModel):
     write_performed: bool = False
 
 
+class DeclarationFormatResult(BaseModel):
+    status: str
+    path: str
+    reordered: list[str] = Field(default_factory=list)
+    issues: list[dict[str, str]] = Field(default_factory=list)
+    write_performed: bool = False
+
+
 class WorkspaceConfigCheckResult(BaseModel):
     status: str
     checked: list[str] = Field(default_factory=list)

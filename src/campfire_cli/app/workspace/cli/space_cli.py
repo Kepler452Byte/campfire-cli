@@ -36,6 +36,16 @@ def check(
     emit(invoke(lambda: service(ctx).check(space_id)))
 
 
+@space_cli.command("format")
+def format_space(
+    ctx: typer.Context,
+    space_id: str = typer.Option(..., "--space", help="要格式化的 Space id"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """只规范化 Space 声明 Frontmatter，完整保留 Markdown 正文。"""
+    emit(invoke(lambda: service(ctx).format(space_id, confirm)))
+
+
 @space_cli.command("create")
 def create(
     ctx: typer.Context,

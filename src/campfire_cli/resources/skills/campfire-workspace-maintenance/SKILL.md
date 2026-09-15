@@ -26,6 +26,8 @@ campfire workspace rebuild --confirm
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
 2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。CLI 根据目标路径推导所属 Space 和最近父 Domain。Project 从 Manifest 绑定的稳定根 Domain id 与祖先拓扑推导，Domain 声明不保存 Project 字段。默认先预览，用户确认后追加 `--confirm`。
+
+声明 Frontmatter 顺序分别使用 `workspace space format --space <id>` 和 `workspace domain format --domain <id>`；两者默认预览，追加 `--confirm` 后只调整 Frontmatter，Markdown 正文逐字节保留。
 3. 创建正式文档、接管无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile，根据 type 推导文件名，并一次返回所有缺失字段。契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type 和文件名前缀。格式顺序单独使用 `document format`。
 4. 单篇文档改名或跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`；批量文档迁移使用 `workspace restructure`。不要让 Agent 拼目标目录，不要为单篇修改创建批次计划。
 5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
@@ -73,7 +75,8 @@ Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校�
 
 - 整个 Workspace 只有一个根 `_收件箱/`；语义无法唯一判断时进入待用户确认，不为追求检查通过而猜测。
 - `_空间.md` 声明 Space，`_领域.md` 声明可多级嵌套的 Domain；保留目录不是 Space 或 Domain。
-- `.campfire.yaml`、声明文件、MOC 自动区域、Base、关系页和 SQLite 可读但不可由 Agent 直接写入；必须使用对应 Campfire 语义命令，命令缺失时报告能力缺口。
+- `.campfire.yaml`、声明 Frontmatter、`AUTO-GENERATED` 标记区域、Base、关系页和 SQLite 可读但不可由 Agent 直接写入；必须使用对应 Campfire 语义命令。`_空间.md` 和 `_领域.md` 标记外的 Markdown 正文可由人或 Agent 自由编辑。
+- 自动生成内容必须位于成对、唯一且闭合的 `AUTO-GENERATED` 标记内；CLI 只替换标记内部，标记异常时停止，不猜测边界。
 - Project 单向绑定稳定根 Domain id；Domain 移动不改变绑定，子 Domain 通过祖先拓扑继承 Project。
 - 一篇文档只有一个主物理 Domain，可以出现在多个自动索引中。
 - MOC 自动区域、相关文档、反向链接、关系和统计由 CLI 生成，不手工维护。

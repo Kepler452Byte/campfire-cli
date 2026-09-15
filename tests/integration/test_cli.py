@@ -108,8 +108,10 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "rebuild", "-h"],
         ["workspace", "space", "-h"],
         ["workspace", "space", "adopt", "-h"],
+        ["workspace", "space", "format", "-h"],
         ["workspace", "domain", "-h"],
         ["workspace", "domain", "adopt", "-h"],
+        ["workspace", "domain", "format", "-h"],
         ["workspace", "domain", "rename", "-h"],
         ["workspace", "domain", "move", "-h"],
         ["workspace", "domain", "rekey", "-h"],
@@ -2018,6 +2020,56 @@ def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> Non
         issue["code"] == "frontmatter-field-missing" and issue["field"] == "description"
         for issue in payload["issues"]
     )
+
+
+def test_space_and_domain_format_preserve_human_and_generated_body(workspace: Path) -> None:
+    space_marker = workspace / "mynote/_空间.md"
+    space_body = (
+        "\n# 我的知识空间\n\n自由说明。\n\n"
+        "<!-- AUTO-GENERATED:SPACE-SUMMARY:START -->\n自动内容\n"
+        "<!-- AUTO-GENERATED:SPACE-SUMMARY:END -->\n"
+    )
+    space_marker.write_text(
+        "---\nstatus: active\nspace_type: knowledge\nname: 知识\nspace_id: knowledge\n---\n"
+        + space_body,
+        encoding="utf-8",
+    )
+    domain = workspace / "mynote/基础知识"
+    write_domain_marker(domain, "knowledge-basics", "基础知识", governance="knowledge-base")
+    domain_marker = domain / "_领域.md"
+    parsed_domain = domain_marker.read_text(encoding="utf-8")
+    domain_body = parsed_domain[parsed_domain.index("\n---\n", 4) + 5 :]
+    domain_marker.write_text(
+        "---\nstatus: active\nmoc: '[[MOC-基础知识]]'\ngovernance: knowledge-base\n"
+        "domain_type: project-domain\ndomain_id: knowledge-basics\nname: 基础知识\n---\n"
+        + domain_body,
+        encoding="utf-8",
+    )
+
+    space_preview = runner.invoke(
+        app, ["workspace", "space", "format", "--space", "knowledge"]
+    )
+    domain_preview = runner.invoke(
+        app, ["workspace", "domain", "format", "--domain", "knowledge-basics"]
+    )
+    assert domain_preview.exit_code == 0, repr(domain_preview.exception)
+    assert json.loads(space_preview.output)["status"] == "planned"
+    assert json.loads(domain_preview.output)["status"] == "planned"
+
+    runner.invoke(
+        app, ["workspace", "space", "format", "--space", "knowledge", "--confirm"]
+    )
+    runner.invoke(
+        app,
+        ["workspace", "domain", "format", "--domain", "knowledge-basics", "--confirm"],
+    )
+
+    formatted_space = space_marker.read_text(encoding="utf-8")
+    formatted_domain = domain_marker.read_text(encoding="utf-8")
+    assert formatted_space.endswith(space_body)
+    assert formatted_domain.endswith(domain_body)
+    assert formatted_space.index("name:") < formatted_space.index("space_id:")
+    assert formatted_domain.index("name:") < formatted_domain.index("domain_id:")
 
 
 def test_document_commands_delegate_workspace_markers(workspace: Path) -> None:

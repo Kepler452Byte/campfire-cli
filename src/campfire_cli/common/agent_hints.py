@@ -24,16 +24,18 @@ HINT_BODY = """## Campfire 文档治理
 5. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
    契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
    `document inspect` 后 apply，不从 `tree` 开始逐层探索。
-6. 文件工具不得编辑自动生成区域。CLI 写命令完成后只执行结果实际返回的
+6. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
+   `AUTO-GENERATED` 标记区域只能由 CLI 修改；标记外 Markdown 正文可以直接
+   使用文件工具编辑。CLI 写命令完成后只执行结果实际返回的
    `follow_up`；正文编辑会影响关系计算时执行一次局部 `maintenance sync`。
    没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
 7. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
    不为通过检查而猜测。
 
-`.campfire.yaml`、`_空间.md`、`_领域.md`、MOC 自动区域、Base、关系页和
-SQLite 是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；
-缺少对应命令时停止并报告能力缺口，不直接编辑文件或数据库。
+`.campfire.yaml`、声明 Frontmatter、自动生成区域、Base、关系页和 SQLite
+是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；缺少
+对应命令时停止并报告能力缺口，不直接编辑。声明文件标记外正文不受此限制。
 
 不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
 字段、枚举和顺序以 Campfire Profile 为唯一事实来源。

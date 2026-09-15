@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 
 from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
+    DeclarationFormatResult,
     Domain,
     DomainCheckResult,
     DomainCreateResult,
@@ -20,6 +21,7 @@ from campfire_cli.common.documents.domain_context import (
     DomainContextError,
     resolve_domain_context,
 )
+from campfire_cli.common.documents.frontmatter_format import format_text
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
 from campfire_cli.config.defaults import config_section
@@ -46,6 +48,36 @@ def parse_marker(path: Path) -> dict[str, str]:
         if match:
             values[match.group(1)] = match.group(2).strip().strip('"').strip("'")
     return values
+
+
+def _format_declaration(
+    workspace_root: Path,
+    lock_root: Path,
+    marker: Path,
+    field_order: list[str],
+    confirm: bool,
+) -> DeclarationFormatResult:
+    original = marker.read_text(encoding="utf-8")
+    formatted, errors = format_text(original, field_order)
+    relative = marker.relative_to(workspace_root).as_posix()
+    if errors:
+        return DeclarationFormatResult(
+            status="blocked",
+            path=relative,
+            issues=[{"code": code, "path": relative} for code in errors],
+        )
+    changed = formatted != original
+    if changed and confirm:
+        with workspace_write_lock(lock_root):
+            if marker.read_text(encoding="utf-8") != original:
+                raise ConfigurationError("声明文件在格式化期间发生变化，请重新执行")
+            atomic_write(marker, formatted)
+    return DeclarationFormatResult(
+        status="formatted" if changed and confirm else "planned" if changed else "current",
+        path=relative,
+        reordered=["frontmatter"] if changed else [],
+        write_performed=changed and confirm,
+    )
 
 
 class SpaceService:
@@ -102,6 +134,16 @@ class SpaceService:
             issues = [issue for issue in issues if issue.get("path", "").startswith(prefix)]
         return SpaceCheckResult(
             status="ok" if not issues else "issues-found", spaces=spaces, issues=issues
+        )
+
+    def format(self, space_id: str, confirm: bool = False) -> DeclarationFormatResult:
+        space = self.show(space_id)
+        return _format_declaration(
+            self.root,
+            self.lock_root,
+            self.root / space.path / SPACE_MARKER,
+            ["name", "space_id", "space_type", "status"],
+            confirm,
         )
 
     def create(
@@ -177,7 +219,8 @@ class SpaceService:
         return "".join(
             [
                 "---\n",
-                "# Managed by Campfire CLI; do not edit this declaration directly.\n",
+                "# Frontmatter managed by Campfire CLI; "
+                "edit Markdown outside generated regions freely.\n",
                 f"name: {json.dumps(space.name, ensure_ascii=False)}\n",
                 f"space_id: {space.id}\nspace_type: {space.type}\n",
                 f"status: {space.status}\n---\n\n",
@@ -341,6 +384,24 @@ class DomainService:
             ]
         )
 
+    def format(self, domain_id: str, confirm: bool = False) -> DeclarationFormatResult:
+        domain = self.show(domain_id)
+        return _format_declaration(
+            self.root,
+            self.lock_root,
+            self.root / domain.path / DOMAIN_MARKER,
+            [
+                "name",
+                "domain_id",
+                "domain_type",
+                "governance",
+                "moc",
+                "parent_domain",
+                "status",
+            ],
+            confirm,
+        )
+
     def show(self, domain_id: str) -> Domain:
         matches = [item for item in self.discover()[0] if item.id == domain_id]
         if len(matches) != 1:
@@ -462,7 +523,8 @@ class DomainService:
         return "".join(
             [
                 "---\n",
-                "# Managed by Campfire CLI; do not edit this declaration directly.\n",
+                "# Frontmatter managed by Campfire CLI; "
+                "edit Markdown outside generated regions freely.\n",
                 f"name: {json.dumps(domain.name, ensure_ascii=False)}\n",
                 f"domain_id: {domain.id}\ndomain_type: {domain.type}\n",
                 f"governance: {domain.governance}\n",

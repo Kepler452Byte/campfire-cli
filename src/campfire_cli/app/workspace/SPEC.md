@@ -16,7 +16,7 @@ Adoption、文档批量 Restructure 与 Domain Restructure 均使用共享 Chang
 
 Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space 并继承 governance。`_收件箱` 与 `治理视图` 是系统区域，不是 Space。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
 
-Space 与 Domain 声明文件只由本模块解释和校验；Document App 对其返回 `not-applicable`。`workspace space check --space <id>` 支持对单个 Space 做局部复检。
+Space 与 Domain 声明 Frontmatter 只由本模块解释、格式化和修改；Document App 对其返回 `not-applicable`。`workspace space/domain format` 只规范化 Frontmatter 并逐字节保留 Markdown 正文。声明文件中 `AUTO-GENERATED` 标记区域由 CLI 独占，标记外正文允许人和 Agent 编辑。`workspace space check --space <id>` 支持对单个 Space 做局部复检。
 
 Project 是 Workspace 连接的外部工作资源，记录稳定 id、显示名称、文档领域、本地代码路径、Git remote、默认分支和生命周期状态。Project 业务代码归属本模块，对外使用 `campfire workspace project` 子命令。提供本地 Git 路径时可自动发现 remote 和分支；动态 Git 状态不写入注册表。
 

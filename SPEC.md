@@ -102,6 +102,7 @@ Campfire 使用语义化版本：
 - 普通 rename 和 move 不得改变 `domain_id`；只有显式 `domain rekey` 可以修改稳定身份。
 - 修改领域名称不得修改 Project 名称；Project 展示名称只能由 `workspace project update --name` 显式修改。
 - `.campfire.yaml` 的 `projects[].document_domain_id` 是 Project 到根 Domain 绑定的唯一事实；Domain 声明不保存 Project 字段。
+- Space/Domain 声明 Frontmatter 和 `AUTO-GENERATED` 标记区域由 CLI 管理；标记外 Markdown 正文允许人和 Agent 直接编辑，formatter 必须完整保留。
 - 领域改名和移动不修改 Project 元数据；merge 或 rekey 改变稳定 Domain id 时必须在同一事务更新 Project 绑定、路径引用和子领域解析。
 - `rekey` 必须同步直接子领域的 `parent_domain`。
 - `move` 的目标必须使用 Space 或 Domain 稳定 id；`merge` 和 `delete` 不得退化为 Agent 手工移动、删除声明与清理索引。

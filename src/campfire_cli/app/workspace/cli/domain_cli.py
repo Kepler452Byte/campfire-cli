@@ -42,6 +42,16 @@ def check(ctx: typer.Context) -> None:
     emit(invoke(lambda: service(ctx).check()))
 
 
+@domain_cli.command("format")
+def format_domain(
+    ctx: typer.Context,
+    domain_id: str = typer.Option(..., "--domain", help="要格式化的 Domain id"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """只规范化 Domain 声明 Frontmatter，完整保留 Markdown 正文。"""
+    emit(invoke(lambda: service(ctx).format(domain_id, confirm)))
+
+
 @domain_cli.command("create")
 def create(
     ctx: typer.Context,

@@ -214,6 +214,8 @@ def replace_generated_region(original: str, generated: str) -> str:
         raise ValueError("MOC 自动生成标记必须且只能各出现一次")
     start = original.index(START_MARKER) + len(START_MARKER)
     end = original.index(END_MARKER)
+    if end < start:
+        raise ValueError("MOC 自动生成标记顺序无效")
     return original[:start] + "\n\n" + generated.rstrip() + "\n\n" + original[end:]
 
 

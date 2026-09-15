@@ -13,7 +13,6 @@ from campfire_cli.app.document.service.frontmatter_apply import (
 from campfire_cli.app.document.service.frontmatter_apply import (
     preflight as preflight_frontmatter,
 )
-from campfire_cli.app.document.service.frontmatter_formatter import format_text  # noqa: E402
 from campfire_cli.app.document.service.frontmatter_plan import (
     build_plan as build_frontmatter_plan,  # noqa: E402
 )
@@ -33,6 +32,7 @@ from campfire_cli.app.maintenance.service.archive_service import (
 from campfire_cli.app.maintenance.service.link_service import check_links
 from campfire_cli.app.maintenance.service.moc_service import generate_relations  # noqa: E402
 from campfire_cli.app.workspace.service.restructure_verifier import after, before  # noqa: E402
+from campfire_cli.common.documents.frontmatter_format import format_text  # noqa: E402
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem.locking import workspace_write_lock
 from campfire_cli.config.defaults import config_section

@@ -59,7 +59,7 @@ description: "在 Agent 进入需要 Workspace、Project、Domain 或 Profile �
 
 CLI 维护：稳定 `id`、`workspace_id`、显示 `name`、根 Domain 的稳定 `document_domain_id`、`git_remote_url`、本机 `local_path`、`default_branch` 和 `status`。Project 单向绑定根 Domain；Domain 声明不保存 Project 字段，子 Domain 归属由祖先拓扑推导。合法状态以 CLI 为准；本 Skill 不复制枚举。
 
-`.campfire.yaml` 和 Space/Domain 声明属于 CLI 管理资源。Agent 可以读取，但只能用 `workspace project/space/domain` 语义命令修改；缺少命令时停止并报告能力缺口，不直接编辑。
+`.campfire.yaml`、Space/Domain 声明 Frontmatter 和 `AUTO-GENERATED` 标记区域属于 CLI 管理资源。Agent 可以读取，但只能用对应语义命令修改；声明文件标记外 Markdown 正文可以直接编辑。缺少结构命令时停止并报告能力缺口，不直接修改受管部分。
 
 ## 输出
 

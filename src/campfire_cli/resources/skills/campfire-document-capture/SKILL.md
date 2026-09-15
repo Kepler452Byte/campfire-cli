@@ -50,7 +50,7 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 进入正式治理流程后，写入前依次确认：
 
 1. **Workspace**：运行 `campfire workspace resolve`；无法唯一解析时询问用户。
-2. **对象**：项目、知识主题或任务必须唯一明确。使用 `campfire workspace space list` 和 `campfire workspace domain list` 获取候选归属；用户使用简称且可能指向多个项目时，运行 `campfire workspace project list`，仍有歧义必须询问，不凭名称相似度猜测。
+2. **对象**：项目、知识主题或任务必须唯一明确。当前目录属于代码项目时用 `workspace project resolve --path <cwd>`；用户明确项目名时用 `workspace project list/show`。得到 Project 后用 `workspace domain list --project <id>` 获取根与子 Domain 候选。通用知识使用 `workspace space/domain list`。仍有歧义必须询问，不凭名称或目录相似度猜测。
 3. **资源**：列出形成可靠文档所需的对话、原始材料、现有文档、源码、配置、测试、日志或外部事实；能自行读取的先读取，只向用户询问真正缺失的资源。
 4. **现状**：写项目当前行为时，运行 `campfire workspace project show <id>` 获取文档领域和本地源码路径，读取项目 `AGENTS.md`、SPEC 或架构文档，并检查相关源码、配置和测试。无法访问源码时不得把讨论或计划写成当前实现。
 5. **目标文档**：搜索同主题文档，明确是创建、更新还是关联。需要判断某篇候选文档的显式关联和上下游时运行 `document inspect --path <path>`；它会自动对齐本地索引，不先跑 Maintenance。没有合适 Domain 时先提议创建；用户确认后用 `workspace domain create`，不在 Space 根直接落正式文档。可能重复、冲突、覆盖或合并时必须确认。
@@ -92,6 +92,18 @@ campfire --workspace personal maintenance sync --scope "mywork/【某项目】�
 规则：一次汇报合并多个提议，不逐条打断；用户拒绝的提议不重复追问，除非出现新证据；同一主题只维护一个跟踪文档，用更新代替重复创建；主动提议不等于写入授权，落盘仍走上方写入门禁。
 
 ## 路由
+
+只读取与当前意图匹配的一条黄金路径：
+
+| 内容 | 归属与参考 |
+| --- | --- |
+| 当前项目实现、方案、记录 | Project Domain；读取[项目内容沉淀](references/项目内容沉淀.md) |
+| 可跨项目复用的概念、方法、经验 | Knowledge Space；读取[通用知识沉淀](references/通用知识沉淀.md) |
+| 需要跟踪的问题或明确取舍 | Project issue/decision；读取[问题与决策沉淀](references/问题与决策沉淀.md) |
+| 有状态、负责人或完成条件的工作 | Project task/plan；读取[任务与计划沉淀](references/任务与计划沉淀.md) |
+| 已有权威文档需要补充或纠正 | 保持原归属；读取[已有文档更新](references/已有文档更新.md) |
+
+无法唯一分类或定位 Project/Domain 时询问用户或创建 Pending Decision，不同时加载多条参考。
 
 预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。创建文档、补齐无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，统一调用一次 `campfire document apply`；它会解析目标 Domain、继承 Project、从 type 推导文件名，并在完整 Profile 校验通过后原子写入。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type 与文件名前缀。
 

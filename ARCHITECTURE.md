@@ -190,6 +190,8 @@ Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器�
 
 可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、根 `document_domain_id`、Git remote、默认分支和状态，明确禁止 `local_path`。`projects[].document_domain_id` 是 Project–Domain 绑定的唯一事实；`_领域.md` 不保存 Project 字段。现有 `_空间.md` 与 `_领域.md` 分别承载 Space 和 Domain 自身事实。Decision 当前保持本地，不属于该 Manifest。
 
+Space/Domain 声明采用区域所有权：Frontmatter 由 Workspace App 管理，成对 `AUTO-GENERATED` 标记内由生成器管理，标记外 Markdown 正文由人和 Agent 自由维护。声明 formatter 只能重排 Frontmatter，必须逐字节保留正文；生成器遇到重复、嵌套或未闭合标记时停止，不猜测覆盖范围。
+
 新设备执行 `campfire setup --path <vault>`：读取 Manifest、注册本机路径、恢复 Project 逻辑元数据、同步类型/Profile/Skills/Bases 并执行健康检查。已注册 Workspace 只通过根级 `campfire --workspace <id> ...` 显式选择。无法自动确定的项目源码路径显示为 `unbound_projects`，再用 `campfire workspace project bind` 完成本机绑定。整个流程可重复执行。
 
 ### 领域结构重构
