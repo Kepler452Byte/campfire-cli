@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
+from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
@@ -13,6 +13,10 @@ from campfire_cli.app.document.service.document_rule_service import DocumentRule
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
+from campfire_cli.common.documents.domain_context import (
+    DomainContextError,
+    resolve_domain_context,
+)
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
@@ -41,8 +45,6 @@ class DocumentApplyService:
         exists = path.is_file()
         original = path.read_text(encoding="utf-8") if exists else ""
         parsed = parse_document(original)
-        if exists and not parsed.has_frontmatter:
-            raise GovernanceBlockedError("已有文档缺少 Frontmatter，不能安全 apply")
 
         current_type = parsed.frontmatter.get("type")
         document_type = request.document_type or (
@@ -52,7 +54,12 @@ class DocumentApplyService:
             raise ConfigurationError("创建文档时必须提供 --type")
         if document_type not in self._settings.document_types.get("types", {}):
             raise ConfigurationError(f"未知文档类型：{document_type}")
-        if exists and request.document_type and current_type != request.document_type:
+        if (
+            exists
+            and parsed.has_frontmatter
+            and request.document_type
+            and current_type != request.document_type
+        ):
             raise GovernanceBlockedError("不允许通过 document apply 改变已有文档的 type")
 
         expected_name = prefixed_name(path.name, document_type, self._settings.document_types)
@@ -63,7 +70,7 @@ class DocumentApplyService:
 
         today = date.today().isoformat()
         frontmatter = dict(parsed.frontmatter)
-        if not exists:
+        if not exists or not parsed.has_frontmatter:
             frontmatter.update(self._creation_defaults(path, document_type, today))
         for key in ("project", "domain"):
             if key in request.values and request.values[key] != frontmatter.get(key):
@@ -81,6 +88,7 @@ class DocumentApplyService:
             return self._result(
                 request,
                 exists,
+                parsed.has_frontmatter,
                 profile.name,
                 actual_hash,
                 "blocked",
@@ -95,7 +103,7 @@ class DocumentApplyService:
             )
 
         next_body = self._next_body(request, parsed.body, exists)
-        if exists:
+        if exists and parsed.has_frontmatter:
             rendered, render_errors = render_patch(
                 original,
                 {**request.values, "updated": today},
@@ -106,6 +114,7 @@ class DocumentApplyService:
                 return self._result(
                     request,
                     exists,
+                    parsed.has_frontmatter,
                     profile.name,
                     actual_hash,
                     "blocked",
@@ -132,6 +141,7 @@ class DocumentApplyService:
         result = self._result(
             request,
             exists,
+            parsed.has_frontmatter,
             profile.name,
             actual_hash,
             status,
@@ -167,22 +177,20 @@ class DocumentApplyService:
             "updated": today,
             "tags": [],
         }
-        marker_name = self._settings.governance.get("domain_marker", "_领域.md")
-        current = path.parent
-        while current == self._settings.vault_root or self._settings.vault_root in current.parents:
-            marker = current / marker_name
-            if marker.is_file():
-                domain = parse_document(marker.read_text(encoding="utf-8")).frontmatter
-                if domain.get("domain_id"):
-                    values["domain"] = domain["domain_id"]
-                project = domain.get("project_id") or domain.get("project")
-                if project:
-                    values["project"] = project
-                return values
-            if current == self._settings.vault_root:
-                break
-            current = current.parent
-        raise ConfigurationError("正式文档必须位于已声明的 Domain 内")
+        try:
+            context = resolve_domain_context(
+                self._settings.vault_root,
+                path,
+                self._settings.governance.get("domain_marker", "_领域.md"),
+            )
+        except DomainContextError as exc:
+            raise ConfigurationError(
+                f"无法解析目标 Domain 上下文：{exc.code}: {exc.detail}"
+            ) from exc
+        values["domain"] = context.domain_id
+        if context.project_id:
+            values["project"] = context.project_id
+        return values
 
     @staticmethod
     def _next_body(request: DocumentApplyRequest, current: str, exists: bool) -> str:
@@ -208,6 +216,7 @@ class DocumentApplyService:
         self,
         request: DocumentApplyRequest,
         exists: bool,
+        had_frontmatter: bool,
         profile: str,
         expected_hash: str,
         status: str,
@@ -215,6 +224,10 @@ class DocumentApplyService:
         missing_fields: list[str] | None = None,
     ) -> DocumentApplyResult:
         scope = Path(request.path).parent.as_posix()
+        derived_fields = {"name", "type", "status", "lifecycle", "domain", "project", "related"}
+        needs_sync = not exists or not had_frontmatter
+        needs_sync = needs_sync or bool(set(request.values) & derived_fields)
+        needs_sync = needs_sync or request.body is not None
         return DocumentApplyResult(
             status=status,
             workspace_id=self._settings.workspace_id,
@@ -224,5 +237,9 @@ class DocumentApplyService:
             expected_hash=expected_hash,
             issues=issues,
             missing_fields=missing_fields or [],
-            follow_up=maintenance_follow_up(self._settings.workspace_id, [scope]),
+            follow_up=(
+                maintenance_sync_follow_up(self._settings.workspace_id, [scope])
+                if not issues and needs_sync
+                else []
+            ),
         )

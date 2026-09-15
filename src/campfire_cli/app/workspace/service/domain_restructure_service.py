@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
-from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
+from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.workspace.repository.manifest_repository import (
     WorkspaceManifestRepository,
 )
@@ -358,5 +358,8 @@ class DomainRestructureService:
             operations=operations,
             affected_projects=[project.id for project in projects],
             write_performed=written,
-            follow_up=maintenance_follow_up(self._settings.workspace_id, [path]),
+            follow_up=maintenance_sync_follow_up(
+                self._settings.workspace_id,
+                [domain.path.relative_to(self._settings.vault_root).as_posix(), path],
+            ),
         )

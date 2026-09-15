@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
+from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.schema import DocumentMoveResult
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.frontmatter_formatter import render_patch
@@ -17,6 +16,11 @@ from campfire_cli.app.document.service.type_apply import (
     rewrite_wikilinks,
 )
 from campfire_cli.common.documents.document_types import prefixed_name
+from campfire_cli.common.documents.domain_context import (
+    DomainContext,
+    DomainContextError,
+    resolve_domain_context,
+)
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
@@ -24,13 +28,6 @@ from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
 STRUCTURAL_FIELDS = {"domain", "project", "updated"}
-
-
-@dataclass(frozen=True)
-class DomainContext:
-    root: Path
-    domain_id: str
-    project_id: str | None
 
 
 class DocumentMoveService:
@@ -69,15 +66,19 @@ class DocumentMoveService:
         actual_hash = file_sha256(source)
         original = source.read_text(encoding="utf-8")
         parsed = parse_document(original)
-        source_domain = self._domain_context(source)
-        target_domain = self._domain_context(target)
+        source_domain, source_domain_issue = self._domain_context(source)
+        target_domain, target_domain_issue = self._domain_context(target)
         issues: list[dict[str, Any]] = []
         if target.exists():
             issues.append({"code": "target-exists", "path": target_name})
         if source_domain is None:
-            issues.append({"code": "source-domain-missing", "path": source_name})
+            issues.append(
+                {"code": source_domain_issue or "source-domain-missing", "path": source_name}
+            )
         if target_domain is None:
-            issues.append({"code": "target-domain-missing", "path": target_name})
+            issues.append(
+                {"code": target_domain_issue or "target-domain-missing", "path": target_name}
+            )
         elif self._is_reserved_target(target_domain, target):
             issues.append({"code": "target-directory-reserved", "path": target_name})
         if not parsed.has_frontmatter:
@@ -211,7 +212,7 @@ class DocumentMoveService:
             frontmatter_changes=frontmatter_changes,
             issues=issues,
             missing_fields=missing_fields,
-            follow_up=maintenance_follow_up(
+            follow_up=maintenance_sync_follow_up(
                 self._settings.workspace_id,
                 (
                     context.root.relative_to(self._settings.vault_root).as_posix()
@@ -272,26 +273,18 @@ class DocumentMoveService:
                 changed.append(reference.relative_to(self._settings.vault_root).as_posix())
         return [FileWrite(path, text) for path, text in writes.items()], changed, expected
 
-    def _domain_context(self, path: Path) -> DomainContext | None:
-        marker_name = self._settings.governance.get("domain_marker", "_领域.md")
-        current = path.parent
-        while current == self._settings.vault_root or self._settings.vault_root in current.parents:
-            marker = current / marker_name
-            if marker.is_file():
-                values = parse_document(marker.read_text(encoding="utf-8")).frontmatter
-                domain_id = values.get("domain_id")
-                if not isinstance(domain_id, str) or not domain_id:
-                    return None
-                project = values.get("project_id") or values.get("project")
-                return DomainContext(
-                    root=current,
-                    domain_id=domain_id,
-                    project_id=project if isinstance(project, str) and project else None,
-                )
-            if current == self._settings.vault_root:
-                break
-            current = current.parent
-        return None
+    def _domain_context(self, path: Path) -> tuple[DomainContext | None, str | None]:
+        try:
+            return (
+                resolve_domain_context(
+                    self._settings.vault_root,
+                    path,
+                    self._settings.governance.get("domain_marker", "_领域.md"),
+                ),
+                None,
+            )
+        except DomainContextError as exc:
+            return None, exc.code
 
     def _is_reserved_target(self, context: DomainContext, target: Path) -> bool:
         relative = target.parent.relative_to(context.root)

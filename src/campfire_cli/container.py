@@ -18,7 +18,6 @@ from campfire_cli.app.maintenance.repository.maintenance_repository import (
 from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
 from campfire_cli.app.skill.repository.skill_repository import SkillRepository
 from campfire_cli.app.skill.service.skill_service import SkillService
-from campfire_cli.app.workspace.repository.adoption_repository import SqliteAdoptionRepository
 from campfire_cli.app.workspace.repository.restructure_repository import (
     SqliteRestructureRepository,
 )
@@ -223,9 +222,7 @@ class AppContainer:
         upgrade_database(database_path)
         engine = create_sqlite_engine(database_path)
         session = open_session(engine)
-        maintenance_repository = SqliteMaintenanceRepository(
-            session, resolution.workspace_id, settings.state_root
-        )
+        maintenance_repository = SqliteMaintenanceRepository(session, resolution.workspace_id)
         maintenance = MaintenanceService(settings, maintenance_repository)
         restructure_repository = SqliteRestructureRepository(
             session, settings.state_root, resolution.workspace_id
@@ -236,7 +233,6 @@ class AppContainer:
         )
         adoption = AdoptionService(
             settings,
-            SqliteAdoptionRepository(session, resolution.workspace_id),
             SqliteWorkspaceRepository(governance_root),
         )
         skill = SkillService(settings, SkillRepository())

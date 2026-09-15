@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -13,21 +14,32 @@ def exempt_document(path: Path, config: dict[str, Any]) -> bool:
     return path.name in set(config.get("exempt_basenames", []))
 
 
-def iter_documents(root: Path, config: dict[str, Any]) -> list[Path]:
+def iter_documents(
+    root: Path,
+    config: dict[str, Any],
+    roots: Iterable[Path] | None = None,
+) -> list[Path]:
     root = root.resolve()
     ignored = set(config.get("ignored_directories", []))
     documents: set[Path] = set()
     space_marker = config.get("space_marker", "_空间.md")
-    spaces = [
-        marker.parent.relative_to(root).as_posix() for marker in root.glob(f"*/{space_marker}")
-    ]
-    if spaces:
-        inboxes = [value for value in config.get("scope_roots", []) if value.startswith("_收件箱/")]
-        scope_roots = [*spaces, *inboxes]
+    if roots is not None:
+        scope_paths = [path.resolve() for path in roots]
     else:
-        scope_roots = config.get("scope_roots", [])
-    for raw_root in scope_roots:
-        scope = safe_path(root, raw_root)
+        spaces = [
+            marker.parent.relative_to(root).as_posix() for marker in root.glob(f"*/{space_marker}")
+        ]
+        if spaces:
+            inboxes = [
+                value for value in config.get("scope_roots", []) if value.startswith("_收件箱/")
+            ]
+            scope_roots = [*spaces, *inboxes]
+        else:
+            scope_roots = config.get("scope_roots", [])
+        scope_paths = [safe_path(root, raw_root) for raw_root in scope_roots]
+    for scope in scope_paths:
+        if scope != root and root not in scope.parents:
+            continue
         if not scope.exists():
             continue
         for path in scope.rglob("*.md"):

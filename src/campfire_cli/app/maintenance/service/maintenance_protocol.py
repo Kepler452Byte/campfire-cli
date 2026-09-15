@@ -6,7 +6,6 @@ from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
     DomainState,
     Issue,
-    MaintenancePlan,
     MaintenanceRunRecord,
     SpaceState,
 )
@@ -21,5 +20,9 @@ class MaintenanceRepositoryProtocol(Protocol):
         domains: list[DomainState],
     ) -> None: ...
     def save_run(self, run: MaintenanceRunRecord) -> None: ...
-    def save_plan(self, plan: MaintenancePlan) -> None: ...
-    def load_plan(self, plan_id: str) -> MaintenancePlan: ...
+    def replace_scope_index(
+        self,
+        scope: str,
+        documents: list[DocumentState],
+        domains: list[DomainState],
+    ) -> None: ...

@@ -2,7 +2,7 @@
 
 本模块承载面向用户和 Agent 的文档业务能力，包括单篇检查与格式化、类型契约、Profile 契约、命名和 Frontmatter 治理。
 
-Document App 负责文档自身及其规则；Maintenance App 负责跨文档统一计划、执行、验收和派生内容同步；Workspace Restructure 用例负责存量结构重构。纯解析、序列化和路径安全等无业务状态的原子能力保留在 `common/documents/`。
+Document App 负责单篇文档及其规则；Maintenance App 负责检查、派生内容同步和归档；Workspace Restructure 负责存量批量结构重构。纯解析、序列化和路径安全等无业务状态的原子能力保留在 `common/documents/`。
 
 ## 当前能力
 
@@ -38,13 +38,13 @@ document/
 - `frontmatter`：检查、规划、执行和格式化文档属性。
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。
 - `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile 和具体问题。
-- `apply`：根据目标路径和类型解析 Profile，不存在时生成文档，已存在时仅应用显式补丁；先完整渲染并校验，追加 `--confirm` 后原子写入。
+- `apply`：根据目标路径和类型解析 Profile，不存在时生成文档，已有 Frontmatter 时只应用显式补丁，无 Frontmatter 时保留正文并补齐完整契约；先完整渲染并校验，追加 `--confirm` 后原子写入。
 - `move`：在任意已声明 Domain 之间移动或改名一篇文档，按目标 Profile 对齐可确定的 `domain`/`project` 归属，并更新可确定解析的 Wiki、Markdown 和路径引用。目标 Profile 缺少业务字段时返回 `needs-input`，不猜测。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。
 
-Document Service 可以被 Maintenance 和 Workspace Restructure 编排，但不得反向依赖它们。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
+Document Service 可以被 Workspace Restructure 编排，但不得反向依赖 Maintenance。批量计划文件、运行记录、MOC、Base、归档和重构批次不属于 Document App。
 
-`apply` 与 `move` 只保证目标文档操作自身有效，不触发 Maintenance。Skill SOP 在写入后显式编排 scoped `maintenance sync` 和 `maintenance check`。所有写入先生成完整 ChangeSet，再经共享 Executor 在乐观锁内提交；多文件操作失败时恢复提交前内容。
+`apply` 与 `move` 只保证目标文档操作自身有效，不触发 Maintenance。结果只在派生状态可能变化时返回一个最小 scope 的 `maintenance sync`；调用方不得固定追加 check。所有写入先生成完整 ChangeSet，再经共享 Executor 在乐观锁内提交；多文件操作失败时恢复提交前内容。
 
 包内 `config.yml` 的默认 Profile 与用户级 `~/.campfire/config.yml` 覆盖共同构成当前治理契约。
 

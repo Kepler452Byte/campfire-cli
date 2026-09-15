@@ -54,6 +54,82 @@ def test_apply_creates_profile_valid_project_document(workspace: Path) -> None:
     assert service(workspace).check(relative)["status"] == "ok"
 
 
+def test_apply_adopts_existing_body_without_frontmatter_in_one_write(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    relative = "mywork/【Example】文档中心/计划-既有正文.md"
+    target = domain / "计划-既有正文.md"
+    body = "# 既有正文\n\n不能丢失。\n"
+    target.write_text(body, encoding="utf-8")
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path=relative,
+            document_type="plan",
+            values={"description": "接管既有正文", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "applied"
+    assert result.write_performed is True
+    assert result.follow_up[0].command == "maintenance sync"
+    parsed = parse_document(target.read_text(encoding="utf-8"))
+    assert parsed.body == body
+    assert parsed.frontmatter["project"] == "example"
+
+
+def test_apply_skips_maintenance_when_only_non_derived_metadata_changes(workspace: Path) -> None:
+    project_domain(workspace)
+    relative = "mywork/【Example】文档中心/计划-快速更新.md"
+    document = service(workspace)
+    document.apply(
+        DocumentApplyRequest(
+            path=relative,
+            document_type="plan",
+            values={"description": "初始描述", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    result = document.apply(
+        DocumentApplyRequest(
+            path=relative,
+            values={"description": "仅更新描述"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "applied"
+    assert result.follow_up == []
+
+
+def test_apply_inherits_project_through_nested_domain(workspace: Path) -> None:
+    parent = project_domain(workspace)
+    child = parent / "发布"
+    child.mkdir()
+    (child / "_领域.md").write_text(
+        "---\nname: 发布\ndomain_id: project-example-release\n"
+        "domain_type: project-domain\ngovernance: project-docs\n"
+        "moc: MOC-发布\nparent_domain: project-example\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    relative = "mywork/【Example】文档中心/发布/计划-版本.md"
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path=relative,
+            document_type="plan",
+            values={"description": "版本计划", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "applied"
+    parsed = parse_document((workspace / relative).read_text(encoding="utf-8"))
+    assert parsed.frontmatter["domain"] == "project-example-release"
+    assert parsed.frontmatter["project"] == "example"
+
+
 @pytest.mark.parametrize(
     ("document_type", "prefix", "values"),
     [
@@ -400,12 +476,7 @@ def test_move_crosses_domains_and_updates_structural_frontmatter(workspace: Path
     moved = parse_document((workspace / target).read_text(encoding="utf-8"))
     assert moved.frontmatter["domain"] == "other"
     assert "project" not in moved.frontmatter
-    assert [item.scope for item in result.follow_up] == [
-        "mywork/【Example】文档中心",
-        "mywork/另一个领域",
-        "mywork/【Example】文档中心",
-        "mywork/另一个领域",
-    ]
+    assert [item.scope for item in result.follow_up] == ["mywork"]
 
 
 def test_move_cross_domain_returns_all_missing_target_profile_fields(workspace: Path) -> None:

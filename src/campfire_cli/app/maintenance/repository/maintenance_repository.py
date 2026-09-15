@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from sqlalchemy import delete
+from sqlalchemy import delete, or_
 from sqlalchemy.orm import Session
 
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
     DomainState,
     Issue,
-    MaintenancePlan,
     MaintenanceRunRecord,
     SpaceState,
 )
@@ -20,15 +17,12 @@ from campfire_cli.common.database.models import (
     WorkspaceDomain,
     WorkspaceSpace,
 )
-from campfire_cli.common.exceptions import GovernanceBlockedError
-from campfire_cli.common.filesystem import atomic_write
 
 
 class SqliteMaintenanceRepository:
-    def __init__(self, session: Session, workspace_id: str, state_root: Path) -> None:
+    def __init__(self, session: Session, workspace_id: str) -> None:
         self._session = session
         self._workspace_id = workspace_id
-        self._state_root = state_root
 
     def replace_current_state(
         self,
@@ -100,16 +94,42 @@ class SqliteMaintenanceRepository:
         )
         self._session.commit()
 
-    def save_plan(self, plan: MaintenancePlan) -> None:
-        atomic_write(self._plan_path(plan.plan_id), plan.model_dump_json(indent=2) + "\n")
-
-    def load_plan(self, plan_id: str) -> MaintenancePlan:
-        path = self._plan_path(plan_id)
-        if not path.is_file():
-            raise GovernanceBlockedError(f"Maintenance Plan 不存在：{plan_id}")
-        return MaintenancePlan.model_validate_json(path.read_text(encoding="utf-8"))
-
-    def _plan_path(self, plan_id: str) -> Path:
-        if not plan_id or Path(plan_id).name != plan_id:
-            raise GovernanceBlockedError(f"Maintenance Plan id 非法：{plan_id}")
-        return self._state_root / "maintenance" / "plans" / plan_id / "plan.json"
+    def replace_scope_index(
+        self,
+        scope: str,
+        documents: list[DocumentState],
+        domains: list[DomainState],
+    ) -> None:
+        normalized = scope.strip("/")
+        for model in (Document, WorkspaceDomain):
+            selection = model.workspace_id == self._workspace_id
+            if normalized not in {"", "."}:
+                selection = selection & or_(
+                    model.path == normalized,
+                    model.path.startswith(f"{normalized}/", autoescape=True),
+                )
+            self._session.execute(delete(model).where(selection))
+        self._session.add_all(
+            [
+                WorkspaceDomain(workspace_id=self._workspace_id, **item.model_dump())
+                for item in domains
+            ]
+        )
+        self._session.add_all(
+            [
+                Document(
+                    workspace_id=self._workspace_id,
+                    path=item.path,
+                    content_hash=item.content_hash,
+                    document_type=item.document_type,
+                    domain_id=item.domain_id,
+                    status=item.status,
+                )
+                for item in documents
+            ]
+        )
+        try:
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise

@@ -15,6 +15,10 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     SpaceCreateResult,
     SpaceListResult,
 )
+from campfire_cli.common.documents.domain_context import (
+    DomainContextError,
+    resolve_domain_context,
+)
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
 from campfire_cli.config.defaults import config_section
@@ -248,6 +252,21 @@ class DomainService:
                         status=meta.get("status", "active"),
                     )
                 )
+        resolved_domains: list[Domain] = []
+        for item in domains:
+            try:
+                context = resolve_domain_context(self.root, item.path / "__context__.md")
+                resolved_domains.append(item.model_copy(update={"project_id": context.project_id}))
+            except DomainContextError as exc:
+                issues.append(
+                    {
+                        "code": exc.code,
+                        "path": item.path.relative_to(self.root).as_posix(),
+                        "detail": exc.detail,
+                    }
+                )
+                resolved_domains.append(item)
+        domains = resolved_domains
         by_id = {item.id: item for item in domains if item.id}
         for item in domains:
             if item.parent_domain:
@@ -330,34 +349,6 @@ class DomainService:
             parent_domain=parent_domain,
             project_id=project_id,
             confirm=confirm,
-            adopt=False,
-        )
-
-    def adopt(
-        self,
-        *,
-        domain_id: str,
-        name: str,
-        path: str,
-        space_id: str,
-        domain_type: str,
-        governance: str,
-        parent_domain: str | None = None,
-        project_id: str | None = None,
-        confirm: bool = False,
-    ) -> DomainCreateResult:
-        """Add a Domain declaration to an existing directory without moving its content."""
-        return self._define(
-            domain_id=domain_id,
-            name=name,
-            path=path,
-            space_id=space_id,
-            domain_type=domain_type,
-            governance=governance,
-            parent_domain=parent_domain,
-            project_id=project_id,
-            confirm=confirm,
-            adopt=True,
         )
 
     def _define(
@@ -372,7 +363,6 @@ class DomainService:
         parent_domain: str | None,
         project_id: str | None,
         confirm: bool,
-        adopt: bool,
     ) -> DomainCreateResult:
         if not ID_RE.fullmatch(domain_id):
             raise ConfigurationError("Domain id 只能使用小写字母、数字和连字符")
@@ -388,12 +378,7 @@ class DomainService:
         existing = self.discover()[0]
         if any(item.id == domain_id or item.path == target for item in existing):
             raise ConfigurationError("Domain id 或已声明路径存在")
-        if adopt:
-            if not target.is_dir():
-                raise ConfigurationError("adopt 只接入已存在的目录")
-            if (target / DOMAIN_MARKER).exists():
-                raise ConfigurationError("目录已经包含领域声明")
-        elif target.exists():
+        if target.exists():
             raise ConfigurationError("Domain 目标路径已存在；请使用 domain adopt 接入")
         if parent_domain:
             parent = next((item for item in existing if item.id == parent_domain), None)
@@ -405,6 +390,8 @@ class DomainService:
                 raise ConfigurationError("父 Domain 不存在、跨 Space 或与目标路径不匹配")
             if governance != parent.governance:
                 raise ConfigurationError("子 Domain 必须继承父 Domain 的 governance")
+            if project_id and parent.project_id and project_id != parent.project_id:
+                raise ConfigurationError("显式 Project 与父 Domain 继承的 Project 冲突")
             project_id = parent.project_id or project_id
         if governance == "project-docs" and not project_id:
             raise ConfigurationError("project-docs Domain 必须绑定 Project id")
@@ -421,7 +408,7 @@ class DomainService:
             project_id=project_id,
         )
         relative_path = target.relative_to(self.root).as_posix()
-        operations = [] if adopt else [{"action": "create-directory", "path": relative_path}]
+        operations = [{"action": "create-directory", "path": relative_path}]
         operations.extend(
             [
                 {"action": "create", "path": f"{relative_path}/{DOMAIN_MARKER}"},
@@ -430,17 +417,14 @@ class DomainService:
         )
         if confirm:
             with workspace_write_lock(self.lock_root):
-                marker = target / DOMAIN_MARKER
                 moc_path = target / f"{moc}.md"
-                if adopt and (not target.is_dir() or marker.exists() or moc_path.exists()):
-                    raise ConfigurationError("接入目录在确认后发生变化，请重新预览")
-                if not adopt and target.exists():
+                if target.exists():
                     raise ConfigurationError("Domain 路径在确认后发生变化，请重新预览")
-                (target / "_总览").mkdir(parents=True, exist_ok=adopt)
+                (target / "_总览").mkdir(parents=True)
                 atomic_write(target / DOMAIN_MARKER, self.render_marker(domain))
                 atomic_write(moc_path, self.render_moc(domain))
         return DomainCreateResult(
-            status=("adopted" if adopt else "created") if confirm else "planned",
+            status="created" if confirm else "planned",
             domain=self._external(domain),
             operations=operations,
             write_performed=confirm,

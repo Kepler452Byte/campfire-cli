@@ -19,10 +19,20 @@ from campfire_cli.app.maintenance.service import moc_service as governance_sync
 from campfire_cli.app.maintenance.service.maintenance_protocol import (
     MaintenanceRepositoryProtocol,
 )
-from campfire_cli.app.maintenance.service.plan_service import MaintenancePlanService
 from campfire_cli.app.workspace.service.structure_service import DomainService
+from campfire_cli.common.documents.domain_context import (
+    DomainContextError,
+    resolve_domain_context,
+)
 from campfire_cli.common.documents.markdown import parse_document
-from campfire_cli.common.filesystem import atomic_write, safe_path
+from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.filesystem import (
+    FileChangeExecutor,
+    FileChangeSet,
+    FileWrite,
+    atomic_write,
+    safe_path,
+)
 from campfire_cli.common.governance import (
     capture_snapshot,
     enrich_issue,
@@ -42,7 +52,7 @@ class MaintenanceService:
         self._settings = settings
         self._repository = repository
         self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
-        self._plans = MaintenancePlanService(settings, repository)
+        self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def check(
         self,
@@ -60,19 +70,7 @@ class MaintenanceService:
         issues: list[Issue] = []
         paths = self._iter_documents()
         for path in paths:
-            relative = path.relative_to(self._settings.vault_root).as_posix()
-            text = path.read_text(encoding="utf-8")
-            parsed = parse_document(text)
-            document_type = parsed.frontmatter.get("type")
-            documents.append(
-                DocumentState(
-                    path=relative,
-                    content_hash=file_sha256(path),
-                    document_type=document_type if isinstance(document_type, str) else None,
-                    domain_id=self._nearest_domain(path),
-                    status=parsed.frontmatter.get("status"),
-                )
-            )
+            documents.append(self._document_state(path))
             issues.extend(
                 Issue.model_validate(enrich_issue(item))
                 for item in self._rules.check_document(self._settings.vault_root, path)
@@ -147,24 +145,6 @@ class MaintenanceService:
         atomic_write(report_root / "current.json", render_json_report(payload))
         atomic_write(report_root / "current.md", render_maintenance_report(payload))
 
-    def plan(
-        self,
-        plan_id: str,
-        *,
-        scope: str | None = None,
-        spec_path: Path | None = None,
-    ) -> MaintenanceResult:
-        return self._plans.plan(plan_id, scope=scope, spec_path=spec_path)
-
-    def show_plan(self, plan_id: str) -> MaintenanceResult:
-        return self._plans.show(plan_id)
-
-    def apply(self, plan_id: str, confirm: bool) -> MaintenanceResult:
-        return self._plans.apply(plan_id, confirm)
-
-    def verify(self, plan_id: str) -> MaintenanceResult:
-        return self._plans.verify(plan_id)
-
     def sync(self, dry_run: bool = False, scope: str | None = None) -> MaintenanceResult:
         domains, issues = DomainService(
             self._settings.vault_root, self._settings.state_root
@@ -176,9 +156,7 @@ class MaintenanceService:
             domains = [
                 domain
                 for domain in domains
-                if domain.path == scope_path
-                or scope_path in domain.path.parents
-                or domain.path in scope_path.parents
+                if domain.path == scope_path or scope_path in domain.path.parents
             ]
             issues = [issue for issue in issues if self._path_matches_scope(issue["path"], scope)]
             if not domains:
@@ -192,11 +170,11 @@ class MaintenanceService:
                 blocked_phase="preflight",
                 blocked_scope=scope or "workspace",
             )
-        scoped_documents = [
-            path
-            for path in self._iter_documents()
-            if any(domain.path == path.parent or domain.path in path.parents for domain in domains)
-        ]
+        scoped_documents = iter_documents(
+            self._settings.vault_root,
+            self._settings.document_types,
+            (domain.path for domain in domains),
+        )
         snapshot = capture_snapshot(self._settings.vault_root, scoped_documents)
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
         profile = self._settings.document_types.get("profiles", {}).get("project-docs", [])
@@ -293,22 +271,43 @@ class MaintenanceService:
         ]
         for path, expected in generated_snapshot.items():
             snapshot.setdefault(path, expected)
-        if not dry_run and changes:
-            with optimistic_write_lock(
-                self._settings.state_root, snapshot, self._settings.vault_root
-            ) as changed:
-                if changed:
-                    return self._concurrent_result(changed)
-                for path, content in changes:
-                    atomic_write(path, content)
+        indexed_document_count = 0
+        if not dry_run:
+            expected = {
+                self._settings.vault_root / path: digest for path, digest in snapshot.items()
+            }
+            change_set = FileChangeSet(
+                writes=tuple(FileWrite(path, content) for path, content in changes),
+                label="maintenance sync",
+                expected=expected,
+            )
+            try:
+                with self._executor.transaction(change_set):
+                    indexed_documents = [
+                        self._document_state(path)
+                        for path in iter_documents(
+                            self._settings.vault_root,
+                            self._settings.document_types,
+                            (domain.path for domain in domains),
+                        )
+                    ]
+                    domain_states = self._topology_states([], domains)[1]
+                    self._repository.replace_scope_index(
+                        scope or ".", indexed_documents, domain_states
+                    )
+                    indexed_document_count = len(indexed_documents)
+            except GovernanceBlockedError as exc:
+                return self._sync_blocked("concurrent-change", str(exc), scope)
         return MaintenanceResult(
             status="dry-run" if dry_run else "synced",
             document_count=note_count,
             issue_count=0,
+            indexed_document_count=indexed_document_count,
             generated_file_count=len(changes),
             write_performed=bool(changes and not dry_run),
             operations=operations,
             scope=scope,
+            domain_count=len(domains),
         )
 
     def _sync_blocked(self, code: str, path: str, scope: str | None) -> MaintenanceResult:
@@ -382,17 +381,21 @@ class MaintenanceService:
         return iter_documents(self._settings.vault_root, self._settings.document_types)
 
     def _nearest_domain(self, path: Path) -> str | None:
-        current = path.parent
-        while current == self._settings.vault_root or self._settings.vault_root in current.parents:
-            marker = current / "_领域.md"
-            if marker.is_file():
-                parsed = parse_document(marker.read_text(encoding="utf-8"))
-                value = parsed.frontmatter.get("domain_id")
-                return value if isinstance(value, str) else None
-            if current == self._settings.vault_root:
-                break
-            current = current.parent
-        return None
+        try:
+            return resolve_domain_context(self._settings.vault_root, path).domain_id
+        except DomainContextError:
+            return None
+
+    def _document_state(self, path: Path) -> DocumentState:
+        parsed = parse_document(path.read_text(encoding="utf-8"))
+        document_type = parsed.frontmatter.get("type")
+        return DocumentState(
+            path=path.relative_to(self._settings.vault_root).as_posix(),
+            content_hash=file_sha256(path),
+            document_type=document_type if isinstance(document_type, str) else None,
+            domain_id=self._nearest_domain(path),
+            status=parsed.frontmatter.get("status"),
+        )
 
     def _topology_states(self, spaces, domains) -> tuple[list[SpaceState], list[DomainState]]:
         space_states: list[SpaceState] = []

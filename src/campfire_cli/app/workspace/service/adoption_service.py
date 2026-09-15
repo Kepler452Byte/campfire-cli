@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
 from pathlib import Path
 
-from campfire_cli.app.base.schema.operation_schema import maintenance_follow_up
+from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.workspace.repository.manifest_repository import (
     WorkspaceManifestRepository,
 )
 from campfire_cli.app.workspace.schema.adoption_schema import (
-    AdoptionBatchState,
     AdoptionInventoryItem,
-    AdoptionPlan,
     AdoptionResult,
 )
 from campfire_cli.app.workspace.schema.workspace_schema import Domain, ManifestProject
-from campfire_cli.app.workspace.service.adoption_protocol import AdoptionRepositoryProtocol
 from campfire_cli.app.workspace.service.structure_service import (
     DOMAIN_MARKER,
     ID_RE,
@@ -37,85 +35,23 @@ IGNORED_NAMES = {".git", ".obsidian", ".DS_Store", "__pycache__"}
 
 
 class AdoptionService:
-    """Safely stage and adopt one existing folder as a managed Domain."""
+    """Preview or atomically adopt one existing folder as a Domain."""
 
     def __init__(
         self,
         settings: WorkspaceSettings,
-        repository: AdoptionRepositoryProtocol,
         workspace_repository: WorkspaceRepositoryProtocol,
         manifest_repository: WorkspaceManifestRepository | None = None,
     ) -> None:
         self._settings = settings
-        self._repository = repository
         self._workspaces = workspace_repository
         self._manifests = manifest_repository or WorkspaceManifestRepository()
         self._domains = DomainService(settings.vault_root, settings.state_root)
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
-    def inventory(self, batch: str, source: Path, confirm: bool = False) -> AdoptionResult:
-        root = source.expanduser().resolve()
-        if not root.is_dir():
-            raise ConfigurationError(f"待接管目录不存在：{root}")
-        if root == self._settings.vault_root:
-            raise ConfigurationError("不能把整个 Workspace 作为一个接管批次")
-        source_kind = "internal" if self._settings.vault_root in root.parents else "external"
-        inventory, issues = self._scan(root)
-        staging = (
-            self._settings.vault_root / "_收件箱" / "待接管" / batch
-            if source_kind == "external"
-            else None
-        )
-        state = AdoptionBatchState(
-            batch=batch,
-            source_path=str(root),
-            source_kind=source_kind,
-            staging_path=(
-                staging.relative_to(self._settings.vault_root).as_posix() if staging else None
-            ),
-            status="blocked" if issues else "inventoried",
-            inventory=inventory,
-        )
-        operations = []
-        copied = 0
-        if source_kind == "external":
-            operations = [
-                {
-                    "action": "copy",
-                    "source": str(root / item.path),
-                    "path": f"{state.staging_path}/{item.path}",
-                }
-                for item in inventory
-            ]
-            if not issues and confirm:
-                copy_issues = self._copy_to_staging(root, staging, inventory)
-                issues.extend(copy_issues)
-                if not issues:
-                    copied = len(inventory)
-                    state.status = "staged"
-        self._repository.save(state)
-        return AdoptionResult(
-            status=(
-                "blocked"
-                if issues
-                else "staged"
-                if source_kind == "external" and confirm
-                else "inventoried"
-            ),
-            batch=batch,
-            source=str(root),
-            source_kind=source_kind,
-            staging_path=state.staging_path,
-            item_count=len(inventory),
-            copied_count=copied,
-            operations=operations,
-            issues=issues,
-            write_performed=bool(copied),
-        )
-
-    def plan(
+    def adopt(
         self,
-        batch: str,
+        source: Path,
         *,
         target_path: str,
         domain_id: str,
@@ -125,24 +61,136 @@ class AdoptionService:
         governance: str,
         parent_domain: str | None = None,
         project_id: str | None = None,
+        confirm: bool = False,
     ) -> AdoptionResult:
-        state = self._repository.load(batch)
-        if state.source_kind == "external" and state.status != "staged":
-            return self._blocked(state, "adoption-source-not-staged", state.source_path)
+        source = source.expanduser().resolve()
+        if not source.is_dir():
+            raise ConfigurationError(f"待接管目录不存在：{source}")
+        if source == self._settings.vault_root:
+            raise ConfigurationError("不能把整个 Workspace 接管为一个 Domain")
+        source_kind = "internal" if self._settings.vault_root in source.parents else "external"
+        inventory, issues = self._scan(source)
+        target = self._validate_target(target_path, space_id)
+        domain = self._domain(
+            target,
+            domain_id=domain_id,
+            name=name,
+            space_id=space_id,
+            domain_type=domain_type,
+            governance=governance,
+            parent_domain=parent_domain,
+            project_id=project_id,
+        )
+        follow_up_scopes = [target_path]
+        if parent_domain:
+            follow_up_scopes.append(self._domains.show(parent_domain).path)
+        if target != source and target.exists():
+            issues.append({"code": "target-exists", "path": target_path})
+        if (source / DOMAIN_MARKER).exists():
+            issues.append({"code": "adoption-declaration-exists", "path": str(source)})
+        moc = target / f"{domain.moc}.md"
+        if target == source and moc.exists():
+            issues.append({"code": "adoption-declaration-exists", "path": target_path})
+        operations = self._operations(source, source_kind, target, target_path, domain, inventory)
+        if issues or not confirm:
+            return self._result(
+                source,
+                source_kind,
+                target_path,
+                inventory,
+                operations,
+                "blocked" if issues else "planned",
+                issues,
+                follow_up_scopes=follow_up_scopes,
+            )
+
+        staging: Path | None = None
+        active_source = source
+        if source_kind == "external":
+            staging = self._stage_external(source, inventory)
+            active_source = staging
+            issues = self._verify_files(source, inventory)
+            issues.extend(self._verify_files(staging, inventory))
+            if issues:
+                shutil.rmtree(staging, ignore_errors=True)
+                return self._result(
+                    source,
+                    source_kind,
+                    target_path,
+                    inventory,
+                    operations,
+                    "blocked",
+                    issues,
+                    follow_up_scopes=follow_up_scopes,
+                )
+
+        original_project = None
+        updated_project = None
+        writes = [
+            FileWrite(target / DOMAIN_MARKER, DomainService.render_marker(domain)),
+            FileWrite(target / f"{domain.moc}.md", DomainService.render_moc(domain)),
+        ]
+        expected = {active_source / item.path: item.sha256 for item in inventory}
+        expected[target / DOMAIN_MARKER] = None
+        expected[target / f"{domain.moc}.md"] = None
+        if project_id:
+            original_project = self._workspaces.get_project(project_id)
+            if original_project:
+                updated_project = original_project.model_copy(
+                    update={"document_domain": target_path}
+                )
+                manifest_path, manifest_content = self._manifest_update(updated_project)
+                writes.append(FileWrite(manifest_path, manifest_content))
+                expected[manifest_path] = file_sha256(manifest_path)
+        moves = (PathMove(active_source, target),) if active_source != target else ()
+        try:
+            with self._executor.transaction(
+                FileChangeSet(
+                    writes=tuple(writes),
+                    moves=moves,
+                    label="workspace domain adopt",
+                    expected=expected,
+                )
+            ):
+                if updated_project:
+                    self._workspaces.save_project(updated_project)
+                if self._verify_files(target, inventory):
+                    raise ConfigurationError("接管后文件验证失败")
+        except Exception:
+            if original_project:
+                self._workspaces.save_project(original_project)
+            raise
+        finally:
+            if staging and staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+        return self._result(
+            source,
+            source_kind,
+            target_path,
+            inventory,
+            operations,
+            "adopted",
+            [],
+            write_performed=True,
+            follow_up_scopes=follow_up_scopes,
+        )
+
+    def _domain(
+        self,
+        target: Path,
+        *,
+        domain_id: str,
+        name: str,
+        space_id: str,
+        domain_type: str,
+        governance: str,
+        parent_domain: str | None,
+        project_id: str | None,
+    ) -> Domain:
         if not ID_RE.fullmatch(domain_id):
             raise ConfigurationError("Domain id 只能使用小写字母、数字和连字符")
-        if any(item.id == domain_id for item in self._domains.discover()[0]):
-            raise ConfigurationError(f"Domain id 已存在：{domain_id}")
-        target = self._validate_target(target_path, space_id)
-        source = self._active_source(state)
-        if target != source and target.exists():
-            raise ConfigurationError(f"目标路径已存在：{target_path}")
-        if (source / DOMAIN_MARKER).exists():
-            raise ConfigurationError("来源目录已经是受管 Domain")
-        if governance == "project-docs" and not project_id:
-            raise ConfigurationError("project-docs Domain 必须绑定 Project id")
-        if project_id and self._workspaces.get_project(project_id) is None:
-            raise ConfigurationError(f"Project 未注册：{project_id}")
+        if any(item.id == domain_id or item.path == target for item in self._domains.discover()[0]):
+            raise ConfigurationError("Domain id 或已声明路径存在")
         if parent_domain:
             parent = self._domains.show(parent_domain)
             parent_path = self._settings.vault_root / parent.path
@@ -150,123 +198,26 @@ class AdoptionService:
                 raise ConfigurationError("目标路径必须位于指定父 Domain 下")
             if parent.governance != governance:
                 raise ConfigurationError("子 Domain 必须继承父 Domain governance")
-        plan = AdoptionPlan(
-            batch=batch,
-            target_path=target.relative_to(self._settings.vault_root).as_posix(),
-            domain_id=domain_id,
+            if project_id and parent.project_id and project_id != parent.project_id:
+                raise ConfigurationError("显式 Project 与父 Domain 继承的 Project 冲突")
+            project_id = project_id or parent.project_id
+        if governance == "project-docs" and not project_id:
+            raise ConfigurationError("project-docs Domain 必须绑定或继承 Project id")
+        if project_id and self._workspaces.get_project(project_id) is None:
+            raise ConfigurationError(f"Project 未注册：{project_id}")
+        if not name.strip():
+            raise ConfigurationError("Domain name 不能为空")
+        return Domain(
+            id=domain_id,
             name=name.strip(),
+            path=target,
             space_id=space_id,
-            domain_type=domain_type,
+            type=domain_type,
             governance=governance,
+            moc=f"_总览/MOC-{name.strip()}总览",
             parent_domain=parent_domain,
             project_id=project_id,
         )
-        if not plan.name:
-            raise ConfigurationError("Domain name 不能为空")
-        state.plan = plan
-        state.status = "planned"
-        self._repository.save(state)
-        operations = []
-        if target != source:
-            operations.append(
-                {
-                    "action": "move-directory",
-                    "source": self._display_path(source),
-                    "path": plan.target_path,
-                }
-            )
-        operations.extend(
-            [
-                {"action": "create-domain-marker", "path": f"{plan.target_path}/_领域.md"},
-                {
-                    "action": "create-moc",
-                    "path": f"{plan.target_path}/_总览/MOC-{plan.name}总览.md",
-                },
-            ]
-        )
-        return self._result(state, "planned", operations=operations)
-
-    def apply(self, batch: str, confirm: bool = False) -> AdoptionResult:
-        state = self._repository.load(batch)
-        if state.plan is None:
-            return self._blocked(state, "adoption-plan-missing", batch)
-        source = self._active_source(state)
-        target = safe_path(self._settings.vault_root, state.plan.target_path)
-        issues = self._verify_files(source, state.inventory)
-        if target != source and target.exists():
-            issues.append({"code": "target-exists", "path": state.plan.target_path})
-        moc = target / "_总览" / f"MOC-{state.plan.name}总览.md"
-        if target == source and ((target / DOMAIN_MARKER).exists() or moc.exists()):
-            issues.append({"code": "adoption-declaration-exists", "path": state.plan.target_path})
-        if issues or not confirm:
-            result = self._result(state, "blocked" if issues else "ready")
-            result.issues = issues
-            return result
-        domain = Domain(
-            id=state.plan.domain_id,
-            name=state.plan.name,
-            path=target,
-            space_id=state.plan.space_id,
-            type=state.plan.domain_type,
-            governance=state.plan.governance,
-            moc=f"_总览/MOC-{state.plan.name}总览",
-            parent_domain=state.plan.parent_domain,
-            project_id=state.plan.project_id,
-        )
-        writes = [
-            FileWrite(target / DOMAIN_MARKER, DomainService.render_marker(domain)),
-            FileWrite(target / f"{domain.moc}.md", DomainService.render_moc(domain)),
-        ]
-        expected = {source / item.path: item.sha256 for item in state.inventory}
-        expected[target / DOMAIN_MARKER] = None
-        expected[target / f"{domain.moc}.md"] = None
-        moves = (PathMove(source, target),) if target != source else ()
-        original_project = None
-        updated_project = None
-        if state.plan.project_id:
-            original_project = self._workspaces.get_project(state.plan.project_id)
-            if original_project:
-                updated_project = original_project.model_copy(
-                    update={"document_domain": state.plan.target_path}
-                )
-                manifest_path, manifest_content = self._manifest_update(updated_project)
-                writes.append(FileWrite(manifest_path, manifest_content))
-                expected[manifest_path] = file_sha256(manifest_path)
-        original_state = state.model_copy(deep=True)
-        state.status = "applied"
-        try:
-            with self._executor.transaction(
-                FileChangeSet(
-                    writes=tuple(writes),
-                    moves=moves,
-                    label="workspace adoption",
-                    expected=expected,
-                )
-            ):
-                if updated_project:
-                    self._workspaces.save_project(updated_project)
-                self._repository.save(state)
-        except Exception:
-            if original_project:
-                self._workspaces.save_project(original_project)
-            self._repository.save(original_state)
-            raise
-        result = self._result(state, "applied")
-        result.write_performed = True
-        return result
-
-    def verify(self, batch: str) -> AdoptionResult:
-        state = self._repository.load(batch)
-        if state.plan is None:
-            return self._blocked(state, "adoption-plan-missing", batch)
-        target = safe_path(self._settings.vault_root, state.plan.target_path)
-        issues = self._verify_files(target, state.inventory)
-        if not (target / DOMAIN_MARKER).is_file():
-            issues.append({"code": "domain-marker-missing", "path": state.plan.target_path})
-        status = "ok" if not issues else "needs-review"
-        result = self._result(state, status)
-        result.issues = issues
-        return result
 
     def _scan(self, root: Path) -> tuple[list[AdoptionInventoryItem], list[dict[str, str]]]:
         items: list[AdoptionInventoryItem] = []
@@ -287,29 +238,25 @@ class AdoptionService:
                 )
         return items, issues
 
-    def _copy_to_staging(
-        self, source: Path, staging: Path, items: list[AdoptionInventoryItem]
-    ) -> list[dict[str, str]]:
-        issues: list[dict[str, str]] = []
-        for item in items:
-            target = staging / item.path
-            if target.exists() and (not target.is_file() or file_sha256(target) != item.sha256):
-                issues.append({"code": "adoption-staging-conflict", "path": item.path})
-        if issues:
-            return issues
-        for item in items:
-            target = staging / item.path
-            if target.is_file():
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source / item.path, target)
-        return []
+    def _stage_external(self, source: Path, inventory: list[AdoptionInventoryItem]) -> Path:
+        staging_root = self._settings.vault_root / "_收件箱" / "待接管"
+        staging_root.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".adopt-", dir=staging_root))
+        try:
+            for item in inventory:
+                target = staging / item.path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source / item.path, target)
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+        return staging
 
     def _validate_target(self, value: str, space_id: str) -> Path:
         target = safe_path(self._settings.vault_root, value)
         space = self._domains.spaces.show(space_id)
         space_root = self._settings.vault_root / space.path
-        if space_root not in target.parents:
+        if target == space_root or space_root not in target.parents:
             raise ConfigurationError("目标路径必须位于指定 Space 下")
         if any(
             part in reserved_directories() or part.startswith(".")
@@ -317,13 +264,6 @@ class AdoptionService:
         ):
             raise ConfigurationError("目标路径不能使用保留目录")
         return target
-
-    def _active_source(self, state: AdoptionBatchState) -> Path:
-        if state.source_kind == "external":
-            if not state.staging_path:
-                raise ConfigurationError("外部接管批次缺少暂存路径")
-            return safe_path(self._settings.vault_root, state.staging_path)
-        return Path(state.source_path).resolve()
 
     @staticmethod
     def _verify_files(root: Path, inventory: list[AdoptionInventoryItem]) -> list[dict[str, str]]:
@@ -340,9 +280,9 @@ class AdoptionService:
         manifest = self._manifests.load(self._settings.vault_root)
         if manifest is None:
             raise ConfigurationError("Workspace 缺少 .campfire.yaml")
-        projects = self._workspaces.list_projects(self._settings.workspace_id)
         projects = [
-            updated_project if project.id == updated_project.id else project for project in projects
+            updated_project if project.id == updated_project.id else project
+            for project in self._workspaces.list_projects(self._settings.workspace_id)
         ]
         manifest.projects = [
             ManifestProject.model_validate(
@@ -352,35 +292,64 @@ class AdoptionService:
         ]
         return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
+    @staticmethod
+    def _operations(
+        source: Path,
+        source_kind: str,
+        target: Path,
+        target_path: str,
+        domain: Domain,
+        inventory: list[AdoptionInventoryItem],
+    ) -> list[dict[str, str]]:
+        if source_kind == "external":
+            action = "copy-file"
+        elif source == target:
+            action = "preserve-file"
+        else:
+            action = "move-file"
+        operations = [
+            {
+                "action": action,
+                "source": str(source / item.path),
+                "path": f"{target_path}/{item.path}",
+            }
+            for item in inventory
+        ]
+        operations.extend(
+            [
+                {"action": "create-domain-marker", "path": f"{target_path}/{DOMAIN_MARKER}"},
+                {"action": "create-moc", "path": f"{target_path}/{domain.moc}.md"},
+            ]
+        )
+        return operations
+
     def _result(
         self,
-        state: AdoptionBatchState,
+        source: Path,
+        source_kind: str,
+        target_path: str,
+        inventory: list[AdoptionInventoryItem],
+        operations: list[dict[str, str]],
         status: str,
+        issues: list[dict[str, str]],
         *,
-        operations: list[dict[str, str]] | None = None,
+        write_performed: bool = False,
+        follow_up_scopes: list[str] | None = None,
     ) -> AdoptionResult:
         return AdoptionResult(
             status=status,
-            batch=state.batch,
-            source=state.source_path,
-            source_kind=state.source_kind,
-            staging_path=state.staging_path,
-            target_path=state.plan.target_path if state.plan else None,
-            item_count=len(state.inventory),
-            operations=operations or [],
+            source=str(source),
+            source_kind=source_kind,
+            target_path=target_path,
+            item_count=len(inventory),
+            operations=operations,
+            issues=issues,
             follow_up=(
-                maintenance_follow_up(self._settings.workspace_id, [state.plan.target_path])
-                if state.plan
+                maintenance_sync_follow_up(
+                    self._settings.workspace_id, follow_up_scopes or [target_path]
+                )
+                if not issues
                 else []
             ),
+            write_performed=write_performed,
         )
-
-    def _blocked(self, state: AdoptionBatchState, code: str, path: str) -> AdoptionResult:
-        result = self._result(state, "blocked")
-        result.issues = [{"code": code, "path": path}]
-        return result
-
-    def _display_path(self, path: Path) -> str:
-        if self._settings.vault_root in path.parents:
-            return path.relative_to(self._settings.vault_root).as_posix()
-        return str(path)

@@ -56,6 +56,7 @@ class MaintenanceResult(BaseModel):
     total_issue_count: int = 0
     issues: list[Issue] = Field(default_factory=list)
     changed_document_count: int = 0
+    indexed_document_count: int = 0
     generated_file_count: int = 0
     write_performed: bool = False
     blocked_phase: str | None = None
@@ -67,38 +68,6 @@ class MaintenanceResult(BaseModel):
     workspace_status: str | None = None
     space_count: int = 0
     domain_count: int = 0
-
-
-class MaintenanceIntentItem(BaseModel):
-    path: str
-    frontmatter: dict[str, Any] = Field(default_factory=dict)
-    filename: str | None = None
-    format_frontmatter: bool = True
-    reason: str
-    approved: bool = False
-
-
-class MaintenanceIntentSpec(BaseModel):
-    schema_version: int = 1
-    operations: list[MaintenanceIntentItem]
-
-
-class MaintenancePlanItem(BaseModel):
-    source: str
-    target: str
-    source_sha256: str
-    frontmatter: dict[str, Any] = Field(default_factory=dict)
-    format_frontmatter: bool = False
-    reason: str
-    approved: bool = False
-
-
-class MaintenancePlan(BaseModel):
-    schema_version: int = 1
-    plan_id: str
-    scope: str | None = None
-    config_hash: str
-    items: list[MaintenancePlanItem] = Field(default_factory=list)
 
 
 class MaintenanceRunRecord(BaseModel):
