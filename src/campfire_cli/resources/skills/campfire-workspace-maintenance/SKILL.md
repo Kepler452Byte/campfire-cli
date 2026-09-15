@@ -5,7 +5,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 
 # Campfire Workspace Maintenance
 
-`.campfire.yaml`、`_空间.md`、`_领域.md` 和内容文档是跨设备 SSOT；SQLite 中的 Workspace 拓扑与文档数据只是本机可重建索引。首次接入使用 `campfire setup --workspace <vault>`，它会自动扫描并建立索引，不要求用户单独初始化数据库。
+`.campfire.yaml`、`_空间.md`、`_领域.md` 和内容文档是跨设备 SSOT；SQLite 中的 Workspace 拓扑与文档数据只是本机可重建索引。首次接入使用 `campfire setup --path <vault>`，它会自动扫描并建立索引，不要求用户单独初始化数据库。Workspace 已注册后，显式选择只使用根级 `campfire --workspace <id> ...`；在该 Workspace 内运行时可省略。
 
 日常运行 `campfire maintenance check` 时会同步刷新 Space、Domain 和 Document 索引。仅在 SQLite 被删除、怀疑索引漂移或 CLI 升级修复时使用低频恢复入口：
 
@@ -23,10 +23,10 @@ campfire workspace rebuild --confirm
 ## 工作流
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
-2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。默认先预览，用户确认后追加 `--confirm`。顶级 Space、根 Domain 和有歧义的父子关系必须由用户确认。
+2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。CLI 根据目标路径推导所属 Space 和最近父 Domain，嵌套 Domain 继承 governance/Project；只有根 Domain 才显式提供 governance/Project。默认先预览，用户确认后追加 `--confirm`。
 3. 创建正式文档、接管无 Frontmatter 的既有正文或修改 Frontmatter，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile 并返回所有缺失字段；Agent 补齐后对同一命令追加 `--confirm`。正文小改可直接 edit；格式顺序单独使用 `document format`。
-4. 单篇文档改名或跨 Domain 移动使用 `document move`；批量文档迁移使用 `workspace restructure`。不要为单篇修改创建批次计划，也不要用批量重构代替原子命令。
-5. 每个写命令完成后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
+4. 单篇文档改名或跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`；批量文档迁移使用 `workspace restructure`。不要让 Agent 拼目标目录，不要为单篇修改创建批次计划。
+5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
 6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页与本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
 7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，调用 `campfire decision create`；获得回答后调用 `decision answer`，答案被原任务消费后调用 `decision close`。
 
@@ -52,7 +52,11 @@ campfire workspace rebuild --confirm
    +-- 需要新 Space 或 Domain
    |      -> space/domain create
    |
-   +-- 需要批量迁移文档、拆分或合并领域
+   +-- 已声明 Domain 合并或删除逻辑空领域
+   |      -> campfire-workspace-restructure
+   |      -> domain merge/delete 预览 -> 同命令 --confirm
+   |
+   +-- 需要批量迁移文档或拆分领域
    |      -> campfire-workspace-restructure
    |
    `-- 归属或语义不能唯一确定

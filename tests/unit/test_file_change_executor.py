@@ -95,3 +95,34 @@ def test_change_set_transaction_restores_move_when_coordinated_step_fails(
     assert original.read_text(encoding="utf-8") == "before\n"
     assert not target.exists()
     assert not (vault / "nested").exists()
+
+
+def test_change_set_removes_empty_directories_and_restores_them_on_failure(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "vault"
+    state = tmp_path / "state"
+    source = vault / "old"
+    nested = source / "generated"
+    nested.mkdir(parents=True)
+    marker = source / "_domain.md"
+    generated = nested / "moc.md"
+    marker.write_text("marker\n", encoding="utf-8")
+    generated.write_text("generated\n", encoding="utf-8")
+    executor = FileChangeExecutor(vault, state)
+
+    with (
+        pytest.raises(RuntimeError, match="database failed"),
+        executor.transaction(
+            FileChangeSet(
+                deletes=(marker, generated),
+                remove_empty_directories=(nested, source),
+                expected={marker: file_sha256(marker), generated: file_sha256(generated)},
+            )
+        ),
+    ):
+        assert not source.exists()
+        raise RuntimeError("database failed")
+
+    assert marker.read_text(encoding="utf-8") == "marker\n"
+    assert generated.read_text(encoding="utf-8") == "generated\n"

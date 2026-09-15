@@ -200,6 +200,14 @@ class DocumentMoveService:
                     frontmatter_changes[field] = after
 
         status = "needs-input" if missing_fields else "blocked" if issues else "ready"
+        follow_up = maintenance_sync_follow_up(
+            self._settings.workspace_id,
+            (
+                context.root.relative_to(self._settings.vault_root).as_posix()
+                for context in (source_domain, target_domain)
+                if context is not None
+            ),
+        )
         result = DocumentMoveResult(
             status=status,
             workspace_id=self._settings.workspace_id,
@@ -212,14 +220,6 @@ class DocumentMoveService:
             frontmatter_changes=frontmatter_changes,
             issues=issues,
             missing_fields=missing_fields,
-            follow_up=maintenance_sync_follow_up(
-                self._settings.workspace_id,
-                (
-                    context.root.relative_to(self._settings.vault_root).as_posix()
-                    for context in (source_domain, target_domain)
-                    if context is not None
-                ),
-            ),
         )
         if issues or not confirm:
             return result
@@ -240,6 +240,7 @@ class DocumentMoveService:
                 "status": "moved",
                 "write_performed": True,
                 "updated_references": updated_references,
+                "follow_up": follow_up,
             }
         )
 

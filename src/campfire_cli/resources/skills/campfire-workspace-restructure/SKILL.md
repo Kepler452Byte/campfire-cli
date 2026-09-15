@@ -1,6 +1,6 @@
 ---
 name: campfire-workspace-restructure
-description: "按审批计划重构 Campfire Workspace 的已有物理结构；适用于批量跨领域迁移、批量改名、领域拆分或合并和引用更新，不用于单篇文档移动、日常检查、格式化或 MOC 同步。"
+description: "用领域原子命令或审批批次重构 Campfire Workspace；适用于 Domain 移动、合并、空删除、rekey，以及批量文档迁移、领域拆分和引用更新，不用于单篇文档移动或日常维护。"
 ---
 
 # Campfire Workspace Restructure
@@ -19,7 +19,9 @@ description: "按审批计划重构 Campfire Workspace 的已有物理结构；�
 ├── 一批内容文档   → inventory / plan / apply / verify
 └── 已声明 Domain
     ├── 修改人类名称     → domain rename
-    ├── 修改物理位置     → domain move
+    ├── 移入目标领域/空间 → domain move
+    ├── 并入另一领域     → domain merge
+    ├── 删除逻辑空领域   → domain delete
     └── 修改稳定机器身份 → domain rekey（高风险）
 ```
 
@@ -27,15 +29,16 @@ description: "按审批计划重构 Campfire Workspace 的已有物理结构；�
 
 ```bash
 campfire workspace domain rename --domain <id> --name <name>
-campfire workspace domain rename --domain <id> --name <name> --rename-directory --project-name <name> --confirm
-campfire workspace domain move --domain <id> --target-path <path> --parent-domain <id> --confirm
+campfire workspace domain move --domain <id> --target <space-or-domain-id>
+campfire workspace domain merge --source <id> --target <id>
+campfire workspace domain delete --domain <id>
 campfire workspace domain rekey --domain <id> --new-id <id> --confirm
 ```
 
-`rename` 默认只修改领域显示名称；`--rename-directory` 或 `--target-path` 才修改目录，`--project-name` 才修改关联 Project 展示名称。普通 rename/move 必须保持 `domain_id`；只有用户明确要求改变稳定身份时使用 `rekey`。
+先运行不带 `--confirm` 的同一命令审查计划；用户已授权且没有 issues 时原样追加 `--confirm`。预览或阻塞结果的 `follow_up` 必须为空；只在确认命令实际写入成功后执行其返回的一个后续。`rename` 只修改领域显示名称，不隐式修改目录或 Project；`move` 只接收目标 Space/Domain 的稳定 ID，由 CLI 推导路径与父子关系。`merge` 一次完成内容迁移、直接子领域改挂和源领域移除；`delete` 只接受没有内容、附件、子领域、Project 绑定或人工声明正文的逻辑空领域。普通操作保持 `domain_id`；只有用户明确要求改变稳定身份时使用 `rekey`。
 
 1. 使用 `campfire workspace restructure inventory --scope <path> --batch <id>` 冻结明确范围。
-2. 使用 `workspace restructure plan --batch <id>` 生成推断计划。工具不能表达的移动或 Frontmatter 修改写入 YAML/JSON 意图规格，再运行 `plan --spec <file>`。
+2. 使用 `workspace restructure plan --batch <id>` 生成推断计划。只有 Domain 原子命令无法表达的批量文档映射、领域拆分或 Frontmatter Patch 才写 YAML/JSON 意图规格；使用规格前读取[批量重构规格](references/restructure-spec.md)。
 3. 逐项审查 source、target、Frontmatter Patch、理由和审批状态。删除、合并、根领域拆分、冲突权威判定和无法逆推的语义必须由用户确认。
 4. 先运行不带 `--confirm` 的 `workspace restructure apply --batch <id>` 做执行前预检；计划已经明确审批且没有阻塞问题时才追加 `--confirm`。
 5. 执行 `workspace restructure verify --batch <id>`，再只执行命令实际返回的 `follow_up`，不自行追加重复预览或检查。
@@ -48,6 +51,7 @@ campfire workspace domain rekey --domain <id> --new-id <id> --confirm
 - 写入返回 `concurrent-change`、`source-hash-changed` 或 `restructure-config-changed` 时停止，重新 inventory 和 plan。
 - 一篇文档只有一个主目标位置；跨领域关系使用链接和自动索引表达。
 - 领域路径变化必须联动 Project `document_domain`、`.campfire.yaml`、路径引用和子领域解析；不得手工分别维护。
+- 不手工删除 `_领域.md`、MOC 或领域目录；合并使用 `domain merge`，删除使用 `domain delete`。
 - `domain_id` 是稳定身份；`rekey` 必须更新直接子领域的 `parent_domain`，且必须显式确认。
 - 目标冲突、来源缺失、链接歧义或语义不明确时保持未执行并请求确认。
 - 报告移动、改名、Frontmatter 变化、引用更新、验证结果和剩余问题。

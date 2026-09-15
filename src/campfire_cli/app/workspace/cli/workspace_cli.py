@@ -25,6 +25,14 @@ def service() -> WorkspaceService:
     return WorkspaceService(root, SqliteWorkspaceRepository(root))
 
 
+def selector(ctx: typer.Context) -> str | None:
+    return ctx.find_root().params.get("workspace")
+
+
+def resolution(ctx: typer.Context):
+    return service().resolve(selector(ctx), safe_cwd())
+
+
 def emit(result: BaseModel) -> None:
     typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 
@@ -65,9 +73,9 @@ def show(workspace_id: str) -> None:
 
 
 @workspace_cli.command("resolve")
-def resolve(selector: str | None = typer.Option(None, "--workspace")) -> None:
+def resolve(ctx: typer.Context) -> None:
     """按显式选择、当前目录或默认值解析 Workspace。"""
-    emit(invoke(lambda: service().resolve(selector, safe_cwd())))
+    emit(invoke(lambda: resolution(ctx)))
 
 
 @workspace_cli.command("set-default")
@@ -78,7 +86,7 @@ def set_default(workspace_id: str) -> None:
 
 @workspace_cli.command("rebuild")
 def rebuild(
-    workspace: str | None = typer.Option(None, "--workspace"),
+    ctx: typer.Context,
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """从 Manifest 和 Markdown SSOT 重建本机派生索引。"""
@@ -97,7 +105,7 @@ def rebuild(
         return
     from campfire_cli.container import AppContainer
 
-    emit(invoke(lambda: AppContainer.build(workspace).maintenance.check(summary=True)))
+    emit(invoke(lambda: AppContainer.build(selector(ctx)).maintenance.check(summary=True)))
 
 
 @workspace_cli.command("export")

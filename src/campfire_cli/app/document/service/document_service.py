@@ -18,6 +18,7 @@ from campfire_cli.app.document.service.kanban_service import (
     renderability_result,
 )
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.common.documents.domain_context import DomainContextError, resolve_domain_by_id
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
@@ -137,13 +138,23 @@ class DocumentService:
     def move(
         self,
         source: str,
-        target: str,
+        target_domain: str,
         *,
+        name: str | None = None,
         values: dict[str, Any] | None = None,
         unset_fields: tuple[str, ...] = (),
         expected_hash: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
+        source_path = safe_path(self._settings.vault_root, source)
+        target_name = name or source_path.name
+        if Path(target_name).name != target_name or not target_name.endswith(".md"):
+            raise ConfigurationError("document move 的 --name 必须是 Markdown 文件名")
+        try:
+            domain = resolve_domain_by_id(self._settings.vault_root, target_domain)
+        except DomainContextError as exc:
+            raise ConfigurationError(f"目标 Domain 不存在或不唯一：{exc.detail}") from exc
+        target = (domain.root / target_name).relative_to(self._settings.vault_root).as_posix()
         return self._movement.move(
             source,
             target,

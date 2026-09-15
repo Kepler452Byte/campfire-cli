@@ -97,7 +97,7 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 | --- | --- | --- |
 | 语义原子性 | 一条命令只表达一个可以用一句话说清的用户意图 | `document move` 表达“在已声明 Domain 之间正确移动一篇文档” |
 | 一致性原子性 | 为保持该意图不变量而必须一起变更的事实，属于同一个变更集；整体成功或恢复到执行前 | 移动文档时同步修复可确定解析的引用 |
-| 可组合原子性 | 不相关的派生治理不隐式执行；命令用结构化 `follow_up` 声明必要步骤，由 Skill 决定组合顺序 | `document apply` 只在必要时返回一个 scoped `maintenance sync` |
+| 可组合原子性 | 不相关的派生治理不隐式执行；只有实际写入成功的结果用结构化 `follow_up` 声明必要步骤，由 Skill 决定组合顺序 | `document apply` 预览时 `follow_up` 为空，写入后只在必要时返回一个 scoped `maintenance sync` |
 
 命令副作用按下列边界分类：
 
@@ -124,6 +124,7 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 5. **人类与 Agent 共用一个契约**：命令和结果只有一套语义。JSON 状态、issues、missing fields 与 follow-up 供 Agent 稳定消费，`tree` 和分层 `-h` 供人类与 Agent 渐进发现，不维护第二套参数目录。
 6. **语义与机制分层**：人类决定高风险取舍，Agent 理解正文和业务语义，Skill 规定加载时机、事实门禁与 SOP，CLI 只执行可确定验证的治理机制。歧义进入 Decision，不为“自动化成功”而猜测。
 7. **聚合入口是少数例外**：`setup` 和 `upgrade` 可以编排多个服务，因为它们表达完整安装生命周期；日常内容治理保持原子能力，避免重新出现 `maintenance run` 一类不可审查的聚合入口。
+8. **参数最小充分、黄金路径唯一**：调用方只提交 CLI 无法可靠推导的事实。已受管的 Workspace、Space、Domain 和 Project 优先使用稳定 id，路径只用于外部输入、未接管来源、显式物理位置或尚无稳定 id 的文档；同一事实不得同时要求 id、完整路径和父级关系。一个常规意图只保留一个公共入口，不用互斥模式参数、兼容别名或要求 Agent 手工拼装底层步骤来表达同一行为。
 
 横切关注点与业务 SOP 不使用同一种复用手段。哈希复核、写锁、原子替换和失败恢复由显式 ChangeSet Executor 复用；写命令返回的 `follow_up` 由 Skill 消费。不为了复用 Maintenance 而引入 AOP 切面、命令总线、全局钩子或隐式中间件。
 
@@ -163,7 +164,7 @@ Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器�
 
 可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、文档领域、Git remote、默认分支和状态，明确禁止 `local_path`。现有 `_空间.md` 与 `_领域.md` 继续分别承载 Space 和 Domain 事实，避免在 Manifest 重复维护。Decision 当前保持本地，不属于该 Manifest。
 
-新设备执行 `campfire setup --workspace <vault>`：读取 Manifest、注册本机路径、恢复 Project 逻辑元数据、同步类型/Profile/Skills/Bases 并执行健康检查。无法自动确定的项目源码路径显示为 `unbound_projects`，再用 `campfire workspace project bind` 完成本机绑定。整个流程可重复执行。
+新设备执行 `campfire setup --path <vault>`：读取 Manifest、注册本机路径、恢复 Project 逻辑元数据、同步类型/Profile/Skills/Bases 并执行健康检查。已注册 Workspace 只通过根级 `campfire --workspace <id> ...` 显式选择。无法自动确定的项目源码路径显示为 `unbound_projects`，再用 `campfire workspace project bind` 完成本机绑定。整个流程可重复执行。
 
 ### 领域结构重构
 
@@ -172,10 +173,10 @@ Domain 的机器身份、显示名称和物理位置是三个独立维度：
 ```text
 domain_id  稳定身份，普通重命名和移动不改变
 name       人类可读名称，通过 domain rename 修改
-path       Workspace 内物理位置，通过 domain move 或显式目录重命名修改
+path       Workspace 内物理位置，通过 domain move 修改
 ```
 
-`domain rename`、`domain move` 和高风险的 `domain rekey` 是领域级事务，不应拆成大量逐文件迁移。路径变化必须联动 `_领域.md`、Project `document_domain`、`.campfire.yaml` 和路径引用；`rekey` 必须联动直接子领域的 `parent_domain`。所有命令默认预览，显式 `--confirm` 后执行。
+`domain rename`、`domain move`、`domain merge`、`domain delete` 和高风险的 `domain rekey` 是领域级意图原子事务，不应拆成大量逐文件迁移。路径变化必须联动 `_领域.md`、Project `document_domain`、`.campfire.yaml` 和路径引用；`rekey` 必须联动直接子领域的 `parent_domain`。`merge` 把源 Domain 的受管内容迁入目标 Domain，并在不变量满足时移除源 Domain；`delete` 只删除没有内容、附件、子 Domain 或 Project 绑定的逻辑空 Domain。它们不是跨业务聚合入口，内部必须复用同一 ChangeSet、快照复核和失败恢复边界。所有命令默认预览，显式 `--confirm` 后执行。
 
 SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不是新的事实源。`setup`、`maintenance check` 和领域重构会自动从 `.campfire.yaml`、`_空间.md`、`_领域.md` 与内容文档刷新这些表；`workspace rebuild --confirm` 只提供低频的完整恢复入口。
 

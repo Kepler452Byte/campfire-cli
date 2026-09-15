@@ -96,16 +96,18 @@ Campfire 使用语义化版本：
 
 - `domain_id`、`name` 和 `path` 分别表示稳定身份、显示名称和物理位置，不得隐式绑定。
 - 普通 rename 和 move 不得改变 `domain_id`；只有显式 `domain rekey` 可以修改稳定身份。
-- 修改领域名称不得默认修改 Project 名称；必须由 `--project-name` 明确表达。
+- 修改领域名称不得修改 Project 名称；Project 展示名称只能由 `workspace project update --name` 显式修改。
 - 领域路径变化必须同步 Project `document_domain`、`.campfire.yaml` 和路径引用。
 - `rekey` 必须同步直接子领域的 `parent_domain`。
+- `move` 的目标必须使用 Space 或 Domain 稳定 id；`merge` 和 `delete` 不得退化为 Agent 手工移动、删除声明与清理索引。
+- 已受管对象使用稳定 id，路径参数只用于新位置、具体文件、外部输入与扫描范围；不得同时要求可推导的 id、路径和父级关系。
 - 领域级写入默认只预览，只有显式 `--confirm` 才执行。
 
 ## Workspace 索引
 
 - SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
 - `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
-- 写命令只在派生状态可能变化时返回一个 scoped `maintenance sync` follow-up；
+- 写命令只在实际写入成功且派生状态可能变化时返回一个 scoped `maintenance sync` follow-up；预览和阻塞结果必须返回空列表；
   调用方只执行实际返回的 follow-up，不固定追加 check 或全量扫描。
 - `workspace rebuild` 默认只预览；`--confirm` 后从 Manifest 和 Markdown 完整替换派生索引。
 

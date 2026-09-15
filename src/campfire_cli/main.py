@@ -82,7 +82,7 @@ app.add_typer(base_cli, name="base")
 @app.callback()
 def main(
     ctx: typer.Context,
-    workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的 id 或路径"),
+    workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的稳定 id"),
 ) -> None:
     """初始化目标 Workspace 的应用依赖。"""
     if ctx.invoked_subcommand in {None, "version", "setup", "workspace", "document"}:
@@ -123,8 +123,8 @@ def tree(ctx: typer.Context) -> None:
 
 @app.command("setup")
 def setup(
-    workspace: Path | None = typer.Option(
-        None, "--workspace", help="要初始化的 Workspace 根目录；缺省时仅同步全局资源并输出接入引导"
+    path: Path | None = typer.Option(
+        None, "--path", help="要初始化的 Workspace 根目录；缺省时仅同步全局资源并输出接入引导"
     ),
     workspace_id: str | None = typer.Option(
         None, "--id", help="缺少 .campfire.yaml 时使用的稳定 Workspace id"
@@ -133,12 +133,12 @@ def setup(
 ) -> None:
     """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
     try:
-        if workspace is None and workspace_id is not None:
-            raise ConfigurationError("--id 只能与 --workspace 一起使用")
+        if path is None and workspace_id is not None:
+            raise ConfigurationError("--id 只能与 --path 一起使用")
         result = (
             AppContainer.setup_global_resources()
-            if workspace is None
-            else AppContainer.setup(workspace, make_default, workspace_id)
+            if path is None
+            else AppContainer.setup(path, make_default, workspace_id)
         )
     except AppError as exc:
         typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))

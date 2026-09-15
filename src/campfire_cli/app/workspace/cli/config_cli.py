@@ -4,12 +4,9 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolution
 from campfire_cli.app.workspace.service.config_service import WorkspaceConfigService
-from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
-from campfire_cli.common.filesystem.cwd import safe_cwd
-from campfire_cli.config.settings import WorkspaceSettings, campfire_home
+from campfire_cli.config.settings import WorkspaceSettings
 
 config_cli = typer.Typer(
     help="检查 Workspace 治理配置契约",
@@ -17,15 +14,12 @@ config_cli = typer.Typer(
 )
 
 
-def service(workspace: str | None) -> WorkspaceConfigService:
-    home = campfire_home()
-    resolved = WorkspaceService(home, SqliteWorkspaceRepository(home)).resolve(
-        workspace, safe_cwd()
-    )
+def service(ctx: typer.Context) -> WorkspaceConfigService:
+    resolved = resolution(ctx)
     settings = WorkspaceSettings.load(resolved.workspace_id, Path(resolved.workspace))
     return WorkspaceConfigService(settings)
 
 
 @config_cli.command("check")
-def check(workspace: str | None = typer.Option(None, "--workspace")) -> None:
-    emit(invoke(lambda: service(workspace).check()))
+def check(ctx: typer.Context) -> None:
+    emit(invoke(lambda: service(ctx).check()))

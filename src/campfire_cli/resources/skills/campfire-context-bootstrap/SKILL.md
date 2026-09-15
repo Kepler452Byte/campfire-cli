@@ -47,8 +47,8 @@ description: "在 Agent 首次读写 Campfire 文档时解析 Workspace 和当�
 2. 在当前工作目录运行 `campfire workspace project resolve --path <cwd>`。`matched` 才表示唯一项目（依据是 local-path 匹配）；`unmatched` 和 `ambiguous` 都不能猜测。`unmatched` 且带 `remote_matches` 时，表示该目录仅与这些项目共享 Git remote（monorepo 子目录或未绑定本机路径的项目），不能当作其中任何一个工作：同一项目换机未绑路径时提议 `project bind`，monorepo 子目录则提议注册新项目，提示见返回的 `hint`。
 3. 唯一匹配后运行 `campfire workspace project check <id>`，把 Project 元信息和实际源码、Git、文档中心进行比较。
 4. CLI 能读取的信息先自行读取：Git 根目录、origin remote、默认分支、注册项目列表和现有文档中心。只询问用户无法可靠推断的稳定身份与归属。
-5. Project 未注册且文档中心不存在时，向用户展示建议的 `id`、`name`、Workspace、`document_domain`、`local_path`、remote、默认分支和依据。先运行不带 `--confirm` 的 `campfire workspace project create` 展示计划，用户确认后追加 `--confirm`；命令只初始化项目根领域和项目总览，不虚构业务子领域。已有文档中心使用 `project adopt` 接入。
-6. Project 已注册但发生漂移时，区分定位信息与稳定身份。local path、同仓库 remote 或默认分支变化可以建议 `project update`；Project id、Workspace、文档中心、合并关系或归档状态必须明确确认。
+5. Project 未注册且文档中心不存在时，向用户展示建议的 `id`、`name`、Workspace、目标路径、`local_path`、remote、默认分支和依据。先运行不带 `--confirm` 的 `campfire workspace project create --id <id> --name <name> --path <workspace-relative-path>` 展示计划，用户确认后追加 `--confirm`；命令只初始化项目根领域和项目总览，不虚构业务子领域。已有文档中心使用 `project adopt --domain <domain-id>` 接入，不传领域路径。
+6. Project 已注册但发生漂移时，区分定位信息与稳定身份。local path、同仓库 remote 或默认分支变化可以建议 `project update --id <id>`，只传需要修改的字段；文档中心变更使用 `--domain <domain-id>`。Project id、Workspace、文档中心、合并关系或归档状态必须明确确认。
 7. 写入后重新运行 `project check`。只有结果为 `ok`，或已向用户明确说明不影响当前文档工作的剩余问题，才把上下文交给后续 Skill。
 
 ## 当前 Project 元信息

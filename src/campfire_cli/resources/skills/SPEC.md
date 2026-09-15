@@ -13,7 +13,8 @@ conversation-router → context-bootstrap → document-capture / task-management
 - Skill 负责加载时机、事实门禁、业务语义和工作流程。
 - CLI Profile 负责字段、枚举、类型、顺序和条件必填；Skill 不复制这些契约。
 - 创建正式文档或修改 Frontmatter 使用 `document apply`。正文局部编辑可用 edit。
-- 写入命令保持原子性；Skill 在写后显式编排 scoped `maintenance sync` 与 `check`。
+- 写入命令保持原子性；Skill 只执行命令实际返回的 scoped `maintenance sync`，诊断或发布验收时再显式 `check`。
+- 已存在的 Workspace、Space、Domain 和 Project 使用稳定 ID 选择；路径只用于新位置、具体文件、外部输入和显式扫描范围。
 
 ## 新增或修改 Skill checklist
 

@@ -159,7 +159,7 @@ class MaintenanceService:
                 if domain.path == scope_path or scope_path in domain.path.parents
             ]
             issues = [issue for issue in issues if self._path_matches_scope(issue["path"], scope)]
-            if not domains:
+            if not domains and not scope_path.exists():
                 return self._sync_blocked("scope-missing", scope, scope)
         if issues:
             return MaintenanceResult(

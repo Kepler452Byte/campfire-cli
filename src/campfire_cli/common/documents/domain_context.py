@@ -85,3 +85,21 @@ def resolve_domain_context(
         raise DomainContextError("domain-project-conflict", ",".join(sorted(projects)))
     project = next(iter(projects), None)
     return DomainContext(root=nearest.root, domain_id=nearest.domain_id, project_id=project)
+
+
+def resolve_domain_by_id(
+    vault_root: Path,
+    domain_id: str,
+    marker_name: str = "_领域.md",
+) -> DomainContext:
+    """Resolve exactly one declared Domain by stable id."""
+
+    root = vault_root.resolve()
+    matches: list[Path] = []
+    for marker in root.rglob(marker_name):
+        frontmatter = parse_document(marker.read_text(encoding="utf-8")).frontmatter
+        if frontmatter.get("domain_id") == domain_id:
+            matches.append(marker)
+    if len(matches) != 1:
+        raise DomainContextError("domain-id-not-unique", domain_id)
+    return resolve_domain_context(root, matches[0].parent / "__target__.md", marker_name)

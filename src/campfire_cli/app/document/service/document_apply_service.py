@@ -4,7 +4,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
+from campfire_cli.app.base.schema.operation_schema import (
+    CommandFollowUp,
+    maintenance_sync_follow_up,
+)
 from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
@@ -165,7 +168,13 @@ class DocumentApplyService:
                 expected={path: None if actual_hash == "missing" else actual_hash},
             )
         )
-        return result.model_copy(update={"status": "applied", "write_performed": True})
+        return result.model_copy(
+            update={
+                "status": "applied",
+                "write_performed": True,
+                "follow_up": self._follow_up(request, exists, parsed.has_frontmatter),
+            }
+        )
 
     def _creation_defaults(self, path: Path, document_type: str, today: str) -> dict[str, Any]:
         prefix = self._settings.document_types["types"][document_type]["prefix"]
@@ -223,11 +232,6 @@ class DocumentApplyService:
         issues: list[dict[str, Any]],
         missing_fields: list[str] | None = None,
     ) -> DocumentApplyResult:
-        scope = Path(request.path).parent.as_posix()
-        derived_fields = {"name", "type", "status", "lifecycle", "domain", "project", "related"}
-        needs_sync = not exists or not had_frontmatter
-        needs_sync = needs_sync or bool(set(request.values) & derived_fields)
-        needs_sync = needs_sync or request.body is not None
         return DocumentApplyResult(
             status=status,
             workspace_id=self._settings.workspace_id,
@@ -237,9 +241,23 @@ class DocumentApplyService:
             expected_hash=expected_hash,
             issues=issues,
             missing_fields=missing_fields or [],
-            follow_up=(
-                maintenance_sync_follow_up(self._settings.workspace_id, [scope])
-                if not issues and needs_sync
-                else []
-            ),
+        )
+
+    def _follow_up(
+        self,
+        request: DocumentApplyRequest,
+        exists: bool,
+        had_frontmatter: bool,
+    ) -> list[CommandFollowUp]:
+        derived_fields = {"name", "type", "status", "lifecycle", "domain", "project", "related"}
+        needs_sync = not exists or not had_frontmatter
+        needs_sync = needs_sync or bool(set(request.values) & derived_fields)
+        needs_sync = needs_sync or request.body is not None
+        return (
+            maintenance_sync_follow_up(
+                self._settings.workspace_id,
+                [Path(request.path).parent.as_posix()],
+            )
+            if needs_sync
+            else []
         )

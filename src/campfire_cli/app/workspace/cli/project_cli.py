@@ -4,10 +4,12 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke
+from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolution
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectRegistrationRequest
 from campfire_cli.app.workspace.service.project_service import ProjectService
+from campfire_cli.app.workspace.service.structure_service import DomainService
+from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import campfire_home
 
@@ -44,45 +46,91 @@ def request(
     )
 
 
-def project_options(operation: str):
-    def command(
-        project_id: str = typer.Option(..., "--id"),
-        workspace_id: str = typer.Option(..., "--workspace"),
-        name: str = typer.Option(..., "--name"),
-        document_domain: str = typer.Option(..., "--document-domain"),
-        local_path: Path | None = typer.Option(None, "--local-path"),
-        git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
-        default_branch: str | None = typer.Option(None, "--default-branch"),
-        status: str = typer.Option("active", "--status"),
-    ) -> None:
+def document_domain(workspace: str, domain_id: str) -> str:
+    domain = DomainService(Path(workspace), campfire_home()).show(domain_id)
+    return domain.path.as_posix()
+
+
+@project_cli.command("adopt")
+def adopt(
+    ctx: typer.Context,
+    project_id: str = typer.Option(..., "--id", help="稳定 Project id"),
+    name: str = typer.Option(..., "--name", help="Project 显示名称"),
+    domain_id: str = typer.Option(..., "--domain", help="已有项目根 Domain 的稳定 id"),
+    local_path: Path | None = typer.Option(None, "--local-path"),
+    git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
+    default_branch: str | None = typer.Option(None, "--default-branch"),
+    status: str = typer.Option("active", "--status"),
+) -> None:
+    """把已有 Domain 绑定为 Project 文档中心。"""
+
+    def operation():
+        resolved = resolution(ctx)
         payload = request(
             project_id,
-            workspace_id,
+            resolved.workspace_id,
             name,
-            document_domain,
+            document_domain(resolved.workspace, domain_id),
             local_path,
             git_remote_url,
             default_branch,
             status,
         )
+        return service().adopt(payload)
+
+    emit(invoke(operation))
+
+
+@project_cli.command("update")
+def update(
+    ctx: typer.Context,
+    project_id: str = typer.Option(..., "--id", help="要更新的稳定 Project id"),
+    name: str | None = typer.Option(None, "--name"),
+    domain_id: str | None = typer.Option(
+        None, "--domain", help="新的项目根 Domain id；不修改时省略"
+    ),
+    local_path: Path | None = typer.Option(None, "--local-path"),
+    git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
+    default_branch: str | None = typer.Option(None, "--default-branch"),
+    status: str | None = typer.Option(None, "--status"),
+) -> None:
+    """只更新显式给出的 Project 字段。"""
+
+    def operation():
+        resolved = resolution(ctx)
         target = service()
-        emit(invoke(lambda: getattr(target, operation)(payload)))
+        current = target.show(project_id)
+        if current.workspace_id != resolved.workspace_id:
+            raise ConfigurationError(
+                f"Project {project_id} 属于 Workspace {current.workspace_id}，"
+                f"当前选择的是 {resolved.workspace_id}"
+            )
+        current_local_path = Path(current.local_path) if current.local_path else None
+        payload = request(
+            project_id,
+            current.workspace_id,
+            name if name is not None else current.name,
+            (
+                document_domain(resolved.workspace, domain_id)
+                if domain_id
+                else current.document_domain
+            ),
+            local_path if local_path is not None else current_local_path,
+            git_remote_url if git_remote_url is not None else current.git_remote_url,
+            default_branch if default_branch is not None else current.default_branch,
+            status if status is not None else current.status,
+        )
+        return target.update(payload)
 
-    return command
-
-
-project_cli.command(
-    "adopt", help="接入已有 Project 文档领域；提供本地 Git 路径时自动发现 remote 和分支。"
-)(project_options("adopt"))
-project_cli.command("update", help="完整更新一个已注册 Project。")(project_options("update"))
+    emit(invoke(operation))
 
 
 @project_cli.command("create")
 def create(
-    project_id: str = typer.Option(..., "--id"),
-    workspace_id: str = typer.Option(..., "--workspace"),
-    name: str = typer.Option(..., "--name"),
-    document_domain: str = typer.Option(..., "--document-domain"),
+    ctx: typer.Context,
+    project_id: str = typer.Option(..., "--id", help="稳定 Project id"),
+    name: str = typer.Option(..., "--name", help="Project 显示名称"),
+    path: str = typer.Option(..., "--path", help="待创建项目根 Domain 的 Workspace 相对路径"),
     local_path: Path | None = typer.Option(None, "--local-path"),
     git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
     default_branch: str | None = typer.Option(None, "--default-branch"),
@@ -90,23 +138,28 @@ def create(
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览并初始化新 Project 文档中心；追加 --confirm 后创建并注册。"""
-    payload = request(
-        project_id,
-        workspace_id,
-        name,
-        document_domain,
-        local_path,
-        git_remote_url,
-        default_branch,
-        status,
-    )
-    emit(invoke(lambda: service().create(payload, confirm)))
+
+    def operation():
+        workspace_id = resolution(ctx).workspace_id
+        payload = request(
+            project_id,
+            workspace_id,
+            name,
+            path,
+            local_path,
+            git_remote_url,
+            default_branch,
+            status,
+        )
+        return service().create(payload, confirm)
+
+    emit(invoke(operation))
 
 
 @project_cli.command("list")
-def list_projects(workspace_id: str | None = typer.Option(None, "--workspace")) -> None:
-    """列出全部 Project，或按 Workspace 过滤。"""
-    emit(invoke(lambda: service().list(workspace_id)))
+def list_projects(ctx: typer.Context) -> None:
+    """列出当前 Workspace 的已注册 Project。"""
+    emit(invoke(lambda: service().list(resolution(ctx).workspace_id)))
 
 
 @project_cli.command("show")

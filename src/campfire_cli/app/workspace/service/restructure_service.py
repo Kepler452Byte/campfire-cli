@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 from uuid import uuid4
 
 import yaml
 
+from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.type_apply import (
     rewrite_markdown_links,
@@ -22,7 +23,7 @@ from campfire_cli.app.workspace.schema.restructure_schema import (
 )
 from campfire_cli.app.workspace.service.restructure_protocol import RestructureRepositoryProtocol
 from campfire_cli.common.documents.markdown import parse_document, render_document
-from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
@@ -49,6 +50,7 @@ class RestructureService:
                 status="blocked",
                 batch=batch,
                 item_count=0,
+                blocked_count=1,
                 issues=[{"code": "scope-missing", "path": scope}],
             )
         items = [
@@ -62,7 +64,12 @@ class RestructureService:
         config_hash = self._config_hash()
         self._repository.save_batch(str(uuid4()), batch, scope, config_hash)
         self._repository.save_inventory(batch, items)
-        return RestructureResult(status="inventoried", batch=batch, item_count=len(items))
+        return RestructureResult(
+            status="inventoried",
+            batch=batch,
+            item_count=len(items),
+            inventory_count=len(items),
+        )
 
     def plan(self, batch: str, spec_path: Path | None = None) -> RestructureResult:
         scope, config_hash, inventory = self._repository.load_inventory(batch)
@@ -113,11 +120,17 @@ class RestructureService:
             )
         if issues:
             return RestructureResult(
-                status="blocked", batch=batch, item_count=len(items), issues=issues
+                status="blocked",
+                batch=batch,
+                item_count=len(items),
+                inventory_count=len(inventory),
+                planned_count=len(items),
+                blocked_count=len(issues),
+                issues=issues,
             )
         plan = RestructurePlan(batch=batch, scope=scope, config_hash=config_hash, items=items)
         self._repository.save_plan(plan)
-        return RestructureResult(status="planned", batch=batch, item_count=len(items))
+        return self._planned_result(batch, len(inventory), items)
 
     def _plan_from_spec(
         self,
@@ -127,8 +140,11 @@ class RestructureService:
         inventory: list[InventoryItem],
         spec_path: Path,
     ) -> RestructureResult:
-        payload = yaml.safe_load(spec_path.expanduser().read_text(encoding="utf-8"))
-        spec = RestructureIntentSpec.model_validate(payload)
+        try:
+            payload = yaml.safe_load(spec_path.expanduser().read_text(encoding="utf-8"))
+            spec = RestructureIntentSpec.model_validate(payload)
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            raise ConfigurationError(f"重构规格无效：{spec_path}：{exc}") from exc
         known = {item.path: item for item in inventory}
         allowed_fields = self._rules.known_fields()
         items: list[RestructurePlanItem] = []
@@ -197,25 +213,75 @@ class RestructureService:
             )
         if issues:
             return RestructureResult(
-                status="blocked", batch=batch, item_count=len(items), issues=issues
+                status="blocked",
+                batch=batch,
+                item_count=len(items),
+                inventory_count=len(inventory),
+                planned_count=len(items),
+                approved_count=sum(item.approved for item in items),
+                unapproved_count=sum(not item.approved for item in items),
+                blocked_count=len(issues),
+                issues=issues,
             )
         plan = RestructurePlan(batch=batch, scope=scope, config_hash=config_hash, items=items)
         self._repository.save_plan(plan)
-        return RestructureResult(status="planned", batch=batch, item_count=len(items))
+        return self._planned_result(batch, len(inventory), items)
 
     def apply(self, batch: str, confirm: bool) -> RestructureResult:
         plan = self._repository.load_plan(batch)
+        _, _, inventory = self._repository.load_inventory(batch)
         approved = [item for item in plan.items if item.approved]
-        issues = self._preflight(plan, approved)
-        if issues or not confirm:
+        unapproved = [item for item in plan.items if not item.approved]
+        blocking_issues = self._preflight(plan, approved)
+        review_issues = (
+            [
+                {
+                    "code": "restructure-items-unapproved",
+                    "path": batch,
+                    "detail": str(len(unapproved)),
+                }
+            ]
+            if unapproved
+            else []
+        )
+        if blocking_issues or not confirm or not approved or unapproved:
+            if blocking_issues:
+                status = "blocked"
+            elif unapproved:
+                status = "needs-review"
+            else:
+                status = "ready"
             return RestructureResult(
-                status="blocked" if issues else "ready",
+                status=status,
                 batch=batch,
-                item_count=len(approved),
-                issues=issues,
+                item_count=len(plan.items),
+                inventory_count=len(inventory),
+                planned_count=len(plan.items),
+                approved_count=len(approved),
+                unapproved_count=len(unapproved),
+                blocked_count=len(blocking_issues),
+                issues=[*blocking_issues, *review_issues],
             )
         result = RestructureResult(
-            status="applied", batch=batch, item_count=len(approved), applied_count=len(approved)
+            status="applied",
+            batch=batch,
+            item_count=len(plan.items),
+            inventory_count=len(inventory),
+            planned_count=len(plan.items),
+            approved_count=len(approved),
+            unapproved_count=len(unapproved),
+            applied_count=len(approved),
+            follow_up=maintenance_sync_follow_up(
+                self._settings.workspace_id,
+                [
+                    parent.as_posix()
+                    for item in approved
+                    for parent in (
+                        PurePosixPath(item.source).parent,
+                        PurePosixPath(item.target).parent,
+                    )
+                ],
+            ),
         )
         with self._executor.transaction(self._build_change_set(approved)):
             self._repository.save_execution(result)
@@ -223,6 +289,7 @@ class RestructureService:
 
     def verify(self, batch: str) -> RestructureResult:
         plan = self._repository.load_plan(batch)
+        _, _, inventory = self._repository.load_inventory(batch)
         issues: list[dict[str, object]] = []
         for item in [entry for entry in plan.items if entry.approved]:
             target = safe_path(self._settings.vault_root, item.target)
@@ -235,10 +302,30 @@ class RestructureService:
             status="ok" if not issues else "needs-review",
             batch=batch,
             item_count=len(plan.items),
+            inventory_count=len(inventory),
+            planned_count=len(plan.items),
+            approved_count=sum(item.approved for item in plan.items),
+            unapproved_count=sum(not item.approved for item in plan.items),
+            blocked_count=len(issues),
             issues=issues,
         )
         self._repository.save_verification(result)
         return result
+
+    @staticmethod
+    def _planned_result(
+        batch: str, inventory_count: int, items: list[RestructurePlanItem]
+    ) -> RestructureResult:
+        approved_count = sum(item.approved for item in items)
+        return RestructureResult(
+            status="planned",
+            batch=batch,
+            item_count=len(items),
+            inventory_count=inventory_count,
+            planned_count=len(items),
+            approved_count=approved_count,
+            unapproved_count=len(items) - approved_count,
+        )
 
     def _normalized_name(self, name: str, proposed_type: str | None) -> str:
         if not proposed_type:

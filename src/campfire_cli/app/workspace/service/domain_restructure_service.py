@@ -8,7 +8,11 @@ from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follo
 from campfire_cli.app.workspace.repository.manifest_repository import (
     WorkspaceManifestRepository,
 )
-from campfire_cli.app.workspace.schema.restructure_schema import DomainRestructureResult
+from campfire_cli.app.workspace.schema.restructure_schema import (
+    DomainDeleteResult,
+    DomainMergeResult,
+    DomainRestructureResult,
+)
 from campfire_cli.app.workspace.schema.workspace_schema import (
     Domain,
     ManifestProject,
@@ -55,55 +59,55 @@ class DomainRestructureService:
         domain_id: str,
         name: str,
         *,
-        rename_directory: bool = False,
-        target_path: str | None = None,
-        project_name: str | None = None,
         confirm: bool = False,
     ) -> DomainRestructureResult:
         domain = self._domain(domain_id)
         new_name = name.strip()
         if not new_name:
             raise ConfigurationError("Domain name 不能为空")
-        if target_path and rename_directory:
-            raise ConfigurationError("--target-path 与 --rename-directory 只能使用一个")
-        target = domain.path
-        if target_path:
-            target = self._validate_target(target_path, domain)
-        elif rename_directory:
-            target = domain.path.with_name(self._directory_name(domain.path.name, new_name))
         return self._change(
             domain,
-            target=target,
+            target=domain.path,
             name=new_name,
             new_id=domain.id,
             parent_domain=domain.parent_domain,
-            project_name=project_name,
             confirm=confirm,
         )
 
     def move(
         self,
         domain_id: str,
-        target_path: str,
+        target_id: str,
         *,
-        parent_domain: str | None = None,
         confirm: bool = False,
     ) -> DomainRestructureResult:
         domain = self._domain(domain_id)
-        target = self._validate_target(target_path, domain)
-        if parent_domain:
-            parent = self._domain(parent_domain)
-            if parent.path not in target.parents:
-                raise ConfigurationError("目标路径必须位于指定父 Domain 下")
+        domains = [item for item in self._domains.discover()[0] if item.id == target_id]
+        spaces = [item for item in self._domains.spaces.discover()[0] if item.id == target_id]
+        if len(domains) + len(spaces) != 1:
+            raise ConfigurationError(f"目标 Space 或 Domain 不存在或不唯一：{target_id}")
+        if domains:
+            parent = domains[0]
+            if parent.id == domain.id or domain.path in parent.path.parents:
+                raise ConfigurationError("Domain 不能移动到自身或自己的子 Domain")
             if parent.governance != domain.governance:
                 raise ConfigurationError("移动后的子 Domain 必须继承父 Domain governance")
+            if parent.project_id != domain.project_id:
+                raise ConfigurationError("移动后的 Domain 与目标父 Domain Project 不一致")
+            target = parent.path / domain.path.name
+            parent_domain = parent.id
+        else:
+            target = self._settings.vault_root / spaces[0].path / domain.path.name
+            parent_domain = None
+        target = self._validate_target(
+            target.relative_to(self._settings.vault_root).as_posix(), domain
+        )
         return self._change(
             domain,
             target=target,
             name=domain.name,
             new_id=domain.id,
             parent_domain=parent_domain,
-            project_name=None,
             confirm=confirm,
         )
 
@@ -121,8 +125,232 @@ class DomainRestructureService:
             name=domain.name,
             new_id=new_id,
             parent_domain=domain.parent_domain,
-            project_name=None,
             confirm=confirm,
+        )
+
+    def merge(
+        self, source_domain: str, target_domain: str, *, confirm: bool = False
+    ) -> DomainMergeResult:
+        source = self._domain(source_domain)
+        target = self._domain(target_domain)
+        issues = self._merge_issues(source, target)
+        source_relative = source.path.relative_to(self._settings.vault_root).as_posix()
+        target_relative = target.path.relative_to(self._settings.vault_root).as_posix()
+        projects = [
+            project
+            for project in self._workspaces.list_projects(self._settings.workspace_id)
+            if project.document_domain == source_relative
+        ]
+        updated_projects = [
+            project.model_copy(update={"document_domain": target_relative}) for project in projects
+        ]
+        files = sorted(path for path in source.path.rglob("*") if path.is_file())
+        source_moc = source.path / f"{source.moc}.md"
+        retained = [path for path in files if path not in {source.path / DOMAIN_MARKER, source_moc}]
+        targets = {path: target.path / path.relative_to(source.path) for path in retained}
+        for source_path, target_path in targets.items():
+            if target_path.exists():
+                issues.append(
+                    {
+                        "code": "domain-merge-target-exists",
+                        "path": target_path.relative_to(self._settings.vault_root).as_posix(),
+                        "source": source_path.relative_to(self._settings.vault_root).as_posix(),
+                    }
+                )
+        child_domains = [
+            item
+            for item in self._domains.discover()[0]
+            if item.id != source.id and source.path in item.path.parents
+        ]
+        documents = [path for path in retained if path.suffix.lower() == ".md"]
+        assets = [path for path in retained if path.suffix.lower() != ".md"]
+        operations = [
+            {
+                "action": "move-file",
+                "source": path.relative_to(self._settings.vault_root).as_posix(),
+                "path": targets[path].relative_to(self._settings.vault_root).as_posix(),
+            }
+            for path in retained
+        ]
+        operations.extend(
+            {
+                "action": "reparent-domain",
+                "source": child.id,
+                "path": target.id,
+            }
+            for child in child_domains
+            if child.parent_domain == source.id
+        )
+        operations.extend({"action": "update-project", "path": item.id} for item in projects)
+        change_set = self._merge_change_set(
+            source,
+            target,
+            retained,
+            targets,
+            updated_projects,
+        )
+        moved_targets = set(targets.values())
+        manifest_path = self._manifests.path(self._settings.vault_root)
+        reference_updates = sorted(
+            write.path
+            for write in change_set.writes
+            if write.path not in moved_targets and write.path != manifest_path
+        )
+        operations.extend(
+            {
+                "action": "update-reference",
+                "path": path.relative_to(self._settings.vault_root).as_posix(),
+            }
+            for path in reference_updates
+        )
+        operations.append(
+            {
+                "action": "delete-domain",
+                "path": source.path.relative_to(self._settings.vault_root).as_posix(),
+            }
+        )
+        follow_up = maintenance_sync_follow_up(
+            self._settings.workspace_id,
+            [
+                source.path.parent.relative_to(self._settings.vault_root).as_posix(),
+                target.path.relative_to(self._settings.vault_root).as_posix(),
+            ],
+        )
+        if issues or not confirm:
+            return DomainMergeResult(
+                status="blocked" if issues else "planned",
+                source_domain=source.id,
+                target_domain=target.id,
+                document_count=len(documents),
+                asset_count=len(assets),
+                child_domain_count=len(child_domains),
+                reference_count=len(reference_updates),
+                operations=operations,
+                affected_projects=[item.id for item in projects],
+                issues=issues,
+            )
+        current_source = self._domain(source.id)
+        current_target = self._domain(target.id)
+        if current_source.path != source.path or current_target.path != target.path:
+            raise ConfigurationError("Domain 在预览后发生变化，请重新执行")
+        try:
+            with self._executor.transaction(change_set):
+                if updated_projects:
+                    self._workspaces.save_projects(updated_projects)
+                if source.path.exists():
+                    raise ConfigurationError("Domain 合并后源目录仍然存在")
+        except Exception:
+            if projects:
+                self._workspaces.save_projects(projects)
+            raise
+        return DomainMergeResult(
+            status="applied",
+            source_domain=source.id,
+            target_domain=target.id,
+            document_count=len(documents),
+            asset_count=len(assets),
+            child_domain_count=len(child_domains),
+            reference_count=len(reference_updates),
+            operations=operations,
+            affected_projects=[item.id for item in projects],
+            write_performed=True,
+            follow_up=follow_up,
+        )
+
+    def delete(self, domain_id: str, *, confirm: bool = False) -> DomainDeleteResult:
+        domain = self._domain(domain_id)
+        relative = domain.path.relative_to(self._settings.vault_root).as_posix()
+        marker = domain.path / DOMAIN_MARKER
+        moc = domain.path / f"{domain.moc}.md"
+        files = sorted(path for path in domain.path.rglob("*") if path.is_file())
+        child_domains = [
+            item
+            for item in self._domains.discover()[0]
+            if item.id != domain.id and domain.path in item.path.parents
+        ]
+        projects = [
+            project
+            for project in self._workspaces.list_projects(self._settings.workspace_id)
+            if project.document_domain == relative
+        ]
+        content = [path for path in files if path not in {marker, moc}]
+        issues: list[dict[str, object]] = []
+        if child_domains:
+            issues.append(
+                {
+                    "code": "domain-delete-child-domains",
+                    "path": relative,
+                    "detail": ",".join(sorted(item.id for item in child_domains)),
+                    "hint": "先使用 domain merge 或 workspace restructure 迁移子领域",
+                }
+            )
+        if content:
+            issues.append(
+                {
+                    "code": "domain-delete-not-empty",
+                    "path": relative,
+                    "detail": ",".join(
+                        path.relative_to(domain.path).as_posix() for path in content
+                    ),
+                    "hint": "先使用 domain merge 或 workspace restructure 迁移内容",
+                }
+            )
+        if projects:
+            issues.append(
+                {
+                    "code": "domain-delete-project-bound",
+                    "path": relative,
+                    "detail": ",".join(sorted(project.id for project in projects)),
+                    "hint": "先把 Project 文档中心迁移或合并到另一个 Domain",
+                }
+            )
+        issues.extend(self._authored_declaration_issues(domain, marker, moc, "delete"))
+        delete_files = [path for path in (marker, moc) if path.is_file()]
+        directories = sorted(
+            [domain.path, *(path for path in domain.path.rglob("*") if path.is_dir())],
+            key=lambda path: len(path.parts),
+            reverse=True,
+        )
+        operations = [
+            {
+                "action": "delete-file",
+                "path": path.relative_to(self._settings.vault_root).as_posix(),
+            }
+            for path in delete_files
+        ]
+        operations.extend(
+            {
+                "action": "delete-directory",
+                "path": path.relative_to(self._settings.vault_root).as_posix(),
+            }
+            for path in directories
+        )
+        follow_up = maintenance_sync_follow_up(
+            self._settings.workspace_id,
+            [domain.path.parent.relative_to(self._settings.vault_root).as_posix()],
+        )
+        if issues or not confirm:
+            return DomainDeleteResult(
+                status="blocked" if issues else "planned",
+                domain_id=domain.id,
+                path=relative,
+                operations=operations,
+                issues=issues,
+            )
+        change_set = FileChangeSet(
+            deletes=tuple(delete_files),
+            remove_empty_directories=tuple(directories),
+            label="workspace domain delete",
+            expected={path: file_sha256(path) for path in delete_files},
+        )
+        self._executor.execute(change_set)
+        return DomainDeleteResult(
+            status="applied",
+            domain_id=domain.id,
+            path=relative,
+            operations=operations,
+            write_performed=True,
+            follow_up=follow_up,
         )
 
     def _change(
@@ -133,7 +361,6 @@ class DomainRestructureService:
         name: str,
         new_id: str,
         parent_domain: str | None,
-        project_name: str | None,
         confirm: bool,
     ) -> DomainRestructureResult:
         old_relative = domain.path.relative_to(self._settings.vault_root).as_posix()
@@ -173,7 +400,6 @@ class DomainRestructureService:
             project.model_copy(
                 update={
                     "document_domain": new_relative,
-                    "name": project_name.strip() if project_name else project.name,
                 }
             )
             for project in projects
@@ -232,11 +458,176 @@ class DomainRestructureService:
             raise ConfigurationError(f"目标路径已存在：{value}")
         return target
 
+    def _merge_issues(self, source: Domain, target: Domain) -> list[dict[str, object]]:
+        source_relative = source.path.relative_to(self._settings.vault_root).as_posix()
+        issues: list[dict[str, object]] = []
+        if source.id == target.id:
+            issues.append({"code": "domain-merge-same-domain", "path": source_relative})
+        if source.path in target.path.parents:
+            issues.append({"code": "domain-merge-target-inside-source", "path": source_relative})
+        if source.governance != target.governance:
+            issues.append(
+                {
+                    "code": "domain-merge-governance-conflict",
+                    "path": source_relative,
+                    "source": source.governance,
+                    "target": target.governance,
+                }
+            )
+        if source.project_id != target.project_id:
+            issues.append(
+                {
+                    "code": "domain-merge-project-conflict",
+                    "path": source_relative,
+                    "source": source.project_id or "none",
+                    "target": target.project_id or "none",
+                }
+            )
+        for path in source.path.rglob("*"):
+            if path.is_symlink():
+                issues.append(
+                    {
+                        "code": "domain-merge-symlink",
+                        "path": path.relative_to(self._settings.vault_root).as_posix(),
+                    }
+                )
+        issues.extend(
+            self._authored_declaration_issues(
+                source,
+                source.path / DOMAIN_MARKER,
+                source.path / f"{source.moc}.md",
+                "merge",
+            )
+        )
+        return issues
+
+    def _merge_change_set(
+        self,
+        source: Domain,
+        target: Domain,
+        retained: list[Path],
+        targets: dict[Path, Path],
+        updated_projects: list[ProjectEntry],
+    ) -> FileChangeSet:
+        marker = source.path / DOMAIN_MARKER
+        moc = source.path / f"{source.moc}.md"
+        reference_files = self._reference_files()
+        originals = {path: path.read_text(encoding="utf-8") for path in reference_files}
+        writes: list[FileWrite] = []
+        old_relative = source.path.relative_to(self._settings.vault_root).as_posix()
+        new_relative = target.path.relative_to(self._settings.vault_root).as_posix()
+        domain_pattern = re.compile(
+            rf"(?m)^(\s*(?:domain|domain_id|parent_domain):\s*)(['\"]?)"
+            rf"{re.escape(source.id)}\2\s*$"
+        )
+        direct_children = {
+            item.path / DOMAIN_MARKER
+            for item in self._domains.discover()[0]
+            if item.parent_domain == source.id and source.path in item.path.parents
+        }
+        nested_domains = sorted(
+            [
+                item
+                for item in self._domains.discover()[0]
+                if item.id != source.id and source.path in item.path.parents
+            ],
+            key=lambda item: len(item.path.parts),
+            reverse=True,
+        )
+        for path, original in originals.items():
+            if path in {marker, moc}:
+                continue
+            content = original.replace(old_relative, new_relative).replace(
+                quote(old_relative), quote(new_relative)
+            )
+            content = domain_pattern.sub(rf"\g<1>\g<2>{target.id}\g<2>", content)
+            if path in direct_children:
+                parsed = parse_document(content)
+                frontmatter = dict(parsed.frontmatter)
+                frontmatter["parent_domain"] = target.id
+                content = render_document(frontmatter, parsed.body, list(frontmatter))
+            elif path.suffix.lower() == ".md" and source.path in path.parents:
+                owner = next((item for item in nested_domains if item.path in path.parents), source)
+                if owner.id == source.id:
+                    parsed = parse_document(content)
+                    if parsed.frontmatter:
+                        frontmatter = dict(parsed.frontmatter)
+                        if "domain" in frontmatter:
+                            frontmatter["domain"] = target.id
+                            content = render_document(frontmatter, parsed.body, list(frontmatter))
+            final_path = targets.get(path, path)
+            if content != original or final_path != path:
+                writes.append(FileWrite(final_path, content))
+        moves = tuple(PathMove(path, targets[path]) for path in retained)
+        directories = sorted(
+            [source.path, *(path for path in source.path.rglob("*") if path.is_dir())],
+            key=lambda path: len(path.parts),
+            reverse=True,
+        )
+        expected = {path: file_sha256(path) for path in source.path.rglob("*") if path.is_file()}
+        expected[marker] = file_sha256(marker)
+        if moc.is_file():
+            expected[moc] = file_sha256(moc)
+        for final_path in targets.values():
+            expected[final_path] = None
+        for path in reference_files:
+            if source.path not in path.parents:
+                expected[path] = file_sha256(path)
+        if updated_projects:
+            manifest_path, manifest_content = self._manifest_update(updated_projects)
+            writes.append(FileWrite(manifest_path, manifest_content))
+            expected[manifest_path] = file_sha256(manifest_path)
+        return FileChangeSet(
+            writes=tuple(writes),
+            deletes=tuple(path for path in (marker, moc) if path.is_file()),
+            moves=moves,
+            remove_empty_directories=tuple(directories),
+            label="workspace domain merge",
+            expected=expected,
+        )
+
+    def _authored_declaration_issues(
+        self,
+        domain: Domain,
+        marker: Path,
+        moc: Path,
+        operation: str,
+    ) -> list[dict[str, object]]:
+        issues: list[dict[str, object]] = []
+        relative = domain.path.relative_to(self._settings.vault_root).as_posix()
+        if marker.is_file() and self._has_authored_text(marker, generated_moc=False):
+            issues.append(
+                {
+                    "code": f"domain-{operation}-authored-marker",
+                    "path": relative,
+                }
+            )
+        if moc.is_file() and self._has_authored_text(moc, generated_moc=True):
+            issues.append(
+                {
+                    "code": f"domain-{operation}-authored-moc",
+                    "path": moc.relative_to(self._settings.vault_root).as_posix(),
+                }
+            )
+        return issues
+
     @staticmethod
-    def _directory_name(current: str, name: str) -> str:
-        if re.fullmatch(r"【[^】]+】文档中心", current):
-            return f"【{name}】文档中心"
-        return name
+    def _has_authored_text(path: Path, *, generated_moc: bool) -> bool:
+        body = parse_document(path.read_text(encoding="utf-8")).body
+        if generated_moc:
+            body = re.sub(
+                r"<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->.*?"
+                r"<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->",
+                "",
+                body,
+                flags=re.DOTALL,
+            )
+        remaining = [
+            line.strip()
+            for line in body.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        return bool(remaining)
 
     def _plan_changes(
         self,
@@ -358,8 +749,12 @@ class DomainRestructureService:
             operations=operations,
             affected_projects=[project.id for project in projects],
             write_performed=written,
-            follow_up=maintenance_sync_follow_up(
-                self._settings.workspace_id,
-                [domain.path.relative_to(self._settings.vault_root).as_posix(), path],
+            follow_up=(
+                maintenance_sync_follow_up(
+                    self._settings.workspace_id,
+                    [domain.path.relative_to(self._settings.vault_root).as_posix(), path],
+                )
+                if written
+                else []
             ),
         )

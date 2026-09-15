@@ -92,7 +92,7 @@ class AppContainer:
             "paths": [
                 {
                     "scenario": "接入已有 Vault（目录已存在，含或不含 .campfire.yaml）",
-                    "command": "campfire setup --workspace <vault路径> [--id <id>] --default",
+                    "command": "campfire setup --path <vault路径> [--id <id>] --default",
                 },
                 {
                     "scenario": "从零创建新 Workspace（初始化目录结构并注册）",

@@ -62,12 +62,11 @@ class ProjectService:
         structure = DomainService(
             Path(self._repository.load_registry().workspaces[project.workspace_id].path), self._root
         )
-        space_id = self._owning_space_id(structure.spaces, project.document_domain)
+        self._owning_space_id(structure.spaces, project.document_domain)
         domain_plan = structure.create(
             domain_id=f"project-{project.id}",
             name=project.name,
             path=project.document_domain,
-            space_id=space_id,
             domain_type="project-domain",
             governance="project-docs",
             project_id=project.id,
@@ -85,7 +84,6 @@ class ProjectService:
             domain_id=f"project-{project.id}",
             name=project.name,
             path=project.document_domain,
-            space_id=space_id,
             domain_type="project-domain",
             governance="project-docs",
             project_id=project.id,
@@ -296,7 +294,7 @@ class ProjectService:
         manifest = self._manifests.load(root)
         if manifest is None:
             raise ConfigurationError(
-                f"Workspace 缺少 .campfire.yaml；请先运行 campfire setup --workspace {root}"
+                f"Workspace 缺少 .campfire.yaml；请先运行 campfire setup --path {root}"
             )
         manifest.projects = [
             ManifestProject.model_validate(

@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 import yaml
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from campfire_cli.app.workspace.repository.restructure_repository import (
@@ -16,6 +18,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import (
     SqliteWorkspaceRepository,
 )
 from campfire_cli.app.workspace.service.adoption_service import AdoptionService
+from campfire_cli.common.filesystem import FileChangeExecutor
 from campfire_cli.common.package_version import InstallMethod
 from campfire_cli.main import app
 
@@ -27,6 +30,38 @@ def write_user_config(workspace: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return path
+
+
+def write_domain_marker(
+    directory: Path,
+    domain_id: str,
+    name: str,
+    *,
+    governance: str = "project-docs",
+    project_id: str | None = None,
+    parent_domain: str | None = None,
+) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    project = f"project_id: {project_id}\n" if project_id else ""
+    parent = f"parent_domain: {parent_domain}\n" if parent_domain else ""
+    (directory / "_领域.md").write_text(
+        "---\n"
+        f"name: {name}\n"
+        f"domain_id: {domain_id}\n"
+        "domain_type: project-domain\n"
+        f"governance: {governance}\n"
+        f"moc: '[[MOC-{name}]]'\n"
+        f"{parent}"
+        f"{project}"
+        "status: active\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    (directory / f"MOC-{name}.md").write_text(
+        "# MOC\n\n<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n",
+        encoding="utf-8",
+    )
 
 
 def test_short_help_is_available_at_every_command_level() -> None:
@@ -57,6 +92,8 @@ def test_short_help_is_available_at_every_command_level() -> None:
         ["workspace", "domain", "rename", "-h"],
         ["workspace", "domain", "move", "-h"],
         ["workspace", "domain", "rekey", "-h"],
+        ["workspace", "domain", "merge", "-h"],
+        ["workspace", "domain", "delete", "-h"],
         ["workspace", "config", "-h"],
         ["workspace", "config", "check", "-h"],
         ["document", "-h"],
@@ -74,6 +111,117 @@ def test_short_help_is_available_at_every_command_level() -> None:
         result = runner.invoke(app, command)
         assert result.exit_code == 0, (command, result.output)
         assert "help" in result.output.lower()
+
+
+def test_public_selectors_keep_one_stable_golden_path(workspace: Path) -> None:
+    root_help = runner.invoke(app, ["-h"]).output
+    assert "--workspace" in root_help
+
+    contracts = {
+        ("document", "move"): (
+            {"--path", "--domain", "--name"},
+            {"--from", "--to", "--target-path"},
+        ),
+        ("workspace", "project", "adopt"): (
+            {"--domain"},
+            {"--workspace", "--document-domain"},
+        ),
+        ("workspace", "domain", "create"): (
+            {"--path"},
+            {"--space", "--parent"},
+        ),
+        ("workspace", "domain", "rename"): (
+            {"--domain", "--name"},
+            {"--target-path", "--rename-directory", "--project-name"},
+        ),
+        ("workspace", "domain", "move"): (
+            {"--domain", "--target"},
+            {"--target-path", "--parent-domain"},
+        ),
+    }
+    for command, (required, forbidden) in contracts.items():
+        output = runner.invoke(app, [*command, "-h"]).output
+        assert all(option in output for option in required), command
+        assert all(option not in output for option in forbidden), command
+
+    rejected = runner.invoke(
+        app,
+        ["--workspace", str(workspace), "workspace", "resolve"],
+    )
+    assert rejected.exit_code == 2
+    assert "Workspace 未注册" in rejected.output
+
+
+def test_every_public_path_option_has_an_explicit_boundary_classification() -> None:
+    classified = {
+        ("setup", "--path"): "physical-target",
+        ("workspace create", "--path"): "physical-target",
+        ("workspace export", "--output"): "file-output",
+        ("workspace import", "--input"): "file-input",
+        ("workspace project adopt", "--local-path"): "external-path",
+        ("workspace project update", "--local-path"): "external-path",
+        ("workspace project create", "--path"): "physical-target",
+        ("workspace project create", "--local-path"): "external-path",
+        ("workspace project resolve", "--path"): "external-path",
+        ("workspace project bind", "--local-path"): "external-path",
+        ("workspace space create", "--path"): "physical-target",
+        ("workspace space adopt", "--path"): "physical-target",
+        ("workspace domain create", "--path"): "physical-target",
+        ("workspace domain adopt", "--source"): "external-path",
+        ("workspace domain adopt", "--target-path"): "physical-target",
+        ("workspace restructure inventory", "--scope"): "scope",
+        ("workspace restructure plan", "--spec"): "file-input",
+        ("document check", "--path"): "document-path",
+        ("document kanban-check", "--path"): "document-path",
+        ("document inspect", "--path"): "document-path",
+        ("document format", "--path"): "document-path",
+        ("document apply", "--path"): "document-path",
+        ("document apply", "--body-file"): "file-input",
+        ("document move", "--path"): "document-path",
+        ("document profile resolve", "--path"): "document-path",
+        ("decision create", "--related-document"): "document-path",
+        ("maintenance check", "--scope"): "scope",
+        ("maintenance sync", "--scope"): "scope",
+        ("maintenance archive check", "--scope"): "scope",
+        ("maintenance archive apply", "--scope"): "scope",
+        ("skill resolve", "--path"): "document-path",
+    }
+    path_flags = {
+        "--path",
+        "--local-path",
+        "--target-path",
+        "--scope",
+        "--body-file",
+        "--spec",
+        "--input",
+        "--output",
+        "--related-document",
+    }
+    discovered: set[tuple[str, str]] = set()
+
+    def walk(command, parts: tuple[str, ...] = ()) -> None:
+        if hasattr(command, "commands"):
+            for name, child in command.commands.items():
+                walk(child, (*parts, name))
+            return
+        for parameter in command.params:
+            options = getattr(parameter, "opts", [])
+            for option in options:
+                if option in path_flags or (
+                    option == "--source" and "TyperPath" in str(parameter.type)
+                ):
+                    discovered.add((" ".join(parts), option))
+
+    walk(get_command(app))
+    assert discovered == set(classified)
+    assert set(classified.values()) == {
+        "physical-target",
+        "external-path",
+        "document-path",
+        "scope",
+        "file-input",
+        "file-output",
+    }
 
 
 def test_tree_discovers_registered_commands_without_a_parallel_catalog() -> None:
@@ -128,8 +276,6 @@ def test_document_apply_cli_creates_valid_document_without_hidden_sync(workspace
         "Example",
         "--path",
         "mywork/【Example】文档中心",
-        "--space",
-        "work",
         "--type",
         "project-domain",
         "--governance",
@@ -185,7 +331,7 @@ def test_setup_creates_manifest_without_overwriting_user_config(
     existing.write_text("version: 1\ngovernance:\n  custom: true\n", encoding="utf-8")
     result = runner.invoke(
         app,
-        ["setup", "--workspace", str(tmp_path), "--id", "new-workspace", "--default"],
+        ["setup", "--path", str(tmp_path), "--id", "new-workspace", "--default"],
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
@@ -194,7 +340,7 @@ def test_setup_creates_manifest_without_overwriting_user_config(
     assert not (campfire_home / "workspaces/new-workspace/config").exists()
     assert not (tmp_path / ".campfire").exists()
     assert (tmp_path / ".campfire.yaml").is_file()
-    resolved = runner.invoke(app, ["workspace", "resolve", "--workspace", "new-workspace"])
+    resolved = runner.invoke(app, ["--workspace", "new-workspace", "workspace", "resolve"])
     assert json.loads(resolved.output)["workspace"] == str(tmp_path)
 
 
@@ -205,7 +351,7 @@ def test_setup_requires_id_when_existing_workspace_has_no_manifest(
     workspace = tmp_path / "vault"
     workspace.mkdir()
 
-    result = runner.invoke(app, ["setup", "--workspace", str(workspace)])
+    result = runner.invoke(app, ["setup", "--path", str(workspace)])
 
     assert result.exit_code == 2
     assert "首次 setup 必须提供 --id" in result.output
@@ -221,6 +367,7 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
         "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
         encoding="utf-8",
     )
+    write_domain_marker(domain, "project-example", "Example", project_id="example")
     repository = tmp_path / "repository"
     repository.mkdir()
     subprocess.run(
@@ -232,24 +379,23 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
 
     monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-a"))
     assert (
-        runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "personal"]).exit_code
-        == 0
+        runner.invoke(app, ["setup", "--path", str(workspace), "--id", "personal"]).exit_code == 0
     )
     assert (
         runner.invoke(
             app,
             [
+                "--workspace",
+                "personal",
                 "workspace",
                 "project",
                 "adopt",
                 "--id",
                 "example",
-                "--workspace",
-                "personal",
                 "--name",
                 "Example",
-                "--document-domain",
-                "mywork/【Example】文档中心",
+                "--domain",
+                "project-example",
                 "--local-path",
                 str(repository),
             ],
@@ -261,7 +407,7 @@ def test_manifest_attaches_workspace_on_another_device_and_project_bind_is_local
     assert "local_path" not in manifest["projects"][0]
 
     monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "device-b"))
-    setup = runner.invoke(app, ["setup", "--workspace", str(workspace), "--default"])
+    setup = runner.invoke(app, ["setup", "--path", str(workspace), "--default"])
     assert setup.exit_code == 0, setup.output
     payload = json.loads(setup.output)
     assert payload["imported_projects"] == ["example"]
@@ -282,8 +428,8 @@ def test_multiple_registered_workspaces_can_be_selected(tmp_path: Path, monkeypa
     right = tmp_path / "right"
     left.mkdir()
     right.mkdir()
-    runner.invoke(app, ["setup", "--workspace", str(left), "--id", "left", "--default"])
-    runner.invoke(app, ["setup", "--workspace", str(right), "--id", "right"])
+    runner.invoke(app, ["setup", "--path", str(left), "--id", "left", "--default"])
+    runner.invoke(app, ["setup", "--path", str(right), "--id", "right"])
     listed = json.loads(runner.invoke(app, ["workspace", "list"]).output)
     assert listed["default_workspace"] == "left"
     assert set(listed["workspaces"]) == {"left", "right"}
@@ -339,8 +485,6 @@ def test_space_and_nested_domain_commands_use_marker_files(tmp_path: Path, monke
         "软件开发",
         "--path",
         "mynote/软件开发",
-        "--space",
-        "knowledge",
         "--type",
         "knowledge-domain",
         "--governance",
@@ -358,14 +502,8 @@ def test_space_and_nested_domain_commands_use_marker_files(tmp_path: Path, monke
         "Python",
         "--path",
         "mynote/软件开发/Python",
-        "--space",
-        "knowledge",
         "--type",
         "knowledge-domain",
-        "--governance",
-        "knowledge-docs",
-        "--parent",
-        "software",
         "--confirm",
     ]
     assert runner.invoke(app, child_args).exit_code == 0
@@ -403,10 +541,6 @@ def test_domain_adopt_declares_existing_directory_without_moving_content(
         "会议记录",
         "--source",
         str(existing),
-        "--target-path",
-        "mywork/会议记录",
-        "--space",
-        "work",
         "--type",
         "work-domain",
         "--governance",
@@ -514,6 +648,7 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
         "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
         encoding="utf-8",
     )
+    write_domain_marker(domain, "project-example", "Example", project_id="example")
     repository.mkdir()
     subprocess.run(
         ["git", "init", "--initial-branch", "main", str(repository)],
@@ -523,23 +658,23 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     )
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
     added_workspace = runner.invoke(
-        app, ["setup", "--workspace", str(workspace), "--id", "personal", "--default"]
+        app, ["setup", "--path", str(workspace), "--id", "personal", "--default"]
     )
     assert added_workspace.exit_code == 0, added_workspace.output
     added = runner.invoke(
         app,
         [
+            "--workspace",
+            "personal",
             "workspace",
             "project",
             "adopt",
             "--id",
             "example",
-            "--workspace",
-            "personal",
             "--name",
             "Example",
-            "--document-domain",
-            "mywork/【Example】文档中心",
+            "--domain",
+            "project-example",
             "--local-path",
             str(repository),
             "--git-remote-url",
@@ -570,6 +705,57 @@ def test_project_registry_and_json_transfer(tmp_path: Path, monkeypatch) -> None
     assert checked["observed"]["document_domain_exists"] is True
     assert checked["observed"]["default_branch"] == "main"
 
+    other_workspace = tmp_path / "other-workspace"
+    other_workspace.mkdir()
+    registered_other = runner.invoke(
+        app,
+        ["setup", "--path", str(other_workspace), "--id", "other"],
+    )
+    assert registered_other.exit_code == 0, registered_other.output
+    assert (
+        json.loads(
+            runner.invoke(app, ["--workspace", "other", "workspace", "project", "list"]).output
+        )["projects"]
+        == []
+    )
+    wrong_workspace = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "other",
+            "workspace",
+            "project",
+            "update",
+            "--id",
+            "example",
+            "--name",
+            "Wrong Workspace",
+        ],
+    )
+    assert wrong_workspace.exit_code == 2
+    assert "属于 Workspace personal" in wrong_workspace.output
+
+    updated = runner.invoke(
+        app,
+        [
+            "--workspace",
+            "personal",
+            "workspace",
+            "project",
+            "update",
+            "--id",
+            "example",
+            "--git-remote-url",
+            "git@example.com:example/renamed.git",
+        ],
+    )
+    updated_payload = json.loads(updated.output)
+    assert updated_payload["name"] == "Example"
+    assert updated_payload["document_domain"] == "mywork/【Example】文档中心"
+    assert updated_payload["local_path"] == str(repository)
+    assert updated_payload["default_branch"] == "main"
+    assert updated_payload["git_remote_url"] == "git@example.com:example/renamed.git"
+
     backup = tmp_path / "registry.json"
     exported = runner.invoke(app, ["workspace", "export", "--output", str(backup)])
     assert json.loads(exported.output)["project_count"] == 1
@@ -594,21 +780,19 @@ def test_project_create_previews_then_initializes_document_domain(
     )
     repository.mkdir()
     monkeypatch.setenv("CAMPFIRE_HOME", str(campfire_home))
-    added = runner.invoke(
-        app, ["setup", "--workspace", str(workspace), "--id", "personal", "--default"]
-    )
+    added = runner.invoke(app, ["setup", "--path", str(workspace), "--id", "personal", "--default"])
     assert added.exit_code == 0, added.output
     arguments = [
+        "--workspace",
+        "personal",
         "workspace",
         "project",
         "create",
         "--id",
         "new-project",
-        "--workspace",
-        "personal",
         "--name",
         "New Project",
-        "--document-domain",
+        "--path",
         "mywork/【New Project】文档中心",
         "--local-path",
         str(repository),
@@ -648,7 +832,7 @@ def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, m
     for workspace_id in ("left", "right"):
         root = tmp_path / workspace_id
         root.mkdir()
-        added = runner.invoke(app, ["setup", "--workspace", str(root), "--id", workspace_id])
+        added = runner.invoke(app, ["setup", "--path", str(root), "--id", workspace_id])
         assert added.exit_code == 0, added.output
         note = root / "mynote" / "知识-相同路径.md"
         note.parent.mkdir()
@@ -681,10 +865,10 @@ def test_base_sync_is_idempotent_and_preserves_unknown_base(workspace: Path) -> 
     target.mkdir()
     custom = target / "我的视图.base"
     custom.write_text("views: []\n", encoding="utf-8")
-    preview = runner.invoke(app, ["--workspace", str(workspace), "base", "sync", "--dry-run"])
+    preview = runner.invoke(app, ["--workspace", "test", "base", "sync", "--dry-run"])
     assert preview.exit_code == 0, preview.output
     assert len(json.loads(preview.output)["operations"]) == 5
-    applied = runner.invoke(app, ["--workspace", str(workspace), "base", "sync"])
+    applied = runner.invoke(app, ["--workspace", "test", "base", "sync"])
     assert applied.exit_code == 0, applied.output
     assert custom.read_text(encoding="utf-8") == "views: []\n"
     assert len(list(target.glob("*.base"))) == 6
@@ -693,26 +877,26 @@ def test_base_sync_is_idempotent_and_preserves_unknown_base(workspace: Path) -> 
         yaml.safe_dump(yaml.safe_load(managed.read_text(encoding="utf-8")), allow_unicode=True),
         encoding="utf-8",
     )
-    repeated = runner.invoke(app, ["--workspace", str(workspace), "base", "sync", "--dry-run"])
+    repeated = runner.invoke(app, ["--workspace", "test", "base", "sync", "--dry-run"])
     assert json.loads(repeated.output)["operations"] == []
-    checked = runner.invoke(app, ["--workspace", str(workspace), "base", "check"])
+    checked = runner.invoke(app, ["--workspace", "test", "base", "check"])
     assert json.loads(checked.output)["status"] == "ok"
 
 
 def test_skill_sync_uses_packaged_ssot_and_is_idempotent(workspace: Path) -> None:
-    preview = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync", "--dry-run"])
+    preview = runner.invoke(app, ["--workspace", "test", "skill", "sync", "--dry-run"])
     assert preview.exit_code == 0, preview.output
     assert json.loads(preview.output)["operations"]
-    applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
+    applied = runner.invoke(app, ["--workspace", "test", "skill", "sync"])
     assert applied.exit_code == 0, applied.output
     assert (workspace / "_global_skills/campfire-workspace-maintenance/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-workspace-restructure/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-context-bootstrap/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-conversation-router/SKILL.md").is_file()
     assert (workspace / "_global_skills/campfire-document-capture/SKILL.md").is_file()
-    repeated = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync", "--dry-run"])
+    repeated = runner.invoke(app, ["--workspace", "test", "skill", "sync", "--dry-run"])
     assert json.loads(repeated.output)["operations"] == []
-    checked = runner.invoke(app, ["--workspace", str(workspace), "skill", "check"])
+    checked = runner.invoke(app, ["--workspace", "test", "skill", "check"])
     assert json.loads(checked.output)["status"] == "ok"
 
 
@@ -721,9 +905,7 @@ def test_skill_resolve_routes_inbox_and_knowledge(workspace: Path) -> None:
         ("_收件箱/用户输入/test.md", ["campfire-workspace-maintenance", "campfire-inbox-triage"]),
         ("mynote/【知识】软件开发/test.md", ["campfire-workspace-maintenance"]),
     ):
-        result = runner.invoke(
-            app, ["--workspace", str(workspace), "skill", "resolve", "--path", path]
-        )
+        result = runner.invoke(app, ["--workspace", "test", "skill", "resolve", "--path", path])
         assert result.exit_code == 0, result.output
         names = [item["name"] for item in json.loads(result.output)["skills"]]
         assert names == expected
@@ -734,7 +916,7 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "skill",
             "resolve",
             "--path",
@@ -749,7 +931,7 @@ def test_skill_resolve_routes_project_task(workspace: Path) -> None:
 
 
 def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
-    listed = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "list"])
+    listed = runner.invoke(app, ["--workspace", "test", "document", "profile", "list"])
     assert listed.exit_code == 0, listed.output
     profiles = json.loads(listed.output)["profiles"]
     assert [profile["name"] for profile in profiles] == [
@@ -760,7 +942,7 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
     ]
     task = runner.invoke(
         app,
-        ["--workspace", str(workspace), "document", "profile", "show", "task"],
+        ["--workspace", "test", "document", "profile", "show", "task"],
     )
     payload = json.loads(task.output)["profile"]
     assert payload["required"][:3] == ["name", "description", "type"]
@@ -777,7 +959,7 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "profile",
             "resolve",
@@ -798,7 +980,7 @@ def test_document_profile_list_reads_effective_user_config(workspace: Path) -> N
             },
         },
     )
-    result = runner.invoke(app, ["--workspace", str(workspace), "document", "profile", "list"])
+    result = runner.invoke(app, ["--workspace", "test", "document", "profile", "list"])
     assert result.exit_code == 0, result.output
     assert "custom" in {item["name"] for item in json.loads(result.output)["profiles"]}
     assert (
@@ -816,7 +998,7 @@ def test_document_type_list_reads_effective_user_config(workspace: Path) -> None
         },
     )
 
-    result = runner.invoke(app, ["--workspace", str(workspace), "document", "type", "list"])
+    result = runner.invoke(app, ["--workspace", "test", "document", "type", "list"])
     assert result.exit_code == 0, result.output
     assert "custom" in {item["name"] for item in json.loads(result.output)["types"]}
     configured = yaml.safe_load(path.read_text(encoding="utf-8"))["document_types"]["types"]
@@ -834,7 +1016,7 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "check",
             "--path",
@@ -849,7 +1031,7 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "format",
             "--path",
@@ -863,7 +1045,7 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "format",
             "--path",
@@ -877,7 +1059,7 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "check",
             "--path",
@@ -894,7 +1076,7 @@ def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# Test\n",
         encoding="utf-8",
     )
-    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
+    result = runner.invoke(app, ["--workspace", "test", "maintenance", "check"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["status"] == "ok"
     state = workspace / "_campfire/workspaces/test"
@@ -922,7 +1104,7 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
         "tags: []\n---\n# 跟进事项\n",
         encoding="utf-8",
     )
-    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
+    result = runner.invoke(app, ["--workspace", "test", "maintenance", "check"])
     payload = json.loads(result.output)
     missing = {
         issue["field"]
@@ -945,7 +1127,7 @@ def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: 
             app,
             [
                 "--workspace",
-                str(workspace),
+                "test",
                 "workspace",
                 "restructure",
                 "inventory",
@@ -957,13 +1139,26 @@ def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: 
         ).exit_code
         == 0
     )
-    assert (
-        runner.invoke(
-            app,
-            ["--workspace", str(workspace), "workspace", "restructure", "plan", "--batch", "b1"],
-        ).exit_code
-        == 0
+    planned = runner.invoke(
+        app,
+        ["--workspace", "test", "workspace", "restructure", "plan", "--batch", "b1"],
     )
+    assert planned.exit_code == 0
+    planned_payload = json.loads(planned.output)
+    assert planned_payload["inventory_count"] == 1
+    assert planned_payload["planned_count"] == 1
+    assert planned_payload["approved_count"] == 0
+    assert planned_payload["unapproved_count"] == 1
+    unapproved = runner.invoke(
+        app,
+        ["--workspace", "test", "workspace", "restructure", "apply", "--batch", "b1"],
+    )
+    unapproved_payload = json.loads(unapproved.output)
+    assert unapproved_payload["status"] == "needs-review"
+    assert unapproved_payload["item_count"] == 1
+    assert unapproved_payload["inventory_count"] == 1
+    assert unapproved_payload["issues"][0]["code"] == "restructure-items-unapproved"
+    assert unapproved_payload["issues"][0]["detail"] == "1"
     plan_path = workspace / "_campfire/workspaces/test/batches/b1/plan.json"
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     assert plan["items"] and plan["items"][0]["approved"] is False
@@ -974,7 +1169,7 @@ def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: 
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "apply",
@@ -986,6 +1181,52 @@ def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: 
     assert result.exit_code == 0
     assert json.loads(result.output)["status"] == "blocked"
     assert "source-hash-changed" in result.output
+
+
+def test_restructure_confirm_never_partially_applies_unapproved_plan(workspace: Path) -> None:
+    first = workspace / "mynote/知识-first.md"
+    second = workspace / "mynote/知识-second.md"
+    first.write_text("---\ntype: knowledge\n---\n", encoding="utf-8")
+    second.write_text("---\ntype: knowledge\n---\n", encoding="utf-8")
+    runner.invoke(
+        app,
+        [
+            "workspace",
+            "restructure",
+            "inventory",
+            "--scope",
+            "mynote",
+            "--batch",
+            "partial",
+        ],
+    )
+    spec = workspace / "partial.yaml"
+    spec.write_text(
+        "operations:\n"
+        "  - source: mynote/知识-first.md\n"
+        "    target: mywork/知识-first.md\n"
+        "    approved: true\n"
+        "  - source: mynote/知识-second.md\n"
+        "    target: mywork/知识-second.md\n",
+        encoding="utf-8",
+    )
+    planned = runner.invoke(
+        app,
+        ["workspace", "restructure", "plan", "--batch", "partial", "--spec", str(spec)],
+    )
+    assert json.loads(planned.output)["approved_count"] == 1
+
+    result = runner.invoke(
+        app,
+        ["workspace", "restructure", "apply", "--batch", "partial", "--confirm"],
+    )
+    payload = json.loads(result.output)
+    assert payload["status"] == "needs-review"
+    assert payload["inventory_count"] == 2
+    assert payload["approved_count"] == 1
+    assert payload["unapproved_count"] == 1
+    assert first.is_file() and second.is_file()
+    assert not (workspace / "mywork/知识-first.md").exists()
 
 
 def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
@@ -1003,7 +1244,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "inventory",
@@ -1028,7 +1269,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "plan",
@@ -1049,7 +1290,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "apply",
@@ -1067,7 +1308,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "apply",
@@ -1078,6 +1319,11 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
     )
     applied_payload = json.loads(applied.output)
     assert applied_payload["status"] == "applied", applied.output
+    assert applied_payload["approved_count"] == 1
+    assert applied_payload["unapproved_count"] == 0
+    assert applied_payload["follow_up"] == [
+        {"command": "maintenance sync", "workspace": "test", "scope": "."}
+    ]
     target = workspace / "mywork" / "知识-迁移.md"
     assert target.is_file() and not source.exists()
     assert "status: draft" in target.read_text(encoding="utf-8")
@@ -1094,7 +1340,7 @@ def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(works
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "inventory",
@@ -1117,7 +1363,7 @@ def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(works
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "plan",
@@ -1131,7 +1377,7 @@ def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(works
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "apply",
@@ -1149,7 +1395,7 @@ def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(works
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "verify",
@@ -1167,7 +1413,7 @@ def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> N
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "inventory",
@@ -1189,7 +1435,7 @@ def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> N
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "workspace",
             "restructure",
             "plan",
@@ -1205,6 +1451,49 @@ def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> N
     assert payload["issues"][0]["allowed"] == ["draft", "current", "archived"]
 
 
+def test_restructure_spec_rejects_unknown_schema_fields_with_json_error(
+    workspace: Path,
+) -> None:
+    source = workspace / "mynote/知识-字段拼错.md"
+    source.write_text("---\ntype: knowledge\n---\n", encoding="utf-8")
+    runner.invoke(
+        app,
+        [
+            "workspace",
+            "restructure",
+            "inventory",
+            "--scope",
+            "mynote",
+            "--batch",
+            "bad-schema",
+        ],
+    )
+    spec = workspace / "bad-schema.yaml"
+    spec.write_text(
+        "operations:\n  - source: mynote/知识-字段拼错.md\n    approve: true\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "workspace",
+            "restructure",
+            "plan",
+            "--batch",
+            "bad-schema",
+            "--spec",
+            str(spec),
+        ],
+    )
+
+    assert result.exit_code == 2
+    payload = json.loads(result.output)
+    assert payload["status"] == "error"
+    assert "重构规格无效" in payload["message"]
+    assert "approve" in payload["message"]
+
+
 def test_maintenance_check_filters_enriches_and_summarizes(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-坏状态.md"
     note.write_text(
@@ -1216,7 +1505,7 @@ def test_maintenance_check_filters_enriches_and_summarizes(workspace: Path) -> N
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "maintenance",
             "check",
             "--scope",
@@ -1234,7 +1523,7 @@ def test_maintenance_check_filters_enriches_and_summarizes(workspace: Path) -> N
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "maintenance",
             "check",
             "--code",
@@ -1256,7 +1545,7 @@ def test_maintenance_discovers_every_declared_space(workspace: Path) -> None:
     )
     (blog / "随手写.md").write_text("缺少 Frontmatter\n", encoding="utf-8")
 
-    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
+    result = runner.invoke(app, ["--workspace", "test", "maintenance", "check"])
     payload = json.loads(result.output)
 
     assert any(
@@ -1275,7 +1564,7 @@ def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> Non
 
     result = runner.invoke(
         app,
-        ["--workspace", str(workspace), "document", "inspect", "--path", "mynote/知识-空字段.md"],
+        ["--workspace", "test", "document", "inspect", "--path", "mynote/知识-空字段.md"],
     )
     payload = json.loads(result.output)
 
@@ -1291,7 +1580,7 @@ def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> Non
 
 def test_document_commands_delegate_workspace_markers(workspace: Path) -> None:
     result = runner.invoke(
-        app, ["--workspace", str(workspace), "document", "inspect", "--path", "mynote/_空间.md"]
+        app, ["--workspace", "test", "document", "inspect", "--path", "mynote/_空间.md"]
     )
     payload = json.loads(result.output)
 
@@ -1303,7 +1592,7 @@ def test_document_commands_delegate_workspace_markers(workspace: Path) -> None:
 def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
     arguments = [
         "--workspace",
-        str(workspace),
+        "test",
         "decision",
         "create",
         "--key",
@@ -1343,7 +1632,7 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "inspect",
             "--path",
@@ -1362,7 +1651,7 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
 
     pending = json.loads(
         runner.invoke(
-            app, ["--workspace", str(workspace), "decision", "list", "--status", "pending"]
+            app, ["--workspace", "test", "decision", "list", "--status", "pending"]
         ).output
     )
     assert [item["id"] for item in pending["decisions"]] == [decision_id]
@@ -1371,7 +1660,7 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "decision",
             "answer",
             decision_id,
@@ -1389,7 +1678,7 @@ def test_decision_lifecycle_is_audited_and_projected(workspace: Path) -> None:
 
     closed = runner.invoke(
         app,
-        ["--workspace", str(workspace), "decision", "close", decision_id, "--actor", "agent"],
+        ["--workspace", "test", "decision", "close", decision_id, "--actor", "agent"],
     )
     assert closed.exit_code == 0, closed.output
     closed_payload = json.loads(closed.output)
@@ -1407,7 +1696,7 @@ def test_decision_rejects_invalid_transition(workspace: Path) -> None:
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "decision",
             "create",
             "--key",
@@ -1420,7 +1709,7 @@ def test_decision_rejects_invalid_transition(workspace: Path) -> None:
     )
     decision_id = json.loads(created.output)["decision"]["id"]
 
-    closed = runner.invoke(app, ["--workspace", str(workspace), "decision", "close", decision_id])
+    closed = runner.invoke(app, ["--workspace", "test", "decision", "close", decision_id])
     assert closed.exit_code != 0
     assert "expected=answered" in closed.output
 
@@ -1429,7 +1718,7 @@ def test_filtered_check_reports_scope_status_and_workspace_status(workspace: Pat
     (workspace / "mynote/坏文档.md").write_text("无 frontmatter\n", encoding="utf-8")
     result = runner.invoke(
         app,
-        ["--workspace", str(workspace), "maintenance", "check", "--code", "template-enum-invalid"],
+        ["--workspace", "test", "maintenance", "check", "--code", "template-enum-invalid"],
     )
     payload = json.loads(result.output)
     assert payload["issue_count"] == 0
@@ -1453,7 +1742,7 @@ def test_document_apply_replaces_semantic_maintenance_plan(workspace: Path) -> N
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "apply",
             "--path",
@@ -1484,7 +1773,7 @@ def test_document_apply_replaces_semantic_maintenance_plan(workspace: Path) -> N
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "document",
             "inspect",
             "--path",
@@ -1512,7 +1801,7 @@ def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> No
     template.write_text("---\ntype: task\nlifecycle: proposed\n---\n", encoding="utf-8")
     result = runner.invoke(
         app,
-        ["--workspace", str(workspace), "maintenance", "check", "--code", "template-enum-invalid"],
+        ["--workspace", "test", "maintenance", "check", "--code", "template-enum-invalid"],
     )
     payload = json.loads(result.output)
     assert payload["issue_count"] == 1
@@ -1557,9 +1846,9 @@ def test_sync_reports_bad_metadata_without_blocking_generated_views(workspace: P
     domain = _create_domain(workspace, "Project")
     (domain / "需求-旧文档.md").write_text("# 缺少元数据\n", encoding="utf-8")
 
-    synced = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "sync"])
+    synced = runner.invoke(app, ["--workspace", "test", "maintenance", "sync"])
     assert synced.exit_code == 0, synced.output
-    result = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
+    result = runner.invoke(app, ["--workspace", "test", "maintenance", "check"])
 
     payload = json.loads(result.output)
     assert result.exit_code == 0, result.output
@@ -1582,7 +1871,7 @@ def test_scoped_sync_ignores_structural_issue_outside_scope(workspace: Path) -> 
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "maintenance",
             "sync",
             "--scope",
@@ -1608,7 +1897,7 @@ def test_scoped_sync_refreshes_index_without_scanning_unrelated_documents(
     healthy_note = healthy / "记录-进展.md"
     healthy_note.write_text("# 进展\n", encoding="utf-8")
     unrelated.write_text("# 无关\n", encoding="utf-8")
-    runner.invoke(app, ["--workspace", str(workspace), "maintenance", "check"])
+    runner.invoke(app, ["--workspace", "test", "maintenance", "check"])
     original_read_text = Path.read_text
     reads: list[Path] = []
 
@@ -1621,7 +1910,7 @@ def test_scoped_sync_refreshes_index_without_scanning_unrelated_documents(
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "maintenance",
             "sync",
             "--scope",
@@ -1657,7 +1946,7 @@ def test_archive_scope_does_not_apply_other_candidates(workspace: Path) -> None:
         app,
         [
             "--workspace",
-            str(workspace),
+            "test",
             "maintenance",
             "archive",
             "apply",
@@ -1711,17 +2000,17 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
     added = runner.invoke(
         app,
         [
+            "--workspace",
+            "test",
             "workspace",
             "project",
             "adopt",
             "--id",
             "example",
-            "--workspace",
-            "test",
             "--name",
             "Old Project",
-            "--document-domain",
-            "mywork/【Old】文档中心",
+            "--domain",
+            "project-old",
         ],
     )
     assert added.exit_code == 0, added.output
@@ -1734,32 +2023,12 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
         "project-old",
         "--name",
         "New",
-        "--rename-directory",
-        "--project-name",
-        "New Project",
     ]
     preview = runner.invoke(app, command)
-    assert json.loads(preview.output)["status"] == "planned"
+    preview_payload = json.loads(preview.output)
+    assert preview_payload["status"] == "planned"
+    assert preview_payload["follow_up"] == []
     assert root.is_dir()
-    real_save_projects = SqliteWorkspaceRepository.save_projects
-    calls = 0
-
-    def fail_once(repository, projects) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise OSError("injected project registry failure")
-        real_save_projects(repository, projects)
-
-    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_once)
-    failed = runner.invoke(app, [*command, "--confirm"])
-    assert failed.exit_code != 0
-    assert root.is_dir()
-    assert not (workspace / "mywork/【New】文档中心").exists()
-    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["name"] == "Old Project"
-    assert project["document_domain"] == "mywork/【Old】文档中心"
-    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", real_save_projects)
     applied = runner.invoke(app, [*command, "--confirm"])
     assert applied.exit_code == 0, applied.output
     applied_payload = json.loads(applied.output)
@@ -1767,15 +2036,15 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
         {
             "command": "maintenance sync",
             "workspace": "test",
-            "scope": "mywork",
+            "scope": "mywork/【Old】文档中心",
         },
     ]
-    renamed = workspace / "mywork/【New】文档中心"
-    assert renamed.is_dir() and not root.exists()
-    assert parse_yaml_frontmatter(renamed / "_领域.md")["domain_id"] == "project-old"
+    assert root.is_dir()
+    assert parse_yaml_frontmatter(root / "_领域.md")["name"] == "New"
+    assert parse_yaml_frontmatter(root / "_领域.md")["domain_id"] == "project-old"
     project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["name"] == "New Project"
-    assert project["document_domain"] == "mywork/【New】文档中心"
+    assert project["name"] == "Old Project"
+    assert project["document_domain"] == "mywork/【Old】文档中心"
 
     rekeyed = runner.invoke(
         app,
@@ -1791,26 +2060,472 @@ def test_domain_restructure_renames_moves_and_rekeys_with_project_metadata(
         ],
     )
     assert rekeyed.exit_code == 0, rekeyed.output
-    assert parse_yaml_frontmatter(renamed / "_领域.md")["domain_id"] == "project-new"
-    assert parse_yaml_frontmatter(renamed / "Child/_领域.md")["parent_domain"] == "project-new"
+    assert parse_yaml_frontmatter(root / "_领域.md")["domain_id"] == "project-new"
+    assert parse_yaml_frontmatter(root / "Child/_领域.md")["parent_domain"] == "project-new"
 
-    moved = runner.invoke(
+    destination = workspace / "mywork/Destination"
+    destination.mkdir()
+    (destination / "_领域.md").write_text(
+        "---\nname: Destination\ndomain_id: project-destination\n"
+        "domain_type: project-domain\ngovernance: project-docs\n"
+        "moc: '[[MOC-Destination]]'\nproject_id: example\n"
+        "status: active\n---\n\n# Destination\n",
+        encoding="utf-8",
+    )
+    (destination / "MOC-Destination.md").write_text(moc_body, encoding="utf-8")
+
+    move_command = [
+        "workspace",
+        "domain",
+        "move",
+        "--domain",
+        "project-new",
+        "--target",
+        "project-destination",
+    ]
+    real_save_projects = SqliteWorkspaceRepository.save_projects
+    calls = 0
+
+    def fail_once(repository, projects) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("injected project registry failure")
+        real_save_projects(repository, projects)
+
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_once)
+    failed = runner.invoke(app, [*move_command, "--confirm"])
+    assert failed.exit_code != 0
+    assert root.is_dir()
+    assert not (destination / root.name).exists()
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["document_domain"] == "mywork/【Old】文档中心"
+
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", real_save_projects)
+    moved = runner.invoke(app, [*move_command, "--confirm"])
+    assert moved.exit_code == 0, moved.output
+    moved_root = destination / root.name
+    assert (moved_root / "_领域.md").is_file()
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["document_domain"] == "mywork/Destination/【Old】文档中心"
+
+
+def test_domain_merge_moves_content_reparents_children_and_removes_source(
+    workspace: Path,
+) -> None:
+    source = _create_domain(workspace, "Source", domain_id="source")
+    target = _create_domain(workspace, "Target", domain_id="target")
+    note = source / "记录-迁移.md"
+    note.write_text(
+        "---\nname: 迁移\ntype: record\ndomain: source\n---\n# 迁移\n",
+        encoding="utf-8",
+    )
+    asset = source / "assets/diagram.bin"
+    asset.parent.mkdir()
+    asset.write_bytes(b"diagram")
+    child = source / "Child"
+    child.mkdir()
+    (child / "_领域.md").write_text(
+        "---\nname: Child\ndomain_id: child\ndomain_type: project-domain\n"
+        "governance: project-docs\nmoc: '[[MOC-Child]]'\n"
+        "parent_domain: source\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
+    (child / "MOC-Child.md").write_text(
+        "# MOC\n\n<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
+        "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n",
+        encoding="utf-8",
+    )
+    reference = workspace / "mywork/引用.canvas"
+    reference.write_text("mywork/Source/记录-迁移.md\n", encoding="utf-8")
+    command = [
+        "workspace",
+        "domain",
+        "merge",
+        "--source",
+        "source",
+        "--target",
+        "target",
+    ]
+
+    preview = runner.invoke(app, command)
+    preview_payload = json.loads(preview.output)
+    assert preview.exit_code == 0, preview.output
+    assert preview_payload["status"] == "planned"
+    assert preview_payload["follow_up"] == []
+    assert preview_payload["child_domain_count"] == 1
+    assert preview_payload["reference_count"] == 1
+    assert any(
+        operation["action"] == "update-reference" and operation["path"] == "mywork/引用.canvas"
+        for operation in preview_payload["operations"]
+    )
+    assert source.is_dir()
+
+    applied = runner.invoke(app, [*command, "--confirm"])
+    payload = json.loads(applied.output)
+    assert applied.exit_code == 0, applied.output
+    assert payload["status"] == "applied"
+    assert payload["follow_up"] == [
+        {"command": "maintenance sync", "workspace": "test", "scope": "mywork"}
+    ]
+    assert not source.exists()
+    moved_note = target / "记录-迁移.md"
+    assert parse_yaml_frontmatter(moved_note)["domain"] == "target"
+    assert (target / "assets/diagram.bin").read_bytes() == b"diagram"
+    assert parse_yaml_frontmatter(target / "Child/_领域.md")["parent_domain"] == "target"
+    assert "mywork/Target/记录-迁移.md" in reference.read_text(encoding="utf-8")
+
+
+def test_domain_merge_rebinds_project_root_atomically(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = workspace / "mywork/Source"
+    target = workspace / "mywork/Target"
+    write_domain_marker(source, "source", "Source", project_id="example")
+    write_domain_marker(target, "target", "Target", project_id="example")
+    note = source / "记录-迁移.md"
+    note.write_text("# 迁移\n", encoding="utf-8")
+    (workspace / ".campfire.yaml").write_text(
+        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "  governance_version: 1\nprojects: []\n",
+        encoding="utf-8",
+    )
+    adopted = runner.invoke(
+        app,
+        [
+            "workspace",
+            "project",
+            "adopt",
+            "--id",
+            "example",
+            "--name",
+            "Example",
+            "--domain",
+            "source",
+        ],
+    )
+    assert adopted.exit_code == 0, adopted.output
+
+    command = [
+        "workspace",
+        "domain",
+        "merge",
+        "--source",
+        "source",
+        "--target",
+        "target",
+    ]
+    preview = json.loads(runner.invoke(app, command).output)
+    assert preview["affected_projects"] == ["example"]
+
+    real_save_projects = SqliteWorkspaceRepository.save_projects
+    calls = 0
+
+    def fail_once(repository, projects) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("injected project registry failure")
+        real_save_projects(repository, projects)
+
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", fail_once)
+    failed = runner.invoke(app, [*command, "--confirm"])
+    assert failed.exit_code != 0
+    assert source.is_dir()
+    assert not (target / note.name).exists()
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["document_domain"] == "mywork/Source"
+
+    monkeypatch.setattr(SqliteWorkspaceRepository, "save_projects", real_save_projects)
+    applied = runner.invoke(app, [*command, "--confirm"])
+    assert applied.exit_code == 0, applied.output
+    assert (target / note.name).is_file()
+    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
+    assert project["document_domain"] == "mywork/Target"
+    manifest = yaml.safe_load((workspace / ".campfire.yaml").read_text(encoding="utf-8"))
+    assert manifest["projects"][0]["document_domain"] == "mywork/Target"
+
+
+def test_domain_merge_blocks_a_concurrent_source_change(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _create_domain(workspace, "Source", domain_id="source")
+    target = _create_domain(workspace, "Target", domain_id="target")
+    note = source / "记录-并发.md"
+    note.write_text("before\n", encoding="utf-8")
+    real_transaction = FileChangeExecutor.transaction
+
+    @contextmanager
+    def inject_change(executor, changes):
+        note.write_text("concurrent\n", encoding="utf-8")
+        with real_transaction(executor, changes):
+            yield
+
+    monkeypatch.setattr(FileChangeExecutor, "transaction", inject_change)
+    result = runner.invoke(
         app,
         [
             "workspace",
             "domain",
-            "move",
-            "--domain",
-            "project-new",
-            "--target-path",
-            "mywork/Moved",
+            "merge",
+            "--source",
+            "source",
+            "--target",
+            "target",
             "--confirm",
         ],
     )
-    assert moved.exit_code == 0, moved.output
-    assert (workspace / "mywork/Moved/_领域.md").is_file()
-    project = json.loads(runner.invoke(app, ["workspace", "project", "show", "example"]).output)
-    assert project["document_domain"] == "mywork/Moved"
+
+    assert result.exit_code == 3
+    assert "发生变化" in result.output
+    assert note.read_text(encoding="utf-8") == "concurrent\n"
+    assert not (target / note.name).exists()
+
+
+def test_domain_merge_blocks_conflicts_and_authored_declarations(workspace: Path) -> None:
+    source = _create_domain(workspace, "Source", domain_id="source")
+    target = _create_domain(workspace, "Target", domain_id="target")
+    (source / "记录-冲突.md").write_text("source\n", encoding="utf-8")
+    (target / "记录-冲突.md").write_text("target\n", encoding="utf-8")
+    (source / "_领域.md").write_text(
+        (source / "_领域.md").read_text(encoding="utf-8") + "\n人工边界说明。\n",
+        encoding="utf-8",
+    )
+    (source / "MOC-Source.md").write_text(
+        (source / "MOC-Source.md").read_text(encoding="utf-8") + "\n人工导航说明。\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "workspace",
+            "domain",
+            "merge",
+            "--source",
+            "source",
+            "--target",
+            "target",
+            "--confirm",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert payload["status"] == "blocked"
+    assert {issue["code"] for issue in payload["issues"]} >= {
+        "domain-merge-target-exists",
+        "domain-merge-authored-marker",
+        "domain-merge-authored-moc",
+    }
+    assert source.is_dir()
+
+
+def test_domain_merge_rejects_cycles_and_project_conflicts(workspace: Path) -> None:
+    source = _create_domain(workspace, "Source", domain_id="source")
+    child = source / "Child"
+    write_domain_marker(child, "child", "Child")
+    cycle = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "domain", "merge", "--source", "source", "--target", "child"],
+        ).output
+    )
+    assert cycle["status"] == "blocked"
+    assert "domain-merge-target-inside-source" in {issue["code"] for issue in cycle["issues"]}
+
+    left = workspace / "mywork/Left"
+    right = workspace / "mywork/Right"
+    write_domain_marker(left, "left", "Left", project_id="left-project")
+    write_domain_marker(right, "right", "Right", project_id="right-project")
+    conflict = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "domain", "merge", "--source", "left", "--target", "right"],
+        ).output
+    )
+    assert conflict["status"] == "blocked"
+    assert "domain-merge-project-conflict" in {issue["code"] for issue in conflict["issues"]}
+
+
+def test_domain_merge_can_cross_spaces_when_governance_matches(workspace: Path) -> None:
+    source = workspace / "mywork/Source"
+    target = workspace / "mynote/Target"
+    write_domain_marker(source, "source", "Source", governance="knowledge-docs")
+    write_domain_marker(target, "target", "Target", governance="knowledge-docs")
+    (source / "知识-迁移.md").write_text("# 跨 Space\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "workspace",
+            "domain",
+            "merge",
+            "--source",
+            "source",
+            "--target",
+            "target",
+            "--confirm",
+        ],
+    )
+
+    payload = json.loads(result.output)
+    assert payload["status"] == "applied"
+    assert (target / "知识-迁移.md").is_file()
+    assert payload["follow_up"] == [
+        {"command": "maintenance sync", "workspace": "test", "scope": "."}
+    ]
+
+
+def test_domain_merge_can_move_between_different_parents(workspace: Path) -> None:
+    left = workspace / "mywork/Left"
+    right = workspace / "mywork/Right"
+    write_domain_marker(left, "left", "Left")
+    write_domain_marker(right, "right", "Right")
+    source = left / "Source"
+    target = right / "Target"
+    write_domain_marker(source, "source", "Source", parent_domain="left")
+    write_domain_marker(target, "target", "Target", parent_domain="right")
+    (source / "记录-迁移.md").write_text("# 跨父级\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "workspace",
+            "domain",
+            "merge",
+            "--source",
+            "source",
+            "--target",
+            "target",
+            "--confirm",
+        ],
+    )
+
+    assert json.loads(result.output)["status"] == "applied"
+    assert not source.exists()
+    assert (target / "记录-迁移.md").is_file()
+
+
+def test_domain_delete_only_removes_logically_empty_domain(workspace: Path) -> None:
+    empty = _create_domain(workspace, "Empty", domain_id="empty")
+    command = ["workspace", "domain", "delete", "--domain", "empty"]
+    preview = runner.invoke(app, command)
+    preview_payload = json.loads(preview.output)
+    assert preview_payload["status"] == "planned"
+    assert preview_payload["follow_up"] == []
+    assert {operation["action"] for operation in preview_payload["operations"]} == {
+        "delete-file",
+        "delete-directory",
+    }
+    assert empty.is_dir()
+
+    applied = runner.invoke(app, [*command, "--confirm"])
+    payload = json.loads(applied.output)
+    assert applied.exit_code == 0, applied.output
+    assert payload["status"] == "applied"
+    assert payload["follow_up"] == [
+        {"command": "maintenance sync", "workspace": "test", "scope": "mywork"}
+    ]
+    assert not empty.exists()
+
+    nonempty = _create_domain(workspace, "Nonempty", domain_id="nonempty")
+    (nonempty / "记录-保留.md").write_text("keep\n", encoding="utf-8")
+    blocked = runner.invoke(
+        app,
+        [
+            "workspace",
+            "domain",
+            "delete",
+            "--domain",
+            "nonempty",
+            "--confirm",
+        ],
+    )
+    blocked_payload = json.loads(blocked.output)
+    assert blocked_payload["status"] == "blocked"
+    assert blocked_payload["issues"][0]["code"] == "domain-delete-not-empty"
+    assert "domain merge" in blocked_payload["issues"][0]["hint"]
+    assert nonempty.is_dir()
+
+
+def test_domain_delete_blocks_authored_child_and_project_domains(workspace: Path) -> None:
+    authored = _create_domain(workspace, "Authored", domain_id="authored")
+    (authored / "MOC-Authored.md").write_text(
+        (authored / "MOC-Authored.md").read_text(encoding="utf-8") + "\n人工说明。\n",
+        encoding="utf-8",
+    )
+    authored_result = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "domain", "delete", "--domain", "authored", "--confirm"],
+        ).output
+    )
+    assert "domain-delete-authored-moc" in {issue["code"] for issue in authored_result["issues"]}
+
+    parent = _create_domain(workspace, "Parent", domain_id="parent")
+    write_domain_marker(parent / "Child", "child", "Child")
+    child_result = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "domain", "delete", "--domain", "parent", "--confirm"],
+        ).output
+    )
+    assert "domain-delete-child-domains" in {issue["code"] for issue in child_result["issues"]}
+
+    project_root = _create_domain(workspace, "Project", domain_id="project-root")
+    (workspace / ".campfire.yaml").write_text(
+        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "  governance_version: 1\nprojects: []\n",
+        encoding="utf-8",
+    )
+    adopted = runner.invoke(
+        app,
+        [
+            "workspace",
+            "project",
+            "adopt",
+            "--id",
+            "example",
+            "--name",
+            "Example",
+            "--domain",
+            "project-root",
+        ],
+    )
+    assert adopted.exit_code == 0, adopted.output
+    project_result = json.loads(
+        runner.invoke(
+            app,
+            ["workspace", "domain", "delete", "--domain", "project-root", "--confirm"],
+        ).output
+    )
+    assert "domain-delete-project-bound" in {issue["code"] for issue in project_result["issues"]}
+    assert project_root.is_dir()
+
+
+def test_domain_delete_follow_up_removes_last_index_projection(workspace: Path) -> None:
+    import sqlite3
+
+    domain = _create_domain(workspace, "Last", domain_id="last")
+    runner.invoke(app, ["maintenance", "sync", "--scope", "mywork"])
+    database = workspace / "_campfire/campfire.db"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "select domain_id from domains where workspace_id = 'test'"
+        ).fetchall() == [("last",)]
+
+    deleted = runner.invoke(
+        app,
+        ["workspace", "domain", "delete", "--domain", "last", "--confirm"],
+    )
+    assert json.loads(deleted.output)["status"] == "applied"
+    assert not domain.exists()
+    synced = runner.invoke(app, ["maintenance", "sync", "--scope", "mywork"])
+    assert json.loads(synced.output)["status"] == "synced"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "select count(*) from domains where workspace_id = 'test'"
+        ).fetchone() == (0,)
 
 
 def parse_yaml_frontmatter(path: Path) -> dict:
@@ -1865,8 +2580,6 @@ def test_external_folder_adoption_stages_applies_and_preserves_source(workspace:
         "knowledge-go-concurrency",
         "--name",
         "Go并发",
-        "--space",
-        "knowledge",
         "--type",
         "knowledge-domain",
         "--governance",
@@ -1874,7 +2587,9 @@ def test_external_folder_adoption_stages_applies_and_preserves_source(workspace:
     ]
     preview = runner.invoke(app, command)
     assert preview.exit_code == 0, preview.output
-    assert json.loads(preview.output)["status"] == "planned"
+    preview_payload = json.loads(preview.output)
+    assert preview_payload["status"] == "planned"
+    assert preview_payload["follow_up"] == []
     assert not (workspace / "mynote/Go并发").exists()
 
     applied = runner.invoke(app, [*command, "--confirm"])
@@ -1907,14 +2622,10 @@ def test_internal_folder_adoption_is_applied_in_place(
         "adopt",
         "--source",
         str(source),
-        "--target-path",
-        "mynote/LooseNotes",
         "--id",
         "knowledge-loose-notes",
         "--name",
         "零散笔记",
-        "--space",
-        "knowledge",
         "--type",
         "knowledge-domain",
         "--governance",
@@ -1972,8 +2683,6 @@ def test_adoption_blocks_symbolic_links(workspace: Path) -> None:
             "knowledge-linked",
             "--name",
             "链接",
-            "--space",
-            "knowledge",
             "--type",
             "knowledge-domain",
             "--governance",
@@ -2011,7 +2720,7 @@ def test_sync_does_not_flag_crlf_generated_file_as_concurrent_change(
     )
     (domain / "知识-条目.md").write_text("# 条目\n", encoding="utf-8")
 
-    first = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "sync"])
+    first = runner.invoke(app, ["--workspace", "test", "maintenance", "sync"])
     assert first.exit_code == 0, first.output
     assert json.loads(first.output)["status"] == "synced", first.output
 
@@ -2022,7 +2731,7 @@ def test_sync_does_not_flag_crlf_generated_file_as_concurrent_change(
         relation_page.read_text(encoding="utf-8").replace("\n", "\r\n").encode("utf-8")
     )
 
-    second = runner.invoke(app, ["--workspace", str(workspace), "maintenance", "sync"])
+    second = runner.invoke(app, ["--workspace", "test", "maintenance", "sync"])
     assert second.exit_code == 0, second.output
     payload = json.loads(second.output)
     assert payload["status"] == "synced", second.output
@@ -2046,14 +2755,14 @@ def test_skill_commands_work_without_registered_workspace(tmp_path: Path, monkey
 def test_skill_sync_rewrites_crlf_target_without_concurrent_change(
     workspace: Path,
 ) -> None:
-    applied = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
+    applied = runner.invoke(app, ["--workspace", "test", "skill", "sync"])
     assert applied.exit_code == 0, applied.output
 
     target = next((workspace / "_global_skills").glob("campfire-document-capture/SKILL.md"))
     stale = target.read_text(encoding="utf-8") + "\n<!-- 旧版本残留 -->\n"
     target.write_bytes(stale.replace("\n", "\r\n").encode("utf-8"))
 
-    result = runner.invoke(app, ["--workspace", str(workspace), "skill", "sync"])
+    result = runner.invoke(app, ["--workspace", "test", "skill", "sync"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["status"] == "synced", result.output
@@ -2088,25 +2797,35 @@ def test_project_resolve_does_not_match_by_shared_remote_alone(tmp_path: Path, m
         capture_output=True,
         text=True,
     )
-    runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "personal", "--default"])
+    runner.invoke(app, ["setup", "--path", str(workspace), "--id", "personal", "--default"])
     registered_app = monorepo / "apps" / "registered-app"
     registered_app.mkdir(parents=True)
+    (workspace / "mywork").mkdir()
+    (workspace / "mywork/_空间.md").write_text(
+        "---\nname: 工作\nspace_id: work\nspace_type: work\nstatus: active\n---\n",
+        encoding="utf-8",
+    )
     domain_dir = workspace / "mywork" / "example"
-    domain_dir.mkdir(parents=True)
+    write_domain_marker(
+        domain_dir,
+        "project-registered-app",
+        "Registered App",
+        project_id="registered-app",
+    )
     added = runner.invoke(
         app,
         [
+            "--workspace",
+            "personal",
             "workspace",
             "project",
             "adopt",
             "--id",
             "registered-app",
-            "--workspace",
-            "personal",
             "--name",
             "Registered App",
-            "--document-domain",
-            "mywork/example",
+            "--domain",
+            "project-registered-app",
             "--local-path",
             str(registered_app),
             "--git-remote-url",
@@ -2136,7 +2855,7 @@ def test_setup_injects_agent_hints_idempotently(workspace: Path, monkeypatch) ->
     claude_md = workspace / "CLAUDE.md"
     agents_md = workspace / "AGENTS.md"
     monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", f"{claude_md}{os.pathsep}{agents_md}")
-    first = runner.invoke(app, ["setup", "--workspace", str(workspace), "--id", "test"])
+    first = runner.invoke(app, ["setup", "--path", str(workspace), "--id", "test"])
     assert first.exit_code == 0, first.output
     payload = json.loads(first.output)
     actions = payload["resources"]["agent_hints"]
@@ -2144,7 +2863,7 @@ def test_setup_injects_agent_hints_idempotently(workspace: Path, monkeypatch) ->
     for item in [claude_md, agents_md]:
         assert "campfire:agent-hints:start" in item.read_text(encoding="utf-8")
 
-    second = runner.invoke(app, ["setup", "--workspace", str(workspace)])
+    second = runner.invoke(app, ["setup", "--path", str(workspace)])
     assert second.exit_code == 0, second.output
     assert {item["action"] for item in json.loads(second.output)["resources"]["agent_hints"]} == {
         "kept"
@@ -2237,7 +2956,7 @@ def test_setup_without_workspace_syncs_global_resources_and_prints_guidance(
     payload = json.loads(result.output)
     assert payload["status"] == "needs-input"
     commands = {item["command"] for item in payload["paths"]}
-    assert "campfire setup --workspace <vault路径> [--id <id>] --default" in commands
+    assert "campfire setup --path <vault路径> [--id <id>] --default" in commands
     assert any("workspace create" in command for command in commands)
     assert any("upgrade" in command for command in commands)
     assert payload["resources"]["skills"]["status"] == "synced"

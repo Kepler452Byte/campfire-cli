@@ -18,8 +18,8 @@ description: "把 Vault 内外已有文档文件夹首次接管为 Campfire Doma
 ## SOP
 
 1. 运行 `campfire workspace resolve`，确认唯一 Workspace。
-2. 阅读真实文档，确认 Space、目标路径、稳定 `domain_id`、领域名称、治理类型及可选父 Domain/Project。无法确定唯一归属时先询问用户或创建 Decision。
-3. 运行一次不带 `--confirm` 的 `campfire workspace domain adopt --source <folder> --target-path <path> --id <id> --name <name> --space <id> --type <type> --governance <policy>`，审查文件清单、目标和 issues。
+2. 阅读真实文档，确认目标位置、稳定 `domain_id`、领域名称和领域类型。CLI 从目标路径推导 Space 与最近父 Domain；嵌套 Domain 自动继承 governance/Project，根 Domain 才显式提供。无法确定唯一归属时先询问用户或创建 Decision。
+3. Vault 内原地接管运行一次 `campfire workspace domain adopt --source <folder> --id <id> --name <name> --type <type> [--governance <policy>] [--project <id>]`；外部来源额外提供 `--target-path <workspace-relative-path>`。审查文件清单、推导出的目标和 issues。
 4. 用户已授权且没有冲突时，对完全相同的命令追加 `--confirm`。不要拆成 inventory/plan/apply/verify，也不要创建持久化接管批次。
 5. 成功后只执行结果返回的 `follow_up`；需要多个子领域时，再加载 Restructure Skill。
 

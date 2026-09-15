@@ -239,12 +239,8 @@ class WorkspaceService:
         if selector is not None:
             if selector in registry.workspaces:
                 return selector, Path(registry.workspaces[selector].path).expanduser().resolve()
-            candidate = Path(selector).expanduser().resolve()
-            for workspace_id, entry in registry.workspaces.items():
-                if Path(entry.path).expanduser().resolve() == candidate:
-                    return workspace_id, candidate
             raise ConfigurationError(
-                f"Workspace 未注册：{selector}；请运行 campfire setup --workspace <path> --id <id>"
+                f"Workspace 未注册：{selector}；请运行 campfire setup --path <path> --id <id>"
             )
         current = (cwd or safe_cwd()).resolve()
         matches = [
@@ -260,7 +256,7 @@ class WorkspaceService:
             return registry.default_workspace, Path(entry.path).expanduser().resolve()
         raise ConfigurationError(
             "没有可用 Workspace；已有 Vault（含 .campfire.yaml）运行 "
-            "campfire setup --workspace <path> --default，"
+            "campfire setup --path <path> --default，"
             "已有 Vault（无 Manifest）追加 --id <id>，全新目录运行 "
             "campfire workspace create --id <id> --path <path> --default"
         )

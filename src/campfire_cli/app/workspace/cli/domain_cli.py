@@ -4,11 +4,8 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolution, selector
 from campfire_cli.app.workspace.service.structure_service import DomainService
-from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
-from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import campfire_home
 from campfire_cli.container import AppContainer
 
@@ -17,60 +14,56 @@ domain_cli = typer.Typer(
 )
 
 
-def service(workspace: str | None) -> DomainService:
-    home = campfire_home()
-    resolved = WorkspaceService(home, SqliteWorkspaceRepository(home)).resolve(
-        workspace, safe_cwd()
-    )
-    return DomainService(Path(resolved.workspace), home)
+def service(ctx: typer.Context) -> DomainService:
+    resolved = resolution(ctx)
+    return DomainService(Path(resolved.workspace), campfire_home())
 
 
-def applications(ctx: typer.Context, workspace: str | None) -> AppContainer:
-    selector = workspace or ctx.find_root().params.get("workspace")
-    return AppContainer.build(selector)
+def applications(ctx: typer.Context) -> AppContainer:
+    return AppContainer.build(selector(ctx))
 
 
 @domain_cli.command("list")
 def list_domains(
+    ctx: typer.Context,
     space: str | None = typer.Option(None, "--space"),
-    workspace: str | None = typer.Option(None, "--workspace"),
 ) -> None:
-    emit(invoke(lambda: service(workspace).list(space)))
+    emit(invoke(lambda: service(ctx).list(space)))
 
 
 @domain_cli.command("show")
-def show(domain_id: str, workspace: str | None = typer.Option(None, "--workspace")) -> None:
-    emit(invoke(lambda: service(workspace).show(domain_id)))
+def show(ctx: typer.Context, domain_id: str) -> None:
+    emit(invoke(lambda: service(ctx).show(domain_id)))
 
 
 @domain_cli.command("check")
-def check(workspace: str | None = typer.Option(None, "--workspace")) -> None:
-    emit(invoke(lambda: service(workspace).check()))
+def check(ctx: typer.Context) -> None:
+    emit(invoke(lambda: service(ctx).check()))
 
 
 @domain_cli.command("create")
 def create(
-    domain_id: str = typer.Option(..., "--id"),
-    name: str = typer.Option(..., "--name"),
-    path: str = typer.Option(..., "--path"),
-    space: str = typer.Option(..., "--space"),
-    domain_type: str = typer.Option(..., "--type"),
-    governance: str = typer.Option(..., "--governance"),
-    parent: str | None = typer.Option(None, "--parent"),
-    project: str | None = typer.Option(None, "--project"),
-    workspace: str | None = typer.Option(None, "--workspace"),
+    ctx: typer.Context,
+    domain_id: str = typer.Option(..., "--id", help="稳定 Domain id"),
+    name: str = typer.Option(..., "--name", help="Domain 显示名称"),
+    path: str = typer.Option(..., "--path", help="待创建 Domain 的 Workspace 相对路径"),
+    domain_type: str = typer.Option(..., "--type", help="Domain 类型"),
+    governance: str | None = typer.Option(
+        None, "--governance", help="根 Domain 必填；嵌套 Domain 自动继承"
+    ),
+    project: str | None = typer.Option(
+        None, "--project", help="根 project-docs Domain 必填；嵌套 Domain 自动继承"
+    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(
         invoke(
-            lambda: service(workspace).create(
+            lambda: service(ctx).create(
                 domain_id=domain_id,
                 name=name,
                 path=path,
-                space_id=space,
                 domain_type=domain_type,
                 governance=governance,
-                parent_domain=parent,
                 project_id=project,
                 confirm=confirm,
             )
@@ -81,29 +74,30 @@ def create(
 @domain_cli.command("adopt")
 def adopt(
     ctx: typer.Context,
-    source: Path = typer.Option(..., "--source"),
-    domain_id: str = typer.Option(..., "--id"),
-    name: str = typer.Option(..., "--name"),
-    target_path: str = typer.Option(..., "--target-path"),
-    space: str = typer.Option(..., "--space"),
-    domain_type: str = typer.Option(..., "--type"),
-    governance: str = typer.Option(..., "--governance"),
-    parent: str | None = typer.Option(None, "--parent"),
-    project: str | None = typer.Option(None, "--project"),
-    workspace: str | None = typer.Option(None, "--workspace"),
+    source: Path = typer.Option(..., "--source", help="待接管目录；可位于 Workspace 外"),
+    domain_id: str = typer.Option(..., "--id", help="稳定 Domain id"),
+    name: str = typer.Option(..., "--name", help="Domain 显示名称"),
+    target_path: str | None = typer.Option(
+        None, "--target-path", help="外部来源必填；内部来源省略时原地接管"
+    ),
+    domain_type: str = typer.Option(..., "--type", help="Domain 类型"),
+    governance: str | None = typer.Option(
+        None, "--governance", help="根 Domain 必填；嵌套 Domain 自动继承"
+    ),
+    project: str | None = typer.Option(
+        None, "--project", help="根 project-docs Domain 必填；嵌套 Domain 自动继承"
+    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(
         invoke(
-            lambda: applications(ctx, workspace).adoption.adopt(
+            lambda: applications(ctx).adoption.adopt(
                 source,
                 domain_id=domain_id,
                 name=name,
                 target_path=target_path,
-                space_id=space,
                 domain_type=domain_type,
                 governance=governance,
-                parent_domain=parent,
                 project_id=project,
                 confirm=confirm,
             )
@@ -116,21 +110,14 @@ def rename(
     ctx: typer.Context,
     domain_id: str = typer.Option(..., "--domain"),
     name: str = typer.Option(..., "--name"),
-    rename_directory: bool = typer.Option(False, "--rename-directory"),
-    target_path: str | None = typer.Option(None, "--target-path"),
-    project_name: str | None = typer.Option(None, "--project-name"),
     confirm: bool = typer.Option(False, "--confirm"),
-    workspace: str | None = typer.Option(None, "--workspace"),
 ) -> None:
-    """修改领域显示名称；可显式联动目录和 Project 展示名称。"""
+    """修改 Domain 显示名称，不隐式修改目录或 Project。"""
     emit(
         invoke(
-            lambda: applications(ctx, workspace).domain_restructure.rename(
+            lambda: applications(ctx).domain_restructure.rename(
                 domain_id,
                 name,
-                rename_directory=rename_directory,
-                target_path=target_path,
-                project_name=project_name,
                 confirm=confirm,
             )
         )
@@ -141,18 +128,15 @@ def rename(
 def move(
     ctx: typer.Context,
     domain_id: str = typer.Option(..., "--domain"),
-    target_path: str = typer.Option(..., "--target-path"),
-    parent_domain: str | None = typer.Option(None, "--parent-domain"),
+    target: str = typer.Option(..., "--target", help="目标 Space 或 Domain 的稳定 id"),
     confirm: bool = typer.Option(False, "--confirm"),
-    workspace: str | None = typer.Option(None, "--workspace"),
 ) -> None:
-    """移动完整领域目录，并更新父领域、Project、Manifest 和路径引用。"""
+    """把完整 Domain 移入目标 Space 或 Domain，并更新关联事实。"""
     emit(
         invoke(
-            lambda: applications(ctx, workspace).domain_restructure.move(
+            lambda: applications(ctx).domain_restructure.move(
                 domain_id,
-                target_path,
-                parent_domain=parent_domain,
+                target,
                 confirm=confirm,
             )
         )
@@ -165,13 +149,33 @@ def rekey(
     domain_id: str = typer.Option(..., "--domain"),
     new_id: str = typer.Option(..., "--new-id"),
     confirm: bool = typer.Option(False, "--confirm"),
-    workspace: str | None = typer.Option(None, "--workspace"),
 ) -> None:
     """高风险修改稳定 domain_id，并更新直接子领域引用。"""
     emit(
         invoke(
-            lambda: applications(ctx, workspace).domain_restructure.rekey(
-                domain_id, new_id, confirm=confirm
-            )
+            lambda: applications(ctx).domain_restructure.rekey(domain_id, new_id, confirm=confirm)
         )
     )
+
+
+@domain_cli.command("merge")
+def merge(
+    ctx: typer.Context,
+    source: str = typer.Option(..., "--source", help="待移除的源 Domain id"),
+    target: str = typer.Option(..., "--target", help="接收内容的目标 Domain id"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """把源 Domain 原子合并到目标 Domain；默认只预览。"""
+    emit(
+        invoke(lambda: applications(ctx).domain_restructure.merge(source, target, confirm=confirm))
+    )
+
+
+@domain_cli.command("delete")
+def delete(
+    ctx: typer.Context,
+    domain_id: str = typer.Option(..., "--domain"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """删除逻辑空 Domain；默认只预览且不支持递归删除。"""
+    emit(invoke(lambda: applications(ctx).domain_restructure.delete(domain_id, confirm=confirm)))

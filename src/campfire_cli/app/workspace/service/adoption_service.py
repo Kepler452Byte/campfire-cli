@@ -53,13 +53,11 @@ class AdoptionService:
         self,
         source: Path,
         *,
-        target_path: str,
+        target_path: str | None,
         domain_id: str,
         name: str,
-        space_id: str,
         domain_type: str,
-        governance: str,
-        parent_domain: str | None = None,
+        governance: str | None = None,
         project_id: str | None = None,
         confirm: bool = False,
     ) -> AdoptionResult:
@@ -69,8 +67,12 @@ class AdoptionService:
         if source == self._settings.vault_root:
             raise ConfigurationError("不能把整个 Workspace 接管为一个 Domain")
         source_kind = "internal" if self._settings.vault_root in source.parents else "external"
+        if target_path is None:
+            if source_kind != "internal":
+                raise ConfigurationError("外部来源必须提供 --target-path")
+            target_path = source.relative_to(self._settings.vault_root).as_posix()
         inventory, issues = self._scan(source)
-        target = self._validate_target(target_path, space_id)
+        target, space_id = self._validate_target(target_path)
         domain = self._domain(
             target,
             domain_id=domain_id,
@@ -78,12 +80,11 @@ class AdoptionService:
             space_id=space_id,
             domain_type=domain_type,
             governance=governance,
-            parent_domain=parent_domain,
             project_id=project_id,
         )
         follow_up_scopes = [target_path]
-        if parent_domain:
-            follow_up_scopes.append(self._domains.show(parent_domain).path)
+        if domain.parent_domain:
+            follow_up_scopes.append(self._domains.show(domain.parent_domain).path)
         if target != source and target.exists():
             issues.append({"code": "target-exists", "path": target_path})
         if (source / DOMAIN_MARKER).exists():
@@ -183,24 +184,25 @@ class AdoptionService:
         name: str,
         space_id: str,
         domain_type: str,
-        governance: str,
-        parent_domain: str | None,
+        governance: str | None,
         project_id: str | None,
     ) -> Domain:
         if not ID_RE.fullmatch(domain_id):
             raise ConfigurationError("Domain id 只能使用小写字母、数字和连字符")
         if any(item.id == domain_id or item.path == target for item in self._domains.discover()[0]):
             raise ConfigurationError("Domain id 或已声明路径存在")
-        if parent_domain:
-            parent = self._domains.show(parent_domain)
-            parent_path = self._settings.vault_root / parent.path
-            if parent_path not in target.parents:
-                raise ConfigurationError("目标路径必须位于指定父 Domain 下")
-            if parent.governance != governance:
+        existing = self._domains.discover()[0]
+        parents = [item for item in existing if item.path in target.parents]
+        parent = max(parents, key=lambda item: len(item.path.parts)) if parents else None
+        if parent:
+            if governance and parent.governance != governance:
                 raise ConfigurationError("子 Domain 必须继承父 Domain governance")
             if project_id and parent.project_id and project_id != parent.project_id:
                 raise ConfigurationError("显式 Project 与父 Domain 继承的 Project 冲突")
+            governance = parent.governance
             project_id = project_id or parent.project_id
+        elif not governance:
+            raise ConfigurationError("根 Domain 必须提供 governance")
         if governance == "project-docs" and not project_id:
             raise ConfigurationError("project-docs Domain 必须绑定或继承 Project id")
         if project_id and self._workspaces.get_project(project_id) is None:
@@ -215,7 +217,7 @@ class AdoptionService:
             type=domain_type,
             governance=governance,
             moc=f"_总览/MOC-{name.strip()}总览",
-            parent_domain=parent_domain,
+            parent_domain=parent.id if parent else None,
             project_id=project_id,
         )
 
@@ -252,9 +254,15 @@ class AdoptionService:
             raise
         return staging
 
-    def _validate_target(self, value: str, space_id: str) -> Path:
+    def _validate_target(self, value: str) -> tuple[Path, str]:
         target = safe_path(self._settings.vault_root, value)
-        space = self._domains.spaces.show(space_id)
+        spaces = self._domains.spaces.discover()[0]
+        owners = [
+            space for space in spaces if (self._settings.vault_root / space.path) in target.parents
+        ]
+        if len(owners) != 1:
+            raise ConfigurationError("目标路径必须唯一位于一个已声明 Space 下")
+        space = owners[0]
         space_root = self._settings.vault_root / space.path
         if target == space_root or space_root not in target.parents:
             raise ConfigurationError("目标路径必须位于指定 Space 下")
@@ -263,7 +271,7 @@ class AdoptionService:
             for part in target.relative_to(space_root).parts
         ):
             raise ConfigurationError("目标路径不能使用保留目录")
-        return target
+        return target, space.id
 
     @staticmethod
     def _verify_files(root: Path, inventory: list[AdoptionInventoryItem]) -> list[dict[str, str]]:
@@ -348,7 +356,7 @@ class AdoptionService:
                 maintenance_sync_follow_up(
                     self._settings.workspace_id, follow_up_scopes or [target_path]
                 )
-                if not issues
+                if write_performed and not issues
                 else []
             ),
             write_performed=write_performed,

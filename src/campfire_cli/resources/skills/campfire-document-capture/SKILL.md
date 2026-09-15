@@ -93,7 +93,7 @@ campfire --workspace personal maintenance sync --scope "mywork/【某项目】�
 
 预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。创建文档、补齐无 Frontmatter 的既有正文或修改 Frontmatter，统一调用一次 `campfire document apply`；它会解析目标 Domain、继承 Project，并在完整 Profile 校验通过后原子写入。只改已有文档正文时可以直接使用 edit，避免为了正文补丁重复查询字段契约。
 
-单篇文档在已声明 Domain 之间改名或移动使用一次 `document move`；批量文档迁移或 Domain 树变化时加载 `campfire-workspace-restructure`。CLI 写入完成后只执行结果中实际返回的 `follow_up`，当前只可能是一个最小 scope 的 `maintenance sync`；没有 follow-up 就结束，不自行追加 dry-run、check 或全 Workspace 扫描。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤。
+单篇文档在已声明 Domain 之间改名或移动使用一次 `document move`；Domain 合并或逻辑空删除加载 `campfire-workspace-restructure` 并使用 `domain merge/delete`，批量文档迁移或领域拆分才使用持久 restructure 批次。CLI 写入完成后只执行结果中实际返回的 `follow_up`，当前只可能是一个最小 scope 的 `maintenance sync`；没有 follow-up 就结束，不自行追加 dry-run、check 或全 Workspace 扫描。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤。
 
 ## Pending Decision
 

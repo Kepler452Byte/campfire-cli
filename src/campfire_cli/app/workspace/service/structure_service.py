@@ -332,10 +332,8 @@ class DomainService:
         domain_id: str,
         name: str,
         path: str,
-        space_id: str,
         domain_type: str,
-        governance: str,
-        parent_domain: str | None = None,
+        governance: str | None = None,
         project_id: str | None = None,
         confirm: bool = False,
     ) -> DomainCreateResult:
@@ -343,10 +341,8 @@ class DomainService:
             domain_id=domain_id,
             name=name,
             path=path,
-            space_id=space_id,
             domain_type=domain_type,
             governance=governance,
-            parent_domain=parent_domain,
             project_id=project_id,
             confirm=confirm,
         )
@@ -357,17 +353,19 @@ class DomainService:
         domain_id: str,
         name: str,
         path: str,
-        space_id: str,
         domain_type: str,
-        governance: str,
-        parent_domain: str | None,
+        governance: str | None,
         project_id: str | None,
         confirm: bool,
     ) -> DomainCreateResult:
         if not ID_RE.fullmatch(domain_id):
             raise ConfigurationError("Domain id 只能使用小写字母、数字和连字符")
-        space = self.spaces.show(space_id)
         target = (self.root / PurePosixPath(path)).resolve()
+        spaces = self.spaces.discover()[0]
+        owners = [space for space in spaces if (self.root / space.path) in target.parents]
+        if len(owners) != 1:
+            raise ConfigurationError("Domain path 必须唯一位于一个已声明 Space 下")
+        space = owners[0]
         space_root = (self.root / space.path).resolve()
         if (
             target == space_root
@@ -380,19 +378,17 @@ class DomainService:
             raise ConfigurationError("Domain id 或已声明路径存在")
         if target.exists():
             raise ConfigurationError("Domain 目标路径已存在；请使用 domain adopt 接入")
-        if parent_domain:
-            parent = next((item for item in existing if item.id == parent_domain), None)
-            if (
-                not parent
-                or parent.space_id != space_id
-                or (self.root / parent.path) not in target.parents
-            ):
-                raise ConfigurationError("父 Domain 不存在、跨 Space 或与目标路径不匹配")
-            if governance != parent.governance:
+        parents = [item for item in existing if item.path in target.parents]
+        parent = max(parents, key=lambda item: len(item.path.parts)) if parents else None
+        if parent:
+            if governance and governance != parent.governance:
                 raise ConfigurationError("子 Domain 必须继承父 Domain 的 governance")
             if project_id and parent.project_id and project_id != parent.project_id:
                 raise ConfigurationError("显式 Project 与父 Domain 继承的 Project 冲突")
+            governance = parent.governance
             project_id = parent.project_id or project_id
+        elif not governance:
+            raise ConfigurationError("根 Domain 必须提供 governance")
         if governance == "project-docs" and not project_id:
             raise ConfigurationError("project-docs Domain 必须绑定 Project id")
         moc = f"_总览/MOC-{name}总览"
@@ -400,11 +396,11 @@ class DomainService:
             id=domain_id,
             name=name.strip(),
             path=target,
-            space_id=space_id,
+            space_id=space.id,
             type=domain_type,
             governance=governance,
             moc=moc,
-            parent_domain=parent_domain,
+            parent_domain=parent.id if parent else None,
             project_id=project_id,
         )
         relative_path = target.relative_to(self.root).as_posix()

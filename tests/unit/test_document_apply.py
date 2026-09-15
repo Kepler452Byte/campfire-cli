@@ -7,7 +7,7 @@ import pytest
 from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.document_service import DocumentService
 from campfire_cli.common.documents.markdown import parse_document
-from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -52,6 +52,21 @@ def test_apply_creates_profile_valid_project_document(workspace: Path) -> None:
     assert parsed.frontmatter["domain"] == "project-example"
     assert parsed.frontmatter["tags"] == []
     assert service(workspace).check(relative)["status"] == "ok"
+
+
+def test_apply_preview_does_not_return_actionable_follow_up(workspace: Path) -> None:
+    project_domain(workspace)
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/计划-预览.md",
+            document_type="plan",
+            values={"description": "只预览", "lifecycle": "proposed"},
+        )
+    )
+
+    assert result.status == "planned"
+    assert result.write_performed is False
+    assert result.follow_up == []
 
 
 def test_apply_adopts_existing_body_without_frontmatter_in_one_write(workspace: Path) -> None:
@@ -401,8 +416,15 @@ def test_move_renames_document_and_updates_references(workspace: Path) -> None:
     reference = domain / "记录-引用.md"
     reference.write_text("[[计划-旧名称]]\n[计划](计划-旧名称.md)\n", encoding="utf-8")
 
-    preview = document.move(source, target)
-    result = document.move(source, target, expected_hash=preview.expected_hash, confirm=True)
+    preview = document.move(source, "project-example", name="计划-新名称.md")
+    assert preview.follow_up == []
+    result = document.move(
+        source,
+        "project-example",
+        name="计划-新名称.md",
+        expected_hash=preview.expected_hash,
+        confirm=True,
+    )
 
     assert not result.issues, result.issues
     assert result.status == "moved"
@@ -434,7 +456,8 @@ def test_move_same_domain_preserves_frontmatter_bytes(workspace: Path) -> None:
 
     result = service(workspace).move(
         "mywork/【Example】文档中心/计划-保留注释.md",
-        "mywork/【Example】文档中心/计划-仍保留注释.md",
+        "project-example",
+        name="计划-仍保留注释.md",
         confirm=True,
     )
 
@@ -463,8 +486,9 @@ def test_move_crosses_domains_and_updates_structural_frontmatter(workspace: Path
     )
 
     target = "mywork/另一个领域/计划-旧名称.md"
-    preview = document.move(source, target)
-    result = document.move(source, target, expected_hash=preview.expected_hash, confirm=True)
+    preview = document.move(source, "other")
+    assert preview.follow_up == []
+    result = document.move(source, "other", expected_hash=preview.expected_hash, confirm=True)
 
     assert result.status == "moved"
     assert result.source_domain == "project-example"
@@ -477,6 +501,38 @@ def test_move_crosses_domains_and_updates_structural_frontmatter(workspace: Path
     assert moved.frontmatter["domain"] == "other"
     assert "project" not in moved.frontmatter
     assert [item.scope for item in result.follow_up] == ["mywork"]
+
+
+def test_move_resolves_a_nested_target_domain_by_id(workspace: Path) -> None:
+    root = project_domain(workspace)
+    nested = root / "发布"
+    nested.mkdir()
+    (nested / "_领域.md").write_text(
+        "---\nname: 发布\ndomain_id: project-example-release\n"
+        "domain_type: project-domain\ngovernance: project-docs\n"
+        "moc: MOC-发布\nparent_domain: project-example\nproject_id: example\n"
+        "status: active\n---\n",
+        encoding="utf-8",
+    )
+    source = "mywork/【Example】文档中心/计划-版本.md"
+    document = service(workspace)
+    document.apply(
+        DocumentApplyRequest(
+            path=source,
+            document_type="plan",
+            values={"description": "发布计划", "lifecycle": "proposed"},
+            confirm=True,
+        )
+    )
+
+    result = document.move(source, "project-example-release", confirm=True)
+
+    assert result.status == "moved"
+    target = nested / "计划-版本.md"
+    assert target.is_file()
+    parsed = parse_document(target.read_text(encoding="utf-8"))
+    assert parsed.frontmatter["domain"] == "project-example-release"
+    assert parsed.frontmatter["project"] == "example"
 
 
 def test_move_cross_domain_returns_all_missing_target_profile_fields(workspace: Path) -> None:
@@ -499,7 +555,7 @@ def test_move_cross_domain_returns_all_missing_target_profile_fields(workspace: 
     source_name = "mywork/另一个领域/计划-迁入项目.md"
     target_name = "mywork/【Example】文档中心/计划-迁入项目.md"
 
-    blocked = document.move(source_name, target_name, confirm=True)
+    blocked = document.move(source_name, "project-example", confirm=True)
 
     assert blocked.status == "needs-input"
     assert blocked.missing_fields == ["lifecycle"]
@@ -513,7 +569,7 @@ def test_move_cross_domain_returns_all_missing_target_profile_fields(workspace: 
 
     moved = document.move(
         source_name,
-        target_name,
+        "project-example",
         values={"lifecycle": "proposed"},
         expected_hash=blocked.expected_hash,
         confirm=True,
@@ -541,7 +597,8 @@ def test_move_rejects_new_field_outside_target_profile(workspace: Path) -> None:
 
     result = document.move(
         source,
-        "mywork/【Example】文档中心/计划-新名称.md",
+        "project-example",
+        name="计划-新名称.md",
         values={"invented": "value"},
         confirm=True,
     )
@@ -557,26 +614,18 @@ def test_move_rejects_new_field_outside_target_profile(workspace: Path) -> None:
     assert (workspace / source).is_file()
 
 
-def test_move_rebases_relative_links_when_relocating_inside_domain(workspace: Path) -> None:
-    domain = project_domain(workspace)
+def test_move_rejects_target_name_with_directory_components(workspace: Path) -> None:
+    project_domain(workspace)
     source = "mywork/【Example】文档中心/计划-旧位置.md"
-    target = "mywork/【Example】文档中心/历史/计划-旧位置.md"
-    related = domain / "记录-依据.md"
-    related.write_text("依据\n", encoding="utf-8")
     document = service(workspace)
     document.apply(
         DocumentApplyRequest(
             path=source,
             document_type="plan",
             values={"description": "发布计划", "lifecycle": "proposed"},
-            body="[依据](记录-依据.md)\n",
             confirm=True,
         )
     )
 
-    result = document.move(source, target, confirm=True)
-
-    assert not result.issues, result.issues
-    assert result.status == "moved"
-    moved = (workspace / target).read_text(encoding="utf-8")
-    assert "[依据](../记录-依据.md)" in moved
+    with pytest.raises(ConfigurationError, match="--name 必须是 Markdown 文件名"):
+        document.move(source, "project-example", name="历史/计划-旧位置.md")

@@ -24,9 +24,10 @@ class PathMove:
 
 @dataclass(frozen=True)
 class FileChangeSet:
-    writes: tuple[FileWrite, ...]
+    writes: tuple[FileWrite, ...] = ()
     deletes: tuple[Path, ...] = ()
     moves: tuple[PathMove, ...] = ()
+    remove_empty_directories: tuple[Path, ...] = ()
     label: str = "write"
     expected: dict[Path, str | None] = field(default_factory=dict)
 
@@ -39,6 +40,7 @@ class FileChangeSet:
                     *self.deletes,
                     *(item.source for item in self.moves),
                     *(item.target for item in self.moves),
+                    *self.remove_empty_directories,
                 ]
             )
         )
@@ -71,6 +73,7 @@ class FileChangeExecutor:
             self._validate_moves(changes.moves)
             completed_moves: list[PathMove] = []
             created_directories: list[Path] = []
+            removed_directories: list[Path] = []
             originals: dict[Path, bytes | None] = {}
             try:
                 for move in changes.moves:
@@ -87,8 +90,13 @@ class FileChangeExecutor:
                     atomic_write(item.path, item.content)
                 for path in changes.deletes:
                     path.unlink(missing_ok=True)
+                for path in changes.remove_empty_directories:
+                    path.rmdir()
+                    removed_directories.append(path)
                 yield
             except Exception:
+                for directory in reversed(removed_directories):
+                    directory.mkdir(parents=True, exist_ok=True)
                 self._restore(originals)
                 for move in reversed(completed_moves):
                     if move.target.exists() and not move.source.exists():

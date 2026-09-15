@@ -123,8 +123,9 @@ def apply_document(
 @document_cli.command("move")
 def move_document(
     ctx: typer.Context,
-    source: str = typer.Option(..., "--from"),
-    target: str = typer.Option(..., "--to"),
+    source: str = typer.Option(..., "--path", help="源文档的 Workspace 相对路径"),
+    target_domain: str = typer.Option(..., "--domain", help="目标 Domain 的稳定 id"),
+    name: str | None = typer.Option(None, "--name", help="可选的新文件名；省略时保持原文件名"),
     set_values: list[str] | None = typer.Option(None, "--set"),
     unset_fields: list[str] | None = typer.Option(None, "--unset"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
@@ -134,7 +135,8 @@ def move_document(
     invoke(
         lambda: service(ctx).move(
             source,
-            target,
+            target_domain,
+            name=name,
             values=parse_values(set_values or []),
             unset_fields=tuple(unset_fields or []),
             expected_hash=expected_hash,
