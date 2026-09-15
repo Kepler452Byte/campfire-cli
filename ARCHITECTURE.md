@@ -97,7 +97,7 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 | --- | --- | --- |
 | 语义原子性 | 一条命令只表达一个可以用一句话说清的用户意图 | `document move` 表达“在已声明 Domain 之间正确移动一篇文档” |
 | 一致性原子性 | 为保持该意图不变量而必须一起变更的事实，属于同一个变更集；整体成功或恢复到执行前 | 移动文档时同步修复可确定解析的引用 |
-| 可组合原子性 | 不相关的派生治理不隐式执行；命令用结构化 `follow_up` 声明后续步骤，由 Skill 决定组合顺序 | `document apply` 不自动运行 `maintenance sync/check` |
+| 可组合原子性 | 不相关的派生治理不隐式执行；命令用结构化 `follow_up` 声明必要步骤，由 Skill 决定组合顺序 | `document apply` 只在必要时返回一个 scoped `maintenance sync` |
 
 命令副作用按下列边界分类：
 
@@ -118,14 +118,14 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 命令设计遵循以下约束：
 
 1. **对象域优先**：公共入口采用 `campfire <object-domain> <verb>`，例如 `document apply`、`maintenance check`；动词在所属业务对象内保持单义，不为同一行为保留多个别名。
-2. **意图原子、派生显式**：`document apply` 只创建或更新目标文档，`document move` 原子完成单文档移动、目标 Profile 对齐和确定性引用修复；MOC、关系页和索引治理由 Skill 显式编排 `maintenance sync/check`。
+2. **意图原子、派生显式**：`document apply` 只创建或更新目标文档，`document move` 原子完成单文档移动、目标 Profile 对齐和确定性引用修复；命令只在 MOC、关系页或索引可能变化时返回一个最小 scope 的 `maintenance sync`。
 3. **契约声明式，变更显式**：Profile 是字段、类型、枚举、顺序和条件必填的 SSOT。Agent 提交业务值，CLI 解析有效 Profile 并拒绝猜测；已有文档只修改明确给出的字段或正文操作。
 4. **写入先证明安全**：写命令默认预览，显式确认后才提交；提交时在锁内复核快照或期望哈希，多文件变更作为一个 ChangeSet 执行，失败回滚，避免静默覆盖和部分写入。
 5. **人类与 Agent 共用一个契约**：命令和结果只有一套语义。JSON 状态、issues、missing fields 与 follow-up 供 Agent 稳定消费，`tree` 和分层 `-h` 供人类与 Agent 渐进发现，不维护第二套参数目录。
 6. **语义与机制分层**：人类决定高风险取舍，Agent 理解正文和业务语义，Skill 规定加载时机、事实门禁与 SOP，CLI 只执行可确定验证的治理机制。歧义进入 Decision，不为“自动化成功”而猜测。
 7. **聚合入口是少数例外**：`setup` 和 `upgrade` 可以编排多个服务，因为它们表达完整安装生命周期；日常内容治理保持原子能力，避免重新出现 `maintenance run` 一类不可审查的聚合入口。
 
-横切关注点与业务 SOP 不使用同一种复用手段。哈希复核、写锁、原子替换和失败恢复由显式 ChangeSet Executor 复用；`apply → sync → check` 等业务顺序由 Skill 明文编排。不为了复用 Maintenance 而引入 AOP 切面、命令总线、全局钩子或隐式中间件。
+横切关注点与业务 SOP 不使用同一种复用手段。哈希复核、写锁、原子替换和失败恢复由显式 ChangeSet Executor 复用；写命令返回的 `follow_up` 由 Skill 消费。不为了复用 Maintenance 而引入 AOP 切面、命令总线、全局钩子或隐式中间件。
 
 因此，`document apply` 的准确含义是“对一个 Markdown 文档应用经 Profile 校验的显式意图”，不是“把完整声明持续调谐到某个服务端状态”。用户或 Agent 可以直接 edit 已有正文；无论通过 apply 还是 edit 写入，跨文档派生结果都由后续显式 Maintenance 收敛。
 
@@ -181,7 +181,7 @@ SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不�
 
 ### 存量文件夹接管
 
-Adoption 是首次接管边界，不属于日常 Maintenance。外部目录只读并复制到 `_收件箱/待接管/<batch>`，Vault 内目录原地冻结事实；两者随后通过同一份计划建立一个粗粒度 Domain。CLI 负责文件清单、哈希、软链接与冲突保护、声明、初始 MOC 和 Project/Manifest 联动；Agent 负责阅读正文、选择目标 Space/Domain，并按 `follow_up` 显式刷新派生视图与索引。
+Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain adopt` 一次完成只读盘点、预览和确认后的原子接管，不持久化中间批次。外部目录通过临时隐藏目录复制并校验，原来源保持不变；Vault 内目录原地声明或移动到目标。CLI 负责哈希、软链接与冲突保护、声明、初始 MOC 和 Project/Manifest 联动；Agent 负责阅读正文、选择目标 Space/Domain，并执行返回的 `follow_up`。
 
 ## 6. 本地 Web 工作台
 

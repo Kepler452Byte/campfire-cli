@@ -18,31 +18,33 @@ campfire workspace rebuild --confirm
 
 目标是允许人类低成本记录，同时让 Agent 以可审阅、可重复执行的方式保持 Workspace 合规。
 
-先运行 `campfire workspace resolve` 获取目标 Workspace，再读取其 `AGENTS.md`。运行 `campfire workspace config check`、`workspace space/domain check` 和 `campfire maintenance check` 获取当前状态；检查不修改原始笔记，但可能刷新用户级索引和报告，不得直接编辑 `~/.campfire/`。
+首次读写先运行 `campfire workspace resolve` 获取目标 Workspace，再读取其 `AGENTS.md`。诊断配置、结构或文档问题时分别使用 `workspace config check`、`workspace space/domain check` 或 `maintenance check`；不要把全量检查当作每次写文档的固定步骤。检查不修改原始笔记，但可能刷新用户级索引和报告，不得直接编辑 `~/.campfire/`。
 
 ## 工作流
 
 1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
 2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。默认先预览，用户确认后追加 `--confirm`。顶级 Space、根 Domain 和有歧义的父子关系必须由用户确认。
-3. 创建正式文档或修改 Frontmatter 使用 `campfire document apply`，由 CLI 解析有效 Profile；只读诊断已有文档时使用 `document inspect`。正文小改可用 edit，但两种写法后都必须显式 sync 和 check。字段、顺序与枚举不在 Skill 中复制。
-4. 确定性问题可以生成普通 Plan；缺标题、摘要、类型等语义时，Agent 必须阅读正文和领域上下文，生成 YAML/JSON Spec，再运行 `campfire maintenance plan --id <id> --scope <path> --spec <file>`。Spec 中每项默认不审批；只有用户已明确授权或逐项审查通过才写 `approved: true`。
-5. 依次运行 `maintenance show --plan <id>`、`maintenance apply --plan <id>` 预检、`maintenance apply --plan <id> --confirm` 执行和 `maintenance verify --plan <id>` 局部验收。出现 `concurrent-change` 或配置变化时废弃旧计划并重新生成。
-6. 使用 `maintenance sync --scope <path> --dry-run` 预览当前范围的 MOC、关系页与治理视图变更，审查后去掉 `--dry-run`；再运行 `maintenance check --scope <path>`。两个原子命令由 Skill 顺序编排，不使用聚合别名。
-7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。单篇文档改变 Domain 使用 `document move`；批量文档迁移、Domain 拆分或合并时停止，改用 `campfire-workspace-restructure`。
-8. 无法从正文、领域上下文或项目事实唯一决定时，统一调用 `campfire decision create`。不要判断当前是交互会话还是定时任务；当前对话获得回答后调用 `decision answer`，答案被原任务消费后调用 `decision close`。全部状态由 CLI 投影到统一的决策工作台，未回答事项显示在“待我确认”视图。
+3. 创建正式文档、接管无 Frontmatter 的既有正文或修改 Frontmatter，使用一次 `campfire document apply`。CLI 根据目标 Domain 解析有效 Profile 并返回所有缺失字段；Agent 补齐后对同一命令追加 `--confirm`。正文小改可直接 edit；格式顺序单独使用 `document format`。
+4. 单篇文档改名或跨 Domain 移动使用 `document move`；批量文档迁移使用 `workspace restructure`。不要为单篇修改创建批次计划，也不要用批量重构代替原子命令。
+5. 每个写命令完成后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
+6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页与本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
+7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，调用 `campfire decision create`；获得回答后调用 `decision answer`，答案被原任务消费后调用 `decision close`。
 
 ## 路由
 
 ```text
 发现对象
    |
-   +-- 已在 Domain，字段、类型或 Formatter 不合规
-   |      -> inspect/check -> Agent 语义判断 -> plan --spec
-   |      -> show -> apply 预检 -> apply --confirm -> verify -> sync --scope
+   +-- 新建、补 Frontmatter 或修改字段
+   |      -> document apply 预览 -> 补齐 missing_fields
+   |      -> document apply --confirm -> 仅执行返回的 follow_up
+   |
+   +-- 只改正文
+   |      -> edit -> 若正文影响 MOC/关系则 sync --scope 一次
    |
    +-- 单篇文档改名或跨 Domain 移动
    |      -> document move 预览 -> 必要时 --set/--unset 补齐
-   |      -> document move --confirm -> 按 follow_up 执行 sync/check
+   |      -> document move --confirm -> 仅执行返回的 follow_up
    |
    +-- 已有目录但没有声明
    |      -> space/domain adopt
@@ -58,7 +60,7 @@ campfire workspace rebuild --confirm
           -> pending Decision 自动投影到 _协作/decisions/pending
 ```
 
-Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校验、计划、哈希保护、执行、引用更新和审计；用户负责确认歧义与高风险归属。不要由 Agent 手工执行本可进入 Maintenance Plan 的批量修改。
+Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校验、预览、哈希保护、原子执行、引用更新和索引刷新；用户负责确认歧义与高风险归属。批量内容迁移必须进入 Workspace Restructure 计划。
 
 ## 不变量
 
@@ -66,7 +68,7 @@ Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校�
 - `_空间.md` 声明 Space，`_领域.md` 声明可多级嵌套的 Domain；保留目录不是 Space 或 Domain。
 - 一篇文档只有一个主物理 Domain，可以出现在多个自动索引中。
 - MOC 自动区域、相关文档、反向链接、关系和统计由 CLI 生成，不手工维护。
-- Maintenance 只允许在原 Domain 内按 type 修正文件名，不改变文档主物理归属，不进行跨领域移动、领域合并或拆分。
+- Maintenance 只检查文档、刷新派生内容和执行显式归档，不改变文档主物理归属，不进行跨领域移动、领域合并或拆分。
 - 写入返回 `concurrent-change` 时停止并重新检查，不覆盖其他会话的新内容。
 - Markdown 是内容事实来源，用户级配置是治理契约；SQLite 只保存索引与工作流状态。
 - Decision 是工作流对象：SQLite 当前状态与追加事件是 SSOT，`_协作/decisions/` 只读投影不得手工维护。

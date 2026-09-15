@@ -105,16 +105,15 @@ Campfire 使用语义化版本：
 
 - SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
 - `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
-- 领域重构只提交当前结构意图，并返回 scoped `maintenance sync` 与
-  `maintenance check` follow-up；调用方必须显式执行它们以刷新受影响 MOC
-  和当前 Workspace 索引。
+- 写命令只在派生状态可能变化时返回一个 scoped `maintenance sync` follow-up；
+  调用方只执行实际返回的 follow-up，不固定追加 check 或全量扫描。
 - `workspace rebuild` 默认只预览；`--confirm` 后从 Manifest 和 Markdown 完整替换派生索引。
 
 ## Workspace 接管
 
-- 外部来源必须只读，先复制到 `_收件箱/待接管/<batch>`；不得删除或修改原目录。
+- 外部来源必须只读，经临时隐藏目录复制和哈希校验后落到目标；不得删除或修改原目录。
 - Vault 内来源原地盘点，不得重复复制。
-- 软链接、目标冲突、暂存冲突和源哈希变化必须 fail closed。
+- 软链接、目标冲突和源哈希变化必须 fail closed。
 - 接管计划一次建立一个粗粒度 Domain；CLI 不得自行推断文档语义或子领域。
-- `apply` 默认只预检，显式 `--confirm` 后才移动暂存内容并创建领域声明。
-- `verify` 必须核对接管文件、哈希和领域声明；接管后的格式与细分治理继续使用 Maintenance 和 Restructure。
+- `workspace domain adopt` 默认只预览，显式 `--confirm` 后在一个 ChangeSet 中移动或复制内容并创建领域声明。
+- 提交成功前必须核对接管文件、哈希和领域声明；接管后的细分治理继续使用 Restructure。

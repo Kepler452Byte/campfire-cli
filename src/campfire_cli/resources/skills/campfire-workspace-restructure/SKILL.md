@@ -26,10 +26,10 @@ description: "按审批计划重构 Campfire Workspace 的已有物理结构；�
 领域级命令默认只输出影响计划，用户明确要求执行且计划无歧义时才追加 `--confirm`：
 
 ```bash
-campfire workspace restructure domain rename --domain <id> --name <name>
-campfire workspace restructure domain rename --domain <id> --name <name> --rename-directory --project-name <name> --confirm
-campfire workspace restructure domain move --domain <id> --target-path <path> --parent-domain <id> --confirm
-campfire workspace restructure domain rekey --domain <id> --new-id <id> --confirm
+campfire workspace domain rename --domain <id> --name <name>
+campfire workspace domain rename --domain <id> --name <name> --rename-directory --project-name <name> --confirm
+campfire workspace domain move --domain <id> --target-path <path> --parent-domain <id> --confirm
+campfire workspace domain rekey --domain <id> --new-id <id> --confirm
 ```
 
 `rename` 默认只修改领域显示名称；`--rename-directory` 或 `--target-path` 才修改目录，`--project-name` 才修改关联 Project 展示名称。普通 rename/move 必须保持 `domain_id`；只有用户明确要求改变稳定身份时使用 `rekey`。
@@ -38,7 +38,7 @@ campfire workspace restructure domain rekey --domain <id> --new-id <id> --confir
 2. 使用 `workspace restructure plan --batch <id>` 生成推断计划。工具不能表达的移动或 Frontmatter 修改写入 YAML/JSON 意图规格，再运行 `plan --spec <file>`。
 3. 逐项审查 source、target、Frontmatter Patch、理由和审批状态。删除、合并、根领域拆分、冲突权威判定和无法逆推的语义必须由用户确认。
 4. 先运行不带 `--confirm` 的 `workspace restructure apply --batch <id>` 做执行前预检；计划已经明确审批且没有阻塞问题时才追加 `--confirm`。
-5. 执行 `workspace restructure verify --batch <id>`，再按命令返回的 `follow_up` 加载 `campfire-workspace-maintenance`，预览并刷新派生内容。
+5. 执行 `workspace restructure verify --batch <id>`，再只执行命令实际返回的 `follow_up`，不自行追加重复预览或检查。
 
 ## 安全边界
 

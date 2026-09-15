@@ -10,10 +10,6 @@ campfire base sync
 campfire workspace resolve
 campfire workspace rebuild
 campfire workspace rebuild --confirm
-campfire workspace adopt inventory --source <folder> --batch <id> [--confirm]
-campfire workspace adopt plan --batch <id> --target-path <path> --domain-id <id> --name <name> --space <id> --type <type> --governance <policy> [--parent-domain <id>] [--project <id>]
-campfire workspace adopt apply --batch <id> [--confirm]
-campfire workspace adopt verify --batch <id>
 campfire workspace project bind --id <project-id> --local-path <repository-path>
 campfire workspace space list
 campfire workspace space check
@@ -21,11 +17,12 @@ campfire workspace space check --space <space-id>
 campfire workspace config check
 campfire workspace domain list
 campfire workspace domain check
+campfire workspace domain adopt --source <folder> --target-path <path> --id <id> --name <name> --space <id> --type <type> --governance <policy> [--parent <id>] [--project <id>] [--confirm]
+campfire workspace domain rename --domain <id> --name <name> [--rename-directory|--target-path <path>] [--project-name <name>] [--confirm]
+campfire workspace domain move --domain <id> --target-path <path> [--parent-domain <id>] [--confirm]
+campfire workspace domain rekey --domain <id> --new-id <id> [--confirm]
 campfire workspace restructure inventory --scope <path> --batch <id>
 campfire workspace restructure plan --batch <id>
-campfire workspace restructure domain rename --domain <id> --name <name> [--rename-directory|--target-path <path>] [--project-name <name>] [--confirm]
-campfire workspace restructure domain move --domain <id> --target-path <path> [--parent-domain <id>] [--confirm]
-campfire workspace restructure domain rekey --domain <id> --new-id <id> [--confirm]
 campfire workspace project resolve --path "$PWD"
 campfire document apply --path <workspace-relative-markdown> --type <type> --set <field=value> [--body-file <path>] [--confirm]
 campfire document move --from <source> --to <target> [--set <field=value>] [--unset <field>] [--expected-hash <sha256>] [--confirm]
@@ -39,12 +36,9 @@ campfire decision answer <decision-id> --answer <answer> --answered-by <actor>
 campfire decision close <decision-id>
 campfire decision sync
 campfire maintenance check --summary
-campfire maintenance plan --id <plan-id> --scope <path> [--spec <yaml-or-json>]
-campfire maintenance show --plan <plan-id>
-campfire maintenance apply --plan <plan-id>
-campfire maintenance apply --plan <plan-id> --confirm
-campfire maintenance verify --plan <plan-id>
-campfire maintenance sync --scope <path> --dry-run
+campfire maintenance sync --scope <path> [--dry-run]
+campfire maintenance archive check [--scope <path>]
+campfire maintenance archive apply [--scope <path>] --confirm
 ```
 
-Space、Domain、Project 的 `create`、存量对象的 `adopt`，以及文档移动、重构、归档写操作默认先预览；审查通过后才追加 `--confirm`。`document move` 可在任意已声明 Domain 之间移动单篇文档，自动对齐可确定的 `domain`/`project` 归属；目标 Profile 缺失语义字段时返回 `needs-input`，调用方通过 `--set`/`--unset` 显式补齐。`adopt` 只接入已有对象，不移动已有内容。具体参数以对应命令的 `-h` 为准，避免在文档中维护第二份参数目录。
+Space、Domain、Project 的 `create`/`adopt`，以及文档移动、重构、归档写操作默认先预览；审查通过后才追加 `--confirm`。`document apply` 可新建、更新或为已有正文补齐 Frontmatter；`document move` 可在任意已声明 Domain 之间移动单篇文档并对齐可确定的 `domain`/`project`。目标 Profile 缺少语义字段时返回 `missing_fields`，调用方用 `--set`/`--unset` 补齐。写命令只返回实际需要的一个 scoped `maintenance sync` follow-up，没有派生影响时返回空列表。具体参数以对应命令的 `-h` 为准。

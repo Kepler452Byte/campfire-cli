@@ -98,15 +98,13 @@ campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完�
 
 ## 存量接管与结构重构
 
-`workspace adopt` 负责首次接管已有文件夹：Vault 外来源先按哈希复制到 `_收件箱/待接管/<batch>`（原目录始终保留），Vault 内来源原地盘点；一次建立一个粗粒度 Domain，语义细分交给后续 Maintenance/Restructure 计划。
+`workspace domain adopt` 用一条命令接管一个已有文件夹。Vault 外来源经临时暂存和哈希校验复制到目标 Domain，原目录始终保留；Vault 内来源原地声明或移动到明确目标。命令一次建立一个粗粒度 Domain，语义细分交给后续 Restructure。
 
 ```bash
-campfire workspace adopt inventory --source /path/to/folder --batch notes-001
-campfire workspace adopt plan --batch notes-001 --target-path "mynote/新领域" \
-  --domain-id knowledge-new --name "新领域" --space knowledge \
+campfire workspace domain adopt --source /path/to/folder --target-path "mynote/新领域" \
+  --id knowledge-new --name "新领域" --space knowledge \
   --type knowledge-domain --governance knowledge-docs
-campfire workspace adopt apply --batch notes-001 --confirm
-campfire workspace adopt verify --batch notes-001
+# 审查同一份结构化计划后，对相同命令追加 --confirm
 ```
 
 单篇文档在已声明 Domain 之间移动使用 `document move`。批量文档或 Domain 结构重构先冻结范围，再传入 YAML/JSON 意图规格（含 Frontmatter 修改），逐项审查 `approved` 后执行：
@@ -125,12 +123,12 @@ campfire workspace restructure verify --batch move-001
 - **校验分工**：`maintenance check` 统一负责正式文档的 Schema 与枚举校验，并刷新可重建索引；结构声明由 `workspace space/domain check` 校验；`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
 - **Frontmatter Profile**：声明式一层继承（`base` 或 `base → knowledge/project-doc/task`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
 - **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，失败恢复到执行前。
-- **显式后续治理**：写入命令以轻量 `follow_up` 返回 `maintenance sync/check` 的 Workspace 和 scope；Skill 顺序执行，CLI 不隐式捎带派生治理。
+- **按需后续治理**：写入命令只在派生内容可能变化时返回一个最小 scope 的 `maintenance sync`；Skill 消费该结果，没有 follow-up 就结束，不固定追加 dry-run 或全量 check。
 - **配置两层模型**：产品默认契约在包内 `resources/defaults/config.yml`（SSOT），用户只在 `~/.campfire/config.yml` 写覆盖项；Mapping 递归合并，`campfire workspace config check` 验证有效配置。
 
 ## Agent 协作
 
-全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：先 `workspace resolve` 解析上下文，再读取目标 Workspace 的 `AGENTS.md`；只读检查可直接执行，`restructure apply`、`maintenance apply`、`archive apply` 必须先审查计划并用显式确认参数。有歧义的分类和重构进入 Decision 待确认，不由 Agent 擅自决定。
+全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：首次读写先 `workspace resolve` 并读取 Workspace 的 `AGENTS.md`；单文档用 `document apply/move`，批量结构调整用 `workspace restructure`，归档用 `maintenance archive`。有歧义的分类和重构进入 Decision，不由 Agent 擅自决定。
 
 ## 许可
 
