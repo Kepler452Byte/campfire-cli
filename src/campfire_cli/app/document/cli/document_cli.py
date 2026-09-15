@@ -124,13 +124,14 @@ def apply_document(
     创建时文件名可省略类型前缀；CLI 根据 --type 返回并写入最终 target。
     已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。
     """
+    values = parse_values(set_values or [])
     body = body_file.read_text(encoding="utf-8") if body_file else None
     invoke(
         lambda: service(ctx).apply(
             DocumentApplyRequest(
                 path=path,
                 document_type=document_type,
-                values=parse_values(set_values or []),
+                values=values,
                 body=body,
                 append_section=append_section,
                 replace_body=replace_body,
@@ -153,12 +154,13 @@ def move_document(
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或移动一篇文档，并按目标 Domain 契约更新归属与引用。"""
+    values = parse_values(set_values or [])
     invoke(
         lambda: service(ctx).move(
             source,
             target_domain,
             name=name,
-            values=parse_values(set_values or []),
+            values=values,
             unset_fields=tuple(unset_fields or []),
             expected_hash=expected_hash,
             confirm=confirm,
