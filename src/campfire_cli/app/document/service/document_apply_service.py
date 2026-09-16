@@ -109,6 +109,9 @@ class DocumentApplyService:
         if not exists or not parsed.has_frontmatter:
             defaults = self._creation_defaults(target, document_type, today)
             profile = self._profiles.resolve(document_type, defaults, target)
+            for field in profile.fields:
+                if field.default is not None:
+                    defaults.setdefault(field.name, field.default)
             frontmatter.update(defaults)
         profile = profile or self._profiles.resolve(document_type, frontmatter, target)
         removed_fields: tuple[str, ...] = ()

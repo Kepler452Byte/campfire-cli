@@ -5,3 +5,4 @@
 - 2026-09-12 — Decision: 产品命名为 Campfire，顶层对象从 Vault 提升为 Workspace，CLI 为 `campfire`。Why: 产品服务于人和多个 Agent 围绕共享上下文协作，而非只做 Obsidian 文档治理。Impact: 不保留 `vg`、`vault-governance` 或 Vault 内状态目录的兼容入口。
 - 2026-09-12 — Decision: 运行状态统一位于用户级 `~/.campfire/workspaces/<id>/`。Why: 支持多个 Workspace 并使 CLI 与内容存储解耦。Impact: Markdown 是内容 SSOT，SQLite 是可重建索引。
 - 2026-09-11 — Decision: SQLite 保存当前状态，Markdown 保持内容事实来源，JSON 只保存配置、当前关键快照和有限变更。Why: 同时获得查询能力、可移植性和 Git 可审查性。Impact: 活动数据库不提交 Git。
+- 2026-09-15 — Decision: 声明文件采用区域所有权：Frontmatter 由 CLI 管理，成对 `AUTO-GENERATED` 标记内由生成器管理，标记外 Markdown 正文由人和 Agent 直接编辑。Why: 把托管内容与人工正文边界化，CLI 和生成器可安全重写各自区域而不破坏手写内容，同时保留正文自由编辑。Impact: 声明 formatter 只能重排 Frontmatter 并逐字节保留正文；生成器遇到重复、嵌套或未闭合标记时停止，不猜测覆盖范围；Agent 编辑声明文件正文直接使用文件工具，Frontmatter 与生成区域经 CLI。

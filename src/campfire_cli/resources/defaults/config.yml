@@ -107,6 +107,7 @@ frontmatter_schema:
     profile_by_type:
       task: task
       board: board
+      human-request: human-request
   profiles:
     base:
       unknown_fields: report
@@ -129,6 +130,11 @@ frontmatter_schema:
       extends: base
       unknown_fields: preserve
       fields: {}
+    human-request:
+      extends: base
+      unknown_fields: report
+      fields:
+        human_decision_status: {kind: enum, required: true, default: pending, values: [pending, decided, deferred, cancelled]}
 moc:
   project_groups:
   - label: 任务
@@ -291,9 +297,9 @@ bases:
   target: 治理视图
   managed_bases:
   - 项目文档.base
-  - 待归档文档.base
   - 任务工作台-项目.base
   - 任务工作台-个人.base
-  - 决策工作台.base
+  - 待人决策工作台.base
+  - 归档文档工作台.base
   unknown_base_policy: ignore
   orphaned_base_policy: report
