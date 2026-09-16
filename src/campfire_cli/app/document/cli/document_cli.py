@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 import typer
@@ -124,9 +123,6 @@ def apply_document(
     ),
     document_type: str | None = typer.Option(None, "--type"),
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
-    body_file: Path | None = typer.Option(None, "--body-file"),
-    append_section: str | None = typer.Option(None, "--append-section"),
-    replace_body: bool = typer.Option(False, "--replace-body"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
@@ -139,16 +135,12 @@ def apply_document(
     已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。
     """
     values = parse_values(set_values or [])
-    body = body_file.read_text(encoding="utf-8") if body_file else None
     invoke(
         lambda: service(ctx).apply(
             DocumentApplyRequest(
                 path=path,
                 document_type=document_type,
                 values=values,
-                body=body,
-                append_section=append_section,
-                replace_body=replace_body,
                 expected_hash=expected_hash,
                 confirm=confirm,
             )

@@ -65,7 +65,7 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 
 ### 4. 状态流转
 
-- 更新任务：Frontmatter 契约已知时直接使用 `document apply --set`；字段类型或合法值未知时先对该文档执行一次 `document inspect`，再 apply，不从 `tree` 或逐层 help 开始。进展记录使用 `document apply --append-section`；只修正文的小范围改动可使用 edit。
+- 更新任务：Frontmatter 契约已知时直接使用 `document apply --set`；字段类型或合法值未知时先对该文档执行一次 `document inspect`，再 apply，不从 `tree` 或逐层 help 开始。进展记录和所有正文改动直接使用 edit；只有 Frontmatter 变化才调用 CLI。
 - 完成或取消任务时，只更新 `task_status`；结果、阻塞说明和进展记录写入正文，不固化为任务字段。字段类型或合法值以 CLI 当前 Profile 为准。
 - 用户口头报进度时主动提议同步对应任务文档；一次汇报合并提议，不逐条打断。
 

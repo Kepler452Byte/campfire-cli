@@ -30,6 +30,14 @@ def test_removed_lifecycle_filter_is_not_public() -> None:
     assert result.exit_code != 0
 
 
+def test_document_apply_does_not_expose_body_editing_options() -> None:
+    result = runner.invoke(app, ["document", "apply", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--body-file" not in result.output
+    assert "--append-section" not in result.output
+    assert "--replace-body" not in result.output
+
+
 def test_document_type_list_is_structured(workspace: Path) -> None:
     result = runner.invoke(app, ["--workspace", "test", "document", "type", "list"])
     assert result.exit_code == 0, result.output

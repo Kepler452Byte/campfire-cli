@@ -12,9 +12,6 @@ class DocumentApplyRequest(BaseModel):
     path: str
     document_type: str | None = None
     values: dict[str, str] = Field(default_factory=dict)
-    body: str | None = None
-    append_section: str | None = None
-    replace_body: bool = False
     expected_hash: str | None = None
     confirm: bool = False
 

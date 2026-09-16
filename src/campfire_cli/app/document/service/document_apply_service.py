@@ -165,7 +165,7 @@ class DocumentApplyService:
         frontmatter["type"] = document_type
         frontmatter["updated"] = today
 
-        next_body = self._next_body(request, parsed.body, exists)
+        next_body = parsed.body if exists else ""
         if exists and parsed.has_frontmatter:
             patch = {**values, "updated": today}
             if changes_type:
@@ -268,26 +268,6 @@ class DocumentApplyService:
         }
         return values
 
-    @staticmethod
-    def _next_body(request: DocumentApplyRequest, current: str, exists: bool) -> str:
-        if (
-            exists
-            and request.body is not None
-            and not request.append_section
-            and not request.replace_body
-        ):
-            raise ConfigurationError(
-                "更新时 --body-file 必须与 --append-section 或 --replace-body 同时使用"
-            )
-        if request.append_section:
-            if request.body is None:
-                raise ConfigurationError("--append-section 必须与 --body-file 同时使用")
-            heading = request.append_section.strip().lstrip("#").strip()
-            return current.rstrip() + f"\n\n## {heading}\n\n{request.body.strip()}\n"
-        if request.replace_body and request.body is not None:
-            return request.body
-        return current if exists else (request.body or "")
-
     def _result(
         self,
         request: DocumentApplyRequest,
@@ -349,7 +329,6 @@ class DocumentApplyService:
         }
         needs_sync = not exists or not had_frontmatter
         needs_sync = needs_sync or bool(set(request.values) & derived_fields)
-        needs_sync = needs_sync or request.body is not None
         needs_sync = needs_sync or changes_type
         if context is None:
             return []

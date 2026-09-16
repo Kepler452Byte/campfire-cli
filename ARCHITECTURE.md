@@ -20,7 +20,7 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 - **Document**：知识、项目、决策、计划、问题、记录等持久内容。
 - **Task Channel**：围绕一项任务持续记录负责人、状态、进展、阻塞、交接、结果和验收的异步协作通道。
 - **Inbox Item**：尚未完成归属、类型或意图判断的输入，以及需要人类确认的问题。
-- **Decision**：人类或高级 Agent 必须回答的持久判断；以当前状态和追加事件跨会话传递。
+- **Human request**：Agent 需要人类确认的 Markdown 事项，位于全局收件箱并以 Frontmatter 状态跟踪。
 - **Generated View**：由事实数据生成的 MOC、Base、报告和索引，不由人手重复维护。
 
 ## 3. 业务架构
@@ -70,7 +70,7 @@ Markdown Workspace Adapter   用户级状态
                               batches/reports/locks
 ```
 
-Decision 以 SQLite 当前快照和追加事件为 SSOT。全部状态在 `_协作/decisions/` 生成只读 Markdown 投影，并由统一的决策工作台按 pending、answered、closed、cancelled 展示。Notification 与未来 Task Channel 只通过稳定 Decision id 和事件联动，不反向拥有 Decision 状态。
+待人确认以 `_收件箱/待用户确认/` 的 `human-request` 文档为事实来源；`human_decision_status` 只表达待人处理状态，用户结论随后写回正式文档。不存在独立的 Decision SQLite 状态机或 `_协作/` 投影。
 
 `app/` 按可独立理解的业务能力组织，CLI 只做参数和输出适配，Service 承担业务流程，Repository 负责外部读写。跨 App 的用例编排由组合根 `AppContainer` 承担，`setup` 与 `upgrade` 是当前实例。`common/` 只放跨业务复用、无独立业务流程的原子能力；不能为了“复用”把业务编排下沉到 common。
 
@@ -80,7 +80,7 @@ Document App 是所有面向用户和 Agent 的文档命令入口；Profile、�
 
 Document App 同时拥有设备本地的文档查询投影。Indexer 从 Markdown、Domain 声明、Project 文档根映射和显式链接生成文档记录与确定关系；Repository 只负责按 `workspace_id` 持久化完整快照。组合根从 Workspace Registry 提供当前 Project 映射，Document App 不直接读取 Workspace Repository，也不把每篇文档中可能漂移的重复字段当作物理归属。`document list` 和 `document inspect` 查询前自行轻量 reconcile，不要求 Agent 先运行 Maintenance。Maintenance 只在全量检查或可见生成物同步时触发索引校正，不拥有索引规则，也不是读取命令的前置步骤。
 
-Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`knowledge`、`project-doc`、`task` 只允许一层继承。Profile Loader 将配置编译为完整 EffectiveProfile，Resolver 根据文档类型和领域上下文选择 Profile，Validator 与 Formatter 共同消费该结果。字段规则不使用每种文档一个 Python 子类，也不在 Skill 中复制。
+Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`task`、`human-request`、`board` 只允许一层继承。Profile Loader 将配置编译为完整 EffectiveProfile，Resolver 根据文档类型选择 Profile，Validator 与 Formatter 共同消费该结果。字段规则不使用每种文档一个 Python 子类，也不在 Skill 中复制。
 
 `template` 直接使用 base Profile，物理存放在 Domain 的 `_模板/`。模板作用域由 Domain 拓扑和路径确定；Skill 从目标 Domain 向祖先查找同名模板并使用最近的一份，系统不建立模板注册表或继承状态。
 
@@ -126,7 +126,7 @@ Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合
 3. **契约声明式，变更显式**：Profile 是字段、类型、枚举、顺序和条件必填的 SSOT。Agent 提交业务值，CLI 解析有效 Profile 并拒绝猜测；已有文档只修改明确给出的字段或正文操作。
 4. **写入先证明安全**：写命令默认预览，显式确认后才提交；提交时在锁内复核快照或期望哈希，多文件变更作为一个 ChangeSet 执行，失败回滚，避免静默覆盖和部分写入。
 5. **人类与 Agent 共用一个契约**：命令和结果只有一套语义。JSON 状态、issues、missing fields 与 follow-up 供 Agent 稳定消费，`tree` 和分层 `-h` 供人类与 Agent 渐进发现，不维护第二套参数目录。
-6. **语义与机制分层**：人类决定高风险取舍，Agent 理解正文和业务语义，Skill 规定加载时机、事实门禁与 SOP，CLI 只执行可确定验证的治理机制。歧义进入 Decision，不为“自动化成功”而猜测。
+6. **语义与机制分层**：人类决定高风险取舍，Agent 理解正文和业务语义，Skill 规定加载时机、事实门禁与 SOP，CLI 只执行可确定验证的治理机制。歧义进入 `human-request`，不为“自动化成功”而猜测。
 7. **聚合入口是少数例外**：`setup` 和 `upgrade` 可以编排多个服务，因为它们表达完整安装生命周期；日常内容治理保持原子能力，避免重新出现 `maintenance run` 一类不可审查的聚合入口。
 8. **参数最小充分、黄金路径唯一**：调用方只提交 CLI 无法可靠推导的事实。已受管的 Workspace、Space、Domain 和 Project 优先使用稳定 id，路径只用于外部输入、未接管来源、显式物理位置或尚无稳定 id 的文档；同一事实不得同时要求 id、完整路径和父级关系。一个常规意图只保留一个公共入口，不用互斥模式参数、兼容别名或要求 Agent 手工拼装底层步骤来表达同一行为。
 

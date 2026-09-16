@@ -37,6 +37,8 @@ HINT_BODY = """## Campfire 文档治理
 8. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
    `_模板/模板-<用途>.md`，使用找到的第一份；不合并模板，不修改模板源文档。
    模板不存在时使用对应 Skill 的最小结构，不自行发明复杂格式。
+9. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
+   `--confirm` 只确认 CLI 写入，不代表归档授权。
 
 `.campfire.yaml`、声明 Frontmatter、自动生成区域、Base、关系页和 SQLite
 是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；缺少
