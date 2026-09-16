@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -13,6 +15,11 @@ from campfire_cli.config.settings import WorkspaceSettings
 
 
 class BaseService:
+    _FIELD_REFERENCE = re.compile(
+        r"(?<![.\w])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*(?:==|!=|\.isEmpty\(|\.contains\()"
+    )
+    _ENUM_COMPARISON = re.compile(r'''\b([A-Za-z_]\w*)\s*(?:==|!=)\s*["']([^"']+)["']''')
+
     def __init__(self, settings: WorkspaceSettings, repository: BaseRepository) -> None:
         self._settings = settings
         self._repository = repository
@@ -48,6 +55,8 @@ class BaseService:
                 payload = yaml.safe_load(self._repository.read(self._source_root() / item.path))
                 if not isinstance(payload, dict) or not isinstance(payload.get("views"), list):
                     issues.append({"code": "base-views-missing", "path": item.path})
+                elif payload:
+                    issues.extend(self._semantic_issues(payload, item.path))
             except yaml.YAMLError as exc:
                 issues.append({"code": "base-yaml-invalid", "path": item.path, "detail": str(exc)})
         return BaseResult(status="ok" if not issues else "needs-review", bases=bases, issues=issues)
@@ -122,6 +131,76 @@ class BaseService:
 
     def _managed_names(self) -> list[str]:
         return list(config_section("bases").get("managed_bases", []))
+
+    def _semantic_issues(self, payload: dict[str, Any], path: str) -> list[dict[str, str]]:
+        known = self._known_fields()
+        referenced = set(payload.get("properties", {}))
+        for view in payload.get("views", []):
+            if not isinstance(view, dict):
+                continue
+            referenced.update(view.get("order", []))
+            group_by = view.get("groupBy", {})
+            if isinstance(group_by, dict) and isinstance(group_by.get("property"), str):
+                referenced.add(group_by["property"])
+            for expression in self._expressions(view.get("filters")):
+                referenced.update(self._FIELD_REFERENCE.findall(expression))
+        for expression in self._expressions(payload.get("filters")):
+            referenced.update(self._FIELD_REFERENCE.findall(expression))
+        issues = [
+            {"code": "base-unknown-field", "path": path, "detail": field}
+            for field in sorted(field for field in referenced if field not in known)
+        ]
+        candidates = self._enum_candidates()
+        for expression in self._expressions(payload.get("filters")) + [
+            expression
+            for view in payload.get("views", [])
+            if isinstance(view, dict)
+            for expression in self._expressions(view.get("filters"))
+        ]:
+            for field, value in self._ENUM_COMPARISON.findall(expression):
+                if field in candidates and value not in candidates[field]:
+                    issues.append(
+                        {
+                            "code": "base-enum-value-invalid",
+                            "path": path,
+                            "detail": f"{field}={value}",
+                        }
+                    )
+        return issues
+
+    def _known_fields(self) -> set[str]:
+        profiles = self._settings.frontmatter_schema.get("profiles", {})
+        fields = {
+            field
+            for profile in profiles.values()
+            if isinstance(profile, dict)
+            for field in profile.get("fields", {})
+        }
+        return fields | {"file.name", "file.path", "file.ext"}
+
+    def _enum_candidates(self) -> dict[str, set[str]]:
+        candidates = {"type": set(self._settings.document_types.get("types", {}))}
+        for profile in self._settings.frontmatter_schema.get("profiles", {}).values():
+            if not isinstance(profile, dict):
+                continue
+            for field, rule in profile.get("fields", {}).items():
+                if isinstance(rule, dict) and rule.get("kind") == "enum" and rule.get("values"):
+                    candidates.setdefault(field, set()).update(rule["values"])
+        return candidates
+
+    @staticmethod
+    def _expressions(value: object) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            return [
+                item
+                for values in value.values()
+                if isinstance(values, list)
+                for item in values
+                if isinstance(item, str)
+            ]
+        return []
 
     def _render(self, source: Path) -> str:
         return self._repository.read(source)

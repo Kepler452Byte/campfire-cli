@@ -168,18 +168,6 @@ project:
   - paused
   - archived
   default_space_type: work
-archive:
-  version: 1
-  reasons:
-  - superseded
-  - completed
-  - cancelled
-  - obsolete
-  - merged
-  - project-closed
-  reasons_requiring_successor:
-  - superseded
-  - merged
 issues:
   version: 1
   default:
@@ -213,9 +201,6 @@ issues:
     frontmatter-enum-invalid:
     - Frontmatter 使用了契约之外的枚举值。
     - 使用 issue 的 allowed 值；任务进度写入 task_status，文档状态写入 document_status。
-    document-archive-state-mismatch:
-    - 文档状态、生命周期和 archive 路径不一致。
-    - 使用两阶段归档流程统一修复，不要只修改其中一个字段。
     template-enum-invalid:
     - Skill 模板中的枚举值与当前 Schema 不一致。
     - 修改项目内 Skill SSOT 后运行 campfire skill sync。
@@ -268,9 +253,6 @@ issues:
     domain-:
     - 领域声明不完整或不一致。
     - 检查 _领域.md 与目录结构。
-    archive-:
-    - 文档暂不满足归档条件。
-    - 补齐归档原因或后继关系后重试。
     inbox-:
     - 全局收件箱配置异常。
     - 检查治理配置与 _收件箱 目录。
@@ -296,7 +278,7 @@ bases:
   version: 1
   target: 治理视图
   managed_bases:
-  - 项目文档.base
+  - 文档工作台.base
   - 任务工作台-项目.base
   - 任务工作台-个人.base
   - 待人决策工作台.base

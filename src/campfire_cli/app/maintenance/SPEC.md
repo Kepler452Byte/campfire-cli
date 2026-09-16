@@ -1,6 +1,6 @@
 # Maintenance App SPEC
 
-本模块处理跨文档检查、MOC 等可见自动生成物、两阶段归档和维护运行记录。Space/Domain 结构由 Workspace App 提供，文档查询索引由 Document App 提供；本模块不重复定义，也不承载文档语义修改计划。
+本模块处理跨文档检查、MOC 等可见自动生成物和维护运行记录。Space/Domain 结构由 Workspace App 提供，文档查询索引由 Document App 提供；本模块不重复定义，也不承载文档语义修改计划。
 
 文档扫描、类型、Profile、任务状态、模板枚举、Frontmatter 顺序、跨字段不变量与确定关系索引均委托 Document App；本模块只负责检查编排、过滤、可见派生内容和报告。全量 check 或 scoped sync 通过消费方维护端口触发 Document Index 校正，不依赖具体 Document Service，也不得实现第二套索引规则。写入通过共享 ChangeSet Executor 复核内容哈希并原子提交。
 
@@ -14,8 +14,7 @@ Domain MOC 只列出该 Domain `_模板/` 中实际存在的模板；Maintenance
 maintenance/
 ├── link_service.py
 ├── moc_service.py
-├── archive_service.py
 └── maintenance_service.py
 ```
 
-归档是 Maintenance 子用例，对外使用 `campfire maintenance archive check/apply`，不建立独立 Archive App。
+归档仅是 Document Profile 中的 `document_status` 值，通过 `document apply` 修改；Maintenance 不提供归档命令。

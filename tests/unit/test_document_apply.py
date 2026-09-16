@@ -95,3 +95,20 @@ def test_human_request_is_restricted_to_inbox(workspace: Path) -> None:
     )
     assert result.status == "applied"
     assert result.follow_up == []
+
+
+def test_archived_document_does_not_require_an_archive_directory(workspace: Path) -> None:
+    domain = project_domain(workspace)
+
+    result = AppContainer.build("test").document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/已完成方案",
+            document_type="plan",
+            values={"description": "已完成的方案", "document_status": "archived"},
+            confirm=True,
+        )
+    )
+
+    assert result.status == "applied"
+    document = parse_document((domain / "计划-已完成方案.md").read_text(encoding="utf-8"))
+    assert document.frontmatter["document_status"] == "archived"

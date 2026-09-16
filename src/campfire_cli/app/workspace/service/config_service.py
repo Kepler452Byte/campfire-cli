@@ -70,24 +70,11 @@ class WorkspaceConfigService:
     def _check_policy_lists(self, issues: list[dict[str, Any]]) -> None:
         for name, fields in (
             ("project", ("statuses",)),
-            ("archive", ("reasons", "reasons_requiring_successor")),
             ("issues", ("warning_codes",)),
         ):
             config = config_section(name)
             for field in fields:
                 self._unique(name, field, config.get(field), issues)
-        archive = config_section("archive")
-        unknown = set(archive.get("reasons_requiring_successor", [])) - set(
-            archive.get("reasons", [])
-        )
-        for value in sorted(unknown):
-            self._issue(
-                issues,
-                "archive",
-                "reasons_requiring_successor",
-                "unknown-reference",
-                value,
-            )
 
     def _check_document_types(self, issues: list[dict[str, Any]]) -> None:
         config = self.settings.document_types
@@ -131,7 +118,7 @@ class WorkspaceConfigService:
                     parent,
                 )
             fields = profile.get("fields", {})
-            if not isinstance(fields, dict) or not fields:
+            if not isinstance(fields, dict) or (not fields and not parent):
                 self._issue(
                     issues,
                     "frontmatter_schema",

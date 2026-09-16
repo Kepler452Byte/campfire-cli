@@ -3,7 +3,6 @@
 本目录放 Workspace 与 Maintenance 等业务模块共同使用的原子能力。
 
 - `documents/`：Markdown、Frontmatter、文档类型、链接、领域、关系和 MOC。
-- `archive/`：归档规则与计划能力。
 - `database/`：SQLite、模型和数据库迁移机制。
 - `filesystem/`：安全路径、原子写入和锁。
 - `reports/`：稳定 JSON 与 Markdown 报告渲染。

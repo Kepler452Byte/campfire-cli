@@ -359,17 +359,11 @@ class DocumentRuleService:
         frontmatter: dict[str, Any],
     ) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
-        document_status = frontmatter.get("document_status")
         in_template_directory = "_模板" in path.parts
         if document_type == "template" and path.parent.name != "_模板":
             issues.append({"code": "template-directory-required", "path": relative})
         elif in_template_directory and document_type != "template":
             issues.append({"code": "template-directory-type-mismatch", "path": relative})
-        in_archive = "archive" in path.parts
-        if in_archive != (document_status == "archived") and (
-            in_archive or document_status == "archived"
-        ):
-            issues.append({"code": "document-archive-state-mismatch", "path": relative})
         if document_type != "task":
             return issues
         return issues

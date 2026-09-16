@@ -327,22 +327,6 @@ def generate_project_domain_content(
         count = len(list((domain.path / d).rglob("*.md")))
         if count:
             lines.extend([f"### {d}/", "", f"- {count} 篇，见目录", ""])
-    archive_dir = domain.path / "archive"
-    if archive_dir.is_dir():
-        archived_notes = sorted(
-            archive_dir.rglob("*.md"),
-            key=lambda path: str(path.relative_to(archive_dir)).casefold(),
-        )
-        if archived_notes:
-            lines.extend(["### 已归档", ""])
-            for archived_note in archived_notes:
-                meta = parse_frontmatter(archived_note)
-                reason = meta.get("archive_reason", "待补原因") if meta else "待补元数据"
-                successor = meta.get("superseded_by", "") if meta else ""
-                suffix = f"；替代：{successor}" if successor and successor != "[]" else ""
-                rel = archived_note.relative_to(domain.path).with_suffix("")
-                lines.append(f"- [[{rel}|{archived_note.stem}]]：`{reason}`{suffix}")
-            lines.append("")
     append_template_section(lines, domain, templates)
     lines.append("")
     return "\n".join(lines).rstrip()
