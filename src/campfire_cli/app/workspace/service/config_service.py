@@ -24,6 +24,7 @@ class WorkspaceConfigService:
         self._check_named_list("bases", self.settings.bases, "managed_bases", issues)
         for field in (
             "inbox",
+            "human_request_root",
             "space_marker",
             "domain_marker",
             "related_limit",

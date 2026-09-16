@@ -88,6 +88,32 @@ def test_list_uses_reconciled_index_and_keeps_all_task_lifecycles(workspace: Pat
     assert blocked.index_generation > all_tasks.index_generation
 
 
+def test_system_scope_is_indexed_without_a_domain(workspace: Path) -> None:
+    request = workspace / "_待用户确认/待确认-发布.md"
+    request.write_text(
+        "---\n"
+        "name: 发布\n"
+        "description: 确认是否发布\n"
+        "type: human-request\n"
+        "document_status: current\n"
+        "created: 2026-09-15\n"
+        "updated: 2026-09-15\n"
+        "tags: []\n"
+        "human_decision_status: pending\n"
+        "---\n# 发布\n",
+        encoding="utf-8",
+    )
+    document = AppContainer.build("test").document
+
+    listed = document.list(document_type="human-request")
+    inspected = document.inspect("_待用户确认/待确认-发布.md")
+
+    assert [item.path for item in listed.items] == ["_待用户确认/待确认-发布.md"]
+    assert inspected["domain_id"] is None
+    assert inspected["project_id"] is None
+    assert inspected["status"] == "ok"
+
+
 def test_inspect_returns_declared_outgoing_incoming_and_unresolved(workspace: Path) -> None:
     domain = write_project_domain(workspace)
     source = domain / "计划-Source.md"

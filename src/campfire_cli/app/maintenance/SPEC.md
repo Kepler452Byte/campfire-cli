@@ -6,7 +6,7 @@
 
 Domain MOC 只列出该 Domain `_模板/` 中实际存在的模板；Maintenance 不计算或持久化模板继承结果，Agent 按 Domain 祖先路径就近选择。
 
-受管范围由当前 Workspace 中实际存在的 `_空间.md` 动态发现，不使用固定 Space 白名单；`scope_roots` 只补充收件箱等非 Space 系统范围。声明文件由 Workspace App 校验，不计入普通文档问题。
+受管范围由当前 Workspace 中实际存在的 `_空间.md` 动态发现，不使用固定 Space 白名单；`scope_roots` 只补充 `_待用户确认/` 等非 Space 系统范围。声明文件由 Workspace App 校验，不计入普通文档问题。
 
 `check --scope` 的 status 表示当前筛选结果，`workspace_status` 表示全 Workspace 状态。`sync --scope` 只发现并扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页并触发文档索引 reconcile；只受当前范围的结构问题阻塞。`document list/inspect` 不以 Maintenance 为前置步骤。单篇内容创建、补全和修改属于 Document App，批量迁移属于 Workspace Restructure。
 

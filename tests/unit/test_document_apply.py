@@ -83,11 +83,11 @@ def test_task_dynamic_project_value_is_validated_not_injected(workspace: Path) -
     assert rejected.issues[0]["code"] == "frontmatter-enum-invalid"
 
 
-def test_human_request_is_restricted_to_inbox(workspace: Path) -> None:
+def test_human_request_is_restricted_to_global_request_root(workspace: Path) -> None:
     document = AppContainer.build("test").document
     result = document.apply(
         DocumentApplyRequest(
-            path="_收件箱/待用户确认/上线目标",
+            path="_待用户确认/上线目标",
             document_type="human-request",
             values={"description": "确认上线目标"},
             confirm=True,

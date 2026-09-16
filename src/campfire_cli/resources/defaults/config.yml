@@ -4,7 +4,7 @@ workspace:
   system_directories:
   - _收件箱/用户输入
   - _收件箱/待接管
-  - _收件箱/待用户确认
+  - _待用户确认
   - 治理视图
   spaces:
   - id: knowledge
@@ -17,6 +17,7 @@ workspace:
     type: work
   reserved_directories:
   - _收件箱
+  - _待用户确认
   - _协作
   - 治理视图
   - assets
@@ -30,6 +31,7 @@ workspace:
 governance:
   version: 1
   inbox: _收件箱
+  human_request_root: _待用户确认
   collaboration_root: _协作
   space_marker: _空间.md
   domain_marker: _领域.md
@@ -51,7 +53,8 @@ governance:
 document_types:
   version: 2
   space_marker: _空间.md
-  scope_roots: []
+  scope_roots:
+  - _待用户确认
   ignored_directories:
   - assets
   - generated

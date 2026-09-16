@@ -412,6 +412,9 @@ class MaintenanceService:
         inbox = self._settings.vault_root / self._settings.governance.get("inbox", "_收件箱")
         if not inbox.is_dir():
             return [Issue(code="inbox-missing", path=inbox.name)]
+        requests = self._settings.vault_root / self._settings.governance["human_request_root"]
+        if not requests.is_dir():
+            return [Issue(code="human-request-root-missing", path=requests.name)]
         return []
 
     @staticmethod

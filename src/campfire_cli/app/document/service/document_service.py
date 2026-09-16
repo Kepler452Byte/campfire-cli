@@ -14,7 +14,7 @@ from campfire_cli.app.document.service.document_apply_service import DocumentApp
 from campfire_cli.app.document.service.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.document_move_service import DocumentMoveService
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
-from campfire_cli.app.document.service.document_scanner import exempt_document
+from campfire_cli.app.document.service.document_scanner import exempt_document, is_system_scope_path
 from campfire_cli.app.document.service.kanban_service import (
     check_kanban_renderability,
     renderability_result,
@@ -85,12 +85,19 @@ class DocumentService:
         parsed = parse_document(path.read_text(encoding="utf-8"))
         document_type = parsed.frontmatter.get("type")
         profile = self._profiles.resolve(document_type, parsed.frontmatter, path)
-        context = resolve_domain_context(
-            self._settings.vault_root,
-            path,
-            self._project_roots,
-            self._settings.governance.get("domain_marker", "_领域.md"),
-        )
+        try:
+            context = resolve_domain_context(
+                self._settings.vault_root,
+                path,
+                self._project_roots,
+                self._settings.governance.get("domain_marker", "_领域.md"),
+            )
+        except DomainContextError:
+            if not is_system_scope_path(
+                self._settings.vault_root, path, self._settings.document_types
+            ):
+                raise
+            context = None
         issues = self._rules.check_document(self._settings.vault_root, path)
         generation, relations = self._index.relations(normalized)
         issues.extend(
@@ -106,8 +113,8 @@ class DocumentService:
             "status": "ok" if not issues else "needs-review",
             "workspace_id": self._settings.workspace_id,
             "path": normalized,
-            "domain_id": context.domain_id,
-            "project_id": context.project_id,
+            "domain_id": context.domain_id if context else None,
+            "project_id": context.project_id if context else None,
             "type": document_type if isinstance(document_type, str) else None,
             "profile": profile.model_dump(),
             "index_generation": generation,

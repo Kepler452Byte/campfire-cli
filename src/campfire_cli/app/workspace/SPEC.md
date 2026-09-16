@@ -14,7 +14,7 @@
 
 Adoption、文档批量 Restructure 与 Domain Restructure 均使用共享 ChangeSet Executor 提交文件写入和路径移动，并在协调的 Repository 写入失败时补偿恢复。Workspace Service 不调用 Maintenance Service；实际写入成功的结果只在必要时以轻量 `follow_up` 返回零或一个可直接执行的 scoped `maintenance sync`，预览和阻塞结果不返回可执行后续。
 
-Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space 并继承 governance。`_收件箱` 与 `治理视图` 是系统区域，不是 Space。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
+Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space 并继承 governance。`_收件箱`、`_待用户确认` 与 `治理视图` 是系统区域，不是 Space；其中 `_待用户确认/` 是受管文档范围，但没有虚构的 Domain 或 Project。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
 
 Space 与 Domain 声明 Frontmatter 只由本模块解释、格式化和修改；Document App 对其返回 `not-applicable`。`workspace space/domain format` 只规范化 Frontmatter 并逐字节保留 Markdown 正文。声明文件中 `AUTO-GENERATED` 标记区域由 CLI 独占，标记外正文允许人和 Agent 编辑。`workspace space check --space <id>` 支持对单个 Space 做局部复检。
 

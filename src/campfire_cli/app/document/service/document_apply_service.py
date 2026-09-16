@@ -18,6 +18,7 @@ from campfire_cli.app.document.service.document_patch_values import (
 )
 from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.document_scanner import is_system_scope_path
 from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
@@ -96,12 +97,16 @@ class DocumentApplyService:
             else source
         )
         target_name = target.relative_to(self._settings.vault_root).as_posix()
-        context = self._domain_context(target) if document_type != "human-request" else None
+        context = None if is_system_scope_path(
+            self._settings.vault_root, target, self._settings.document_types
+        ) else self._domain_context(target)
         relative_target = target.relative_to(self._settings.vault_root).as_posix()
         if document_type == "human-request" and not relative_target.startswith(
-            "_收件箱/待用户确认/"
+            f"{self._settings.governance['human_request_root']}/"
         ):
-            raise GovernanceBlockedError("human-request 只能创建在 _收件箱/待用户确认/")
+            raise GovernanceBlockedError(
+                f"human-request 只能创建在 {self._settings.governance['human_request_root']}/"
+            )
 
         today = date.today().isoformat()
         frontmatter = dict(parsed.frontmatter)

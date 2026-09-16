@@ -32,7 +32,7 @@ campfire workspace rebuild --confirm
 4. 单篇文档改名或跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`；批量文档迁移使用 `workspace restructure`。不要让 Agent 拼目标目录，不要为单篇修改创建批次计划。
 5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
 6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页并校正本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
-7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，在 `_收件箱/待用户确认/` 创建 `human-request`；得到回答后把结论写入正式文档。归档或删除必须得到用户针对该文档的明确要求或同意；CLI 的 `--confirm` 不是归档授权。
+7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，在 `_待用户确认/` 创建 `human-request`；得到回答后把结论写入正式文档。归档或删除必须得到用户针对该文档的明确要求或同意；CLI 的 `--confirm` 不是归档授权。
 
 Domain 可在 `_模板/` 中持有 `template` 类型文档。创建结构化文档时从目标 Domain 向父 Domain 查找同名模板并使用最近的一份；不合并模板，也不持久化继承结果。模板只使用 base Profile，创建和 Frontmatter 更新仍走 `document apply`。Maintenance 只在 Domain MOC 中列出当前 Domain 实际持有的模板。
 
@@ -68,7 +68,7 @@ Domain 可在 `_模板/` 中持有 `template` 类型文档。创建结构化文�
    |
    `-- 归属或语义不能唯一确定
           -> document apply --type human-request
-          -> _收件箱/待用户确认/待确认-*.md
+          -> _待用户确认/待确认-*.md
 ```
 
 Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校验、预览、哈希保护、原子执行、引用更新和索引刷新；用户负责确认歧义与高风险归属。批量内容迁移必须进入 Workspace Restructure 计划。
@@ -86,7 +86,7 @@ Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校�
 - Maintenance 只检查文档、刷新派生内容和执行已获用户明确授权的归档，不改变文档主物理归属，不进行跨领域移动、领域合并或拆分。
 - 写入返回 `concurrent-change` 时停止并重新检查，不覆盖其他会话的新内容。
 - Markdown 是内容事实来源，用户级配置是治理契约；SQLite 只保存索引与工作流状态。
-- 待用户确认事项是 `human-request` 文档，不写入 SQLite 工作流或 `_协作/` 投影。
+- 待用户确认事项是位于全局系统受管区 `_待用户确认/` 的 `human-request` 文档，不属于 Space、Domain 或 Project；不写入 SQLite 工作流或 `_协作/` 投影。
 
 ## 内容与任务
 

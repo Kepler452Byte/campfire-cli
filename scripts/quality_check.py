@@ -35,10 +35,13 @@ def check_tag(version: str) -> None:
         raise SystemExit(f"tag {tag} does not match project version {version}")
 
 
-def smoke_test_wheel(version: str) -> None:
+def smoke_test_wheel(version: str, artifact_dir: Path | None = None) -> None:
     with tempfile.TemporaryDirectory(prefix="campfire-quality-") as raw_directory:
         directory = Path(raw_directory)
-        dist = directory / "dist"
+        dist = artifact_dir or directory / "dist"
+        if artifact_dir is not None and dist.exists() and any(dist.iterdir()):
+            raise SystemExit(f"artifact directory must be empty: {dist}")
+        dist.mkdir(parents=True, exist_ok=True)
         environment = directory / "venv"
         workspace = directory / "workspace"
         run("uv", "build", "--out-dir", str(dist))
@@ -95,13 +98,19 @@ def smoke_test_wheel(version: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--release", action="store_true")
+    parser.add_argument("--artifact-dir", type=Path)
     arguments = parser.parse_args()
+    if arguments.artifact_dir is not None and not arguments.release:
+        parser.error("--artifact-dir 只能与 --release 一起使用")
     run("uv", "run", "ruff", "check", "src", "tests", "scripts")
     run("uv", "run", "pytest", "-q")
     if arguments.release:
         version = project_version()
         check_tag(version)
-        smoke_test_wheel(version)
+        smoke_test_wheel(
+            version,
+            arguments.artifact_dir.resolve() if arguments.artifact_dir is not None else None,
+        )
 
 
 if __name__ == "__main__":

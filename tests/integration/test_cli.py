@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from campfire_cli.main import app
@@ -22,7 +23,9 @@ def test_public_tree_exposes_only_current_document_workflow() -> None:
 def test_document_apply_requires_path_option() -> None:
     result = runner.invoke(app, ["document", "apply", "--type", "task"])
     assert result.exit_code != 0
-    assert "--path" in result.output
+    command = get_command(app).commands["document"].commands["apply"]
+    path = next(parameter for parameter in command.params if parameter.name == "path")
+    assert path.required
 
 
 def test_removed_lifecycle_filter_is_not_public() -> None:

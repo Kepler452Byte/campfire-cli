@@ -60,7 +60,7 @@ Workspace ── Space ── Domain 树 ── 文档
 | Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/campfire.db`（注册）+ `.campfire.yaml`（便携 Manifest） |
 | Space / Domain | 顶级容器 / 可嵌套内容边界，声明式 + 自动 MOC | Vault 内 `_空间.md`、`_领域.md` |
 | Document | 知识、计划、问题、决策、记录等持久内容 | Markdown 正文 + Frontmatter |
-| Human request | Agent 需要人类回答的待确认事项 | `_收件箱/待用户确认/` 中的 `human-request` 文档 |
+| Human request | Agent 需要人类回答的待确认事项 | `_待用户确认/` 中的 `human-request` 文档 |
 | Generated View | MOC、相关文档页、Base、报告 | 派生数据，能生成就不手工维护 |
 
 设备边界：`.campfire.yaml` 只保存可跨设备同步的稳定身份与逻辑关联（Project id、Git remote、文档 Domain 等），禁止本机绝对路径；新设备执行 `campfire setup --path <vault>` 即可恢复。本机路径绑定、索引、锁与报告都在 `~/.campfire/`（可用 `CAMPFIRE_HOME` 覆盖），按 Workspace 隔离。

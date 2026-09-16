@@ -70,7 +70,7 @@ Markdown Workspace Adapter   用户级状态
                               batches/reports/locks
 ```
 
-待人确认以 `_收件箱/待用户确认/` 的 `human-request` 文档为事实来源；`human_decision_status` 只表达待人处理状态，用户结论随后写回正式文档。不存在独立的 Decision SQLite 状态机或 `_协作/` 投影。
+待人确认以全局系统受管区 `_待用户确认/` 的 `human-request` 文档为事实来源；它不属于任何 Space、Domain 或 Project。`human_decision_status` 只表达待人处理状态，用户结论随后写回正式文档。不存在独立的 Decision SQLite 状态机或 `_协作/` 投影。
 
 `app/` 按可独立理解的业务能力组织，CLI 只做参数和输出适配，Service 承担业务流程，Repository 负责外部读写。跨 App 的用例编排由组合根 `AppContainer` 承担，`setup` 与 `upgrade` 是当前实例。`common/` 只放跨业务复用、无独立业务流程的原子能力；不能为了“复用”把业务编排下沉到 common。
 

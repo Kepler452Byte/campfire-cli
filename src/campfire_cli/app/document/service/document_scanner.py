@@ -14,6 +14,16 @@ def exempt_document(path: Path, config: dict[str, Any]) -> bool:
     return path.name in set(config.get("exempt_basenames", []))
 
 
+def is_system_scope_path(root: Path, path: Path, config: dict[str, Any]) -> bool:
+    """Return whether a path belongs to a configured non-Space document root."""
+    resolved = path.resolve()
+    return any(
+        resolved == scope or scope in resolved.parents
+        for raw_root in config.get("scope_roots", [])
+        for scope in (safe_path(root.resolve(), raw_root),)
+    )
+
+
 def iter_documents(
     root: Path,
     config: dict[str, Any],
@@ -30,10 +40,7 @@ def iter_documents(
             marker.parent.relative_to(root).as_posix() for marker in root.glob(f"*/{space_marker}")
         ]
         if spaces:
-            inboxes = [
-                value for value in config.get("scope_roots", []) if value.startswith("_收件箱/")
-            ]
-            scope_roots = [*spaces, *inboxes]
+            scope_roots = [*spaces, *config.get("scope_roots", [])]
         else:
             scope_roots = config.get("scope_roots", [])
         scope_paths = [safe_path(root, raw_root) for raw_root in scope_roots]
