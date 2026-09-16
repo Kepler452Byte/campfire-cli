@@ -40,6 +40,7 @@ def smoke_test_wheel(version: str) -> None:
         directory = Path(raw_directory)
         dist = directory / "dist"
         environment = directory / "venv"
+        workspace = directory / "workspace"
         run("uv", "build", "--out-dir", str(dist))
         wheels = list(dist.glob("*.whl"))
         source_distributions = list(dist.glob("*.tar.gz"))
@@ -53,21 +54,40 @@ def smoke_test_wheel(version: str) -> None:
             "campfire.exe" if os.name == "nt" else "campfire"
         )
         run("uv", "pip", "install", "--python", str(python), str(wheel))
+        smoke_environment = os.environ.copy()
+        smoke_environment.update(
+            {
+                "CAMPFIRE_HOME": str(directory / "campfire-home"),
+                "CAMPFIRE_AGENT_HINT_PATH": str(directory / "agent-hints"),
+                "CAMPFIRE_SKILL_TARGETS": str(directory / "agent-skills"),
+            }
+        )
         installed = subprocess.run(
             [str(campfire), "version"],
             cwd=ROOT,
             check=True,
             capture_output=True,
             text=True,
+            env=smoke_environment,
         ).stdout.strip()
         if installed != version:
             raise SystemExit(f"installed version {installed} does not match {version}")
-        output = subprocess.run(
-            [str(campfire), "document", "type", "list"],
+        workspace.mkdir()
+        subprocess.run(
+            [str(campfire), "setup", "--path", str(workspace), "--id", "smoke"],
             cwd=ROOT,
             check=True,
             capture_output=True,
             text=True,
+            env=smoke_environment,
+        )
+        output = subprocess.run(
+            [str(campfire), "--workspace", "smoke", "document", "type", "list"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=smoke_environment,
         ).stdout
         json.loads(output)
 
