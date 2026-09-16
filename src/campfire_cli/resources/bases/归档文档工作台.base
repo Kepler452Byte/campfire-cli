@@ -16,3 +16,10 @@ views:
     sort:
       - property: updated
         direction: DESC
+  - type: table
+    name: 按目录浏览
+    groupBy: {property: file.folder, direction: ASC}
+    order: [file.name, type, description, updated, tags]
+    sort:
+      - property: updated
+        direction: DESC

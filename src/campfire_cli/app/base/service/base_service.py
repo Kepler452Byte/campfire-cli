@@ -176,7 +176,7 @@ class BaseService:
             if isinstance(profile, dict)
             for field in profile.get("fields", {})
         }
-        return fields | {"file.name", "file.path", "file.ext"}
+        return fields | {"file.name", "file.path", "file.folder", "file.ext"}
 
     def _enum_candidates(self) -> dict[str, set[str]]:
         candidates = {"type": set(self._settings.document_types.get("types", {}))}
