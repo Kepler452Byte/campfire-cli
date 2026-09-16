@@ -77,8 +77,8 @@ def make_domain(vault: Path, domain_id: str, doc_count: int) -> None:
     )
     (domain / f"MOC-{domain_id}.md").write_text(
         "---\n"
-        f'name: {domain_id}总览\n'
-        'description: 测试领域导航入口。\n'
+        f"name: {domain_id}总览\n"
+        "description: 测试领域导航入口。\n"
         "type: moc\n"
         "document_status: current\n"
         "lifecycle: maintained\n"

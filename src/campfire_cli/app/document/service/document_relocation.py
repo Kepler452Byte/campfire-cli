@@ -21,9 +21,7 @@ def prepare_document_relocation(
     """Prepare one document relocation and every deterministic reference rewrite."""
 
     references = _reference_files(vault_root)
-    unique_stem = sum(
-        path.stem == source.stem for path in references if path.suffix == ".md"
-    ) == 1
+    unique_stem = sum(path.stem == source.stem for path in references if path.suffix == ".md") == 1
     source_relative = source.relative_to(vault_root).as_posix()
     target_relative = target.relative_to(vault_root).as_posix()
     writes: dict[Path, str] = {}

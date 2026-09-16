@@ -12,6 +12,7 @@ from campfire_cli.app.document.service.document_patch_values import (
 )
 from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.domain_context import (
@@ -26,7 +27,7 @@ from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, sa
 from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
-STRUCTURAL_FIELDS = {"domain", "project", "updated"}
+STRUCTURAL_FIELDS = {"updated"}
 
 
 class DocumentMoveService:
@@ -132,27 +133,7 @@ class DocumentMoveService:
         if not issues and target_domain is not None:
             removed = set(unset_fields)
             structural_patch: dict[str, Any] = {}
-            if parsed.frontmatter.get("domain") != target_domain.domain_id:
-                structural_patch["domain"] = target_domain.domain_id
-            if (
-                target_domain.project_id
-                and parsed.frontmatter.get("project") != target_domain.project_id
-            ):
-                structural_patch["project"] = target_domain.project_id
-            elif not target_domain.project_id and "project" in parsed.frontmatter:
-                removed.add("project")
-            if document_type == "task" and target_domain.project_id:
-                requested_project = values.get("related_project")
-                if requested_project and requested_project != target_domain.project_id:
-                    issues.append(
-                        {
-                            "code": "task-related-project-context-mismatch",
-                            "path": target_name,
-                            "expected": target_domain.project_id,
-                            "actual": requested_project,
-                        }
-                    )
-                structural_patch["related_project"] = target_domain.project_id
+            removed.update({"project", "domain"} & set(parsed.frontmatter))
             if source_domain != target_domain or values or unset_fields:
                 structural_patch["updated"] = date.today().isoformat()
 
@@ -174,7 +155,12 @@ class DocumentMoveService:
                 )
             decoded: dict[str, Any] = {}
             if not unknown:
-                decoded, input_issues = decode_patch_values(profile, values, target_name)
+                decoded, input_issues = decode_patch_values(
+                    profile,
+                    values,
+                    target_name,
+                    workspace_candidate_sets(self._settings.vault_root),
+                )
                 issues.extend(input_issues)
             patch = {**decoded, **structural_patch}
             next_frontmatter = dict(profile_frontmatter)
@@ -197,7 +183,9 @@ class DocumentMoveService:
                 issues.extend(
                     self._rules.check_content(self._settings.vault_root, target, rendered, profile)
                 )
-            enrich_profile_issues(issues, profile)
+            enrich_profile_issues(
+                issues, profile, workspace_candidate_sets(self._settings.vault_root)
+            )
             missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
             missing_fields = [
                 str(item.get("field") or item.get("detail"))

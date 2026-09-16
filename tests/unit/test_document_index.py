@@ -256,22 +256,6 @@ def test_index_excludes_moc_and_reports_ambiguous_links(workspace: Path) -> None
     ]
 
 
-def test_effective_config_change_forces_full_rebuild(workspace: Path) -> None:
-    domain = write_project_domain(workspace)
-    write_task(domain / "任务-Todo.md", "Todo", "todo")
-    initial = AppContainer.build("test").document.list(document_type="task")
-    config = workspace / "_campfire/config.yml"
-    config.write_text(
-        "version: 1\nfrontmatter_schema:\n  profiles:\n    base:\n      unknown_fields: report\n",
-        encoding="utf-8",
-    )
-
-    rebuilt = AppContainer.build("test").document.list(document_type="task")
-
-    assert rebuilt.count == initial.count
-    assert rebuilt.index_generation > initial.index_generation
-
-
 def test_failed_snapshot_replace_keeps_previous_generation(workspace: Path) -> None:
     domain = write_project_domain(workspace)
     task = domain / "任务-Todo.md"

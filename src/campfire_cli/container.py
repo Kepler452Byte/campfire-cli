@@ -6,11 +6,6 @@ from pathlib import Path
 from campfire_cli import __version__
 from campfire_cli.app.base.repository.base_repository import BaseRepository
 from campfire_cli.app.base.service.base_service import BaseService
-from campfire_cli.app.decision.repository.decision_repository import SqliteDecisionRepository
-from campfire_cli.app.decision.service.decision_projection_service import (
-    DecisionProjectionService,
-)
-from campfire_cli.app.decision.service.decision_service import DecisionService
 from campfire_cli.app.document.repository.document_index_repository import (
     SqliteDocumentIndexRepository,
 )
@@ -60,7 +55,6 @@ class AppContainer:
     adoption: AdoptionService
     skill: SkillService
     base: BaseService
-    decision: DecisionService
 
     @classmethod
     def setup(
@@ -253,10 +247,6 @@ class AppContainer:
         )
         skill = SkillService(settings, SkillRepository())
         base = BaseService(settings, BaseRepository())
-        decision = DecisionService(
-            SqliteDecisionRepository(session, resolution.workspace_id),
-            DecisionProjectionService(settings),
-        )
         return cls(
             settings=settings,
             document=DocumentService(settings, document_index, project_roots),
@@ -266,5 +256,4 @@ class AppContainer:
             adoption=adoption,
             skill=skill,
             base=base,
-            decision=decision,
         )

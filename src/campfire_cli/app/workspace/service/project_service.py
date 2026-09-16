@@ -335,9 +335,7 @@ class ProjectService:
             None,
         )
         if duplicate:
-            raise ConfigurationError(
-                f"Domain 已被 active Project 绑定：{duplicate.id}"
-            )
+            raise ConfigurationError(f"Domain 已被 active Project 绑定：{duplicate.id}")
         domains = DomainService(Path(workspace.path), self._root)
         if require_domain:
             domain_path = Path(workspace.path) / domains.show(request.document_domain_id).path

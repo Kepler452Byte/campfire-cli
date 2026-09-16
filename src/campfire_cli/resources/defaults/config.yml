@@ -4,10 +4,7 @@ workspace:
   system_directories:
   - _收件箱/用户输入
   - _收件箱/待接管
-  - _协作/decisions/pending
-  - _协作/decisions/answered
-  - _协作/decisions/closed
-  - _协作/decisions/cancelled
+  - _收件箱/待用户确认
   - 治理视图
   spaces:
   - id: knowledge
@@ -70,12 +67,12 @@ document_types:
     moc:
       prefix: MOC-
       label: 索引
-    product-spec:
-      prefix: 产品-
-      label: 产品
-    tech-spec:
-      prefix: 技术-
-      label: 技术
+    prd:
+      prefix: PRD-
+      label: 产品需求
+    trd:
+      prefix: TRD-
+      label: 技术设计
     decision:
       prefix: 决策-
       label: 决策
@@ -88,9 +85,6 @@ document_types:
     human-request:
       prefix: 待确认-
       label: 待用户确认
-    issue:
-      prefix: 问题-
-      label: 问题
     record:
       prefix: 记录-
       label: 记录
@@ -100,182 +94,41 @@ document_types:
     template:
       prefix: 模板-
       label: 模板
-    requirement-doc:
-      prefix: 需求-
-      label: 需求
     knowledge:
       prefix: 知识-
       label: 知识
-    prompt:
-      prefix: 提示词-
-      label: 提示词
-    meeting:
-      prefix: 会议-
-      label: 会议
-    command:
-      prefix: 命令-
-      label: 命令
     weekly-report:
       prefix: 周报-
       label: 周报
-    work-log:
-      prefix: 日志-
-      label: 日志
 frontmatter_schema:
-  version: 2
+  version: 3
   resolver:
     fallback: base
     profile_by_type:
-      knowledge: knowledge
       task: task
-      template: base
-    profile_by_governance:
-      project-docs: project-doc
-    governance_types:
-      project-docs:
-      - moc
-      - product-spec
-      - tech-spec
-      - decision
-      - plan
-      - issue
-      - record
-      - board
+      board: board
   profiles:
     base:
-      unknown_fields: preserve
-      field_order:
-      - name
-      - description
-      - type
-      - document_status
-      - created
-      - updated
-      - tags
-      required:
-      - name
-      - description
-      - type
-      - document_status
-      - created
-      - updated
-      - tags
-      optional: []
-      enums:
-        document_status:
-        - draft
-        - current
-        - archived
-      value_types:
-        name: string
-        description: string
-        type: string
-        document_status: string
-      lists:
-      - tags
-      dates:
-      - created
-      - updated
-    knowledge:
-      extends: base
-      field_order:
-      - name
-      - description
-      - type
-      - document_status
-      - sources
-      - related
-      - created
-      - updated
-      - tags
-      required: []
-      optional:
-      - sources
-      - related
-      lists:
-      - sources
-      - related
-    project-doc:
-      extends: base
-      field_order:
-      - name
-      - description
-      - type
-      - project
-      - domain
-      - document_status
-      - lifecycle
-      - related
-      - superseded_by
-      - archive_requested
-      - archive_reason
-      - archived_at
-      - created
-      - updated
-      - tags
-      required:
-      - project
-      - domain
-      - lifecycle
-      optional:
-      - related
-      - superseded_by
-      - archive_requested
-      - archive_reason
-      - archived_at
-      enums:
-        lifecycle:
-        - maintained
-        - proposed
-        - completed
-        - archived
-      value_types:
-        project: string
-        domain: string
-        lifecycle: string
-        archive_requested: boolean
-        archive_reason: string
-      lists:
-      - related
-      - superseded_by
-      dates:
-      - archived_at
+      unknown_fields: report
+      fields:
+        name: {kind: string, required: true}
+        description: {kind: string, required: true}
+        type: {kind: string, required: true}
+        document_status: {kind: enum, required: true, values: [draft, current, archived]}
+        created: {kind: date, required: true}
+        updated: {kind: date, required: true}
+        tags: {kind: list, required: true, items: string}
     task:
       extends: base
-      field_order:
-      - name
-      - description
-      - type
-      - document_status
-      - task_status
-      - priority
-      - related_project
-      - created
-      - updated
-      - tags
-      required:
-      - task_status
-      optional:
-      - priority
-      - related_project
-      enums:
-        task_status:
-        - todo
-        - in-progress
-        - blocked
-        - completed
-        - cancelled
-        priority:
-        - urgent
-        - high
-        - medium
-        - low
-      value_types:
-        task_status: string
-        priority: string
-        related_project: string
-      lists: []
-      dates: []
+      unknown_fields: report
+      fields:
+        task_status: {kind: enum, required: true, values: [todo, in-progress, blocked, completed, cancelled]}
+        priority: {kind: enum, required: false, values: [urgent, high, medium, low]}
+        related_project: {kind: enum, required: false, values_from: workspace.project_ids}
+    board:
+      extends: base
+      unknown_fields: preserve
+      fields: {}
 moc:
   project_groups:
   - label: 任务
@@ -284,21 +137,18 @@ moc:
   - label: 索引
     types:
     - moc
-  - label: 产品
+  - label: 产品需求
     types:
-    - product-spec
-  - label: 技术
+    - prd
+  - label: 技术设计
     types:
-    - tech-spec
+    - trd
   - label: 决策
     types:
     - decision
   - label: 计划
     types:
     - plan
-  - label: 问题
-    types:
-    - issue
   - label: 记录
     types:
     - record

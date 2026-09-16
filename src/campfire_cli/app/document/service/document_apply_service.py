@@ -18,6 +18,7 @@ from campfire_cli.app.document.service.document_patch_values import (
 )
 from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.domain_context import (
@@ -95,7 +96,12 @@ class DocumentApplyService:
             else source
         )
         target_name = target.relative_to(self._settings.vault_root).as_posix()
-        context = self._domain_context(target)
+        context = self._domain_context(target) if document_type != "human-request" else None
+        relative_target = target.relative_to(self._settings.vault_root).as_posix()
+        if document_type == "human-request" and not relative_target.startswith(
+            "_收件箱/待用户确认/"
+        ):
+            raise GovernanceBlockedError("human-request 只能创建在 _收件箱/待用户确认/")
 
         today = date.today().isoformat()
         frontmatter = dict(parsed.frontmatter)
@@ -103,12 +109,18 @@ class DocumentApplyService:
         if not exists or not parsed.has_frontmatter:
             defaults = self._creation_defaults(target, document_type, today)
             profile = self._profiles.resolve(document_type, defaults, target)
-            if "domain" in profile.allowed:
-                defaults["domain"] = context.domain_id
-            if context.project_id and "project" in profile.allowed:
-                defaults["project"] = context.project_id
             frontmatter.update(defaults)
         profile = profile or self._profiles.resolve(document_type, frontmatter, target)
+        removed_fields: tuple[str, ...] = ()
+        if changes_type and isinstance(current_type, str):
+            previous_profile = self._profiles.resolve(current_type, parsed.frontmatter, source)
+            removed_fields = tuple(
+                field
+                for field in previous_profile.allowed
+                if field not in profile.allowed and field in frontmatter
+            )
+            for field in removed_fields:
+                frontmatter.pop(field, None)
         actual_hash = file_sha256(source) if exists else "missing"
         unknown = sorted(set(request.values) - set(profile.allowed))
         if unknown:
@@ -129,7 +141,12 @@ class DocumentApplyService:
                 ],
             )
 
-        values, input_issues = decode_patch_values(profile, request.values, request.path)
+        values, input_issues = decode_patch_values(
+            profile,
+            request.values,
+            request.path,
+            workspace_candidate_sets(self._settings.vault_root),
+        )
         if input_issues:
             return self._result(
                 request,
@@ -140,28 +157,10 @@ class DocumentApplyService:
                 "blocked",
                 input_issues,
             )
-        for key in ("project", "domain"):
-            if key in values and values[key] != frontmatter.get(key):
-                raise GovernanceBlockedError(
-                    f"--set {key} 与目标 Domain 上下文不一致；请使用专用重构命令"
-                )
-        if document_type == "task" and context.project_id:
-            if (
-                "related_project" in values
-                and values["related_project"] != context.project_id
-            ):
-                raise GovernanceBlockedError(
-                    "--set related_project 与目标 Project Domain 不一致；"
-                    "请移动到对应项目领域或使用无项目任务领域"
-                )
-            values["related_project"] = context.project_id
+        # Field semantics are fully declared by the selected Profile; no type-specific injection.
         frontmatter.update(values)
         frontmatter["type"] = document_type
         frontmatter["updated"] = today
-        task_project_linked = (
-            document_type == "task"
-            and parsed.frontmatter.get("related_project") != frontmatter.get("related_project")
-        )
 
         next_body = self._next_body(request, parsed.body, exists)
         if exists and parsed.has_frontmatter:
@@ -173,6 +172,7 @@ class DocumentApplyService:
                 patch,
                 next_body,
                 list(profile.field_order),
+                removed_fields,
             )
             if render_errors:
                 return self._result(
@@ -189,7 +189,7 @@ class DocumentApplyService:
         issues = self._rules.check_content(self._settings.vault_root, target, rendered, profile)
         if target != source and target.exists():
             issues.insert(0, {"code": "target-exists", "path": target_name})
-        enrich_profile_issues(issues, profile)
+        enrich_profile_issues(issues, profile, workspace_candidate_sets(self._settings.vault_root))
         missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
         missing = [item for item in issues if item["code"] in missing_codes]
         status = "needs-input" if missing else "blocked" if issues else "planned"
@@ -244,7 +244,6 @@ class DocumentApplyService:
                     parsed.has_frontmatter,
                     context,
                     changes_type,
-                    task_project_linked,
                 ),
             }
         )
@@ -311,9 +310,7 @@ class DocumentApplyService:
             missing_fields=missing_fields or [],
         )
 
-    def _normalization(
-        self, request: DocumentApplyRequest, target: str
-    ) -> list[dict[str, str]]:
+    def _normalization(self, request: DocumentApplyRequest, target: str) -> list[dict[str, str]]:
         actions: list[dict[str, str]] = []
         requested = Path(request.path)
         normalized_request = requested
@@ -337,26 +334,22 @@ class DocumentApplyService:
         request: DocumentApplyRequest,
         exists: bool,
         had_frontmatter: bool,
-        context: DomainContext,
+        context: DomainContext | None,
         changes_type: bool,
-        task_project_linked: bool,
     ) -> list[CommandFollowUp]:
         derived_fields = {
             "name",
             "type",
             "document_status",
-            "lifecycle",
             "task_status",
-            "domain",
-            "project",
-            "related",
             "related_project",
         }
         needs_sync = not exists or not had_frontmatter
         needs_sync = needs_sync or bool(set(request.values) & derived_fields)
         needs_sync = needs_sync or request.body is not None
         needs_sync = needs_sync or changes_type
-        needs_sync = needs_sync or task_project_linked
+        if context is None:
+            return []
         return (
             maintenance_sync_follow_up(
                 self._settings.workspace_id,

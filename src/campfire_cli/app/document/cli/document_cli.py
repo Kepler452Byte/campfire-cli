@@ -73,7 +73,6 @@ def list_documents(
     domain: str | None = typer.Option(None, "--domain", help="精确 Domain id"),
     document_type: str | None = typer.Option(None, "--type", help="精确文档类型"),
     document_status: str | None = typer.Option(None, "--document-status"),
-    lifecycle: str | None = typer.Option(None, "--lifecycle", help="项目文档生命周期"),
     task_status: str | None = typer.Option(None, "--task-status"),
     limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
@@ -84,7 +83,6 @@ def list_documents(
             domain=domain,
             document_type=document_type,
             document_status=document_status,
-            lifecycle=lifecycle,
             task_status=task_status,
             limit=limit,
         )

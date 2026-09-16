@@ -19,6 +19,7 @@ from campfire_cli.app.document.service.kanban_service import (
     check_kanban_renderability,
     renderability_result,
 )
+from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.domain_context import (
     DomainContextError,
@@ -42,7 +43,10 @@ class DocumentService:
     ) -> None:
         self._settings = settings
         self._index = index
-        self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
+        candidates = workspace_candidate_sets(settings.vault_root)
+        self._rules = DocumentRuleService(
+            settings.document_types, settings.frontmatter_schema, candidates
+        )
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
         self._project_roots = project_roots
         self._application = DocumentApplyService(
@@ -118,7 +122,6 @@ class DocumentService:
         domain: str | None = None,
         document_type: str | None = None,
         document_status: str | None = None,
-        lifecycle: str | None = None,
         task_status: str | None = None,
         limit: int | None = None,
     ) -> DocumentListResult:
@@ -127,7 +130,6 @@ class DocumentService:
             domain=domain,
             document_type=document_type,
             document_status=document_status,
-            lifecycle=lifecycle,
             task_status=task_status,
             limit=limit,
         )

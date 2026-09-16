@@ -27,8 +27,9 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
     calls: list[list[str]] = []
     monkeypatch.setattr(
         "campfire_cli.app.workspace.service.project_service.subprocess.run",
-        lambda command, **kwargs: calls.append(command)
-        or subprocess.CompletedProcess(command, 1, stdout="", stderr=""),
+        lambda command, **kwargs: (
+            calls.append(command) or subprocess.CompletedProcess(command, 1, stdout="", stderr="")
+        ),
     )
     runner = CliRunner()
     bootstrapped = runner.invoke(
@@ -68,16 +69,12 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
         assert registered.exit_code == 0, registered.output
 
     calls.clear()
-    matched = runner.invoke(
-        app, ["workspace", "project", "resolve", "--path", str(project_dir)]
-    )
+    matched = runner.invoke(app, ["workspace", "project", "resolve", "--path", str(project_dir)])
     assert matched.exit_code == 0, matched.output
     assert len(calls) == 0, calls
 
     unregistered = tmp_path_factory.mktemp("unregistered")
     calls.clear()
-    unmatched = runner.invoke(
-        app, ["workspace", "project", "resolve", "--path", str(unregistered)]
-    )
+    unmatched = runner.invoke(app, ["workspace", "project", "resolve", "--path", str(unregistered)])
     assert unmatched.exit_code == 0, unmatched.output
     assert len(calls) <= 2, calls

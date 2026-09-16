@@ -46,6 +46,7 @@ def request(
         status=status,
     )
 
+
 @project_cli.command("adopt")
 def adopt(
     ctx: typer.Context,

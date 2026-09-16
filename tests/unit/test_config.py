@@ -8,9 +8,7 @@ from campfire_cli.config.defaults import effective_config
 def test_user_config_deep_merges_mappings_and_replaces_lists(tmp_path: Path) -> None:
     path = tmp_path / "config.yml"
     path.write_text(
-        "version: 1\n"
-        "governance:\n  inbox: inbox\n"
-        "skills:\n  targets: [/tmp/skills]\n",
+        "version: 1\ngovernance:\n  inbox: inbox\nskills:\n  targets: [/tmp/skills]\n",
         encoding="utf-8",
     )
 

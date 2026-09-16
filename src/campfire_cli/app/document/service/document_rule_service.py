@@ -15,10 +15,16 @@ DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 class DocumentRuleService:
     """Single entry point for document and template contract validation."""
 
-    def __init__(self, type_config: dict[str, Any], schema: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        type_config: dict[str, Any],
+        schema: dict[str, Any],
+        candidate_sets: dict[str, list[str]] | None = None,
+    ) -> None:
         self._type_config = type_config
         self._schema = schema
         self._profiles = ProfileRegistry(type_config, schema)
+        self._candidate_sets = candidate_sets or {}
 
     def check_document(self, root: Path, path: Path) -> list[dict[str, Any]]:
         return self.check_content(root, path, path.read_text(encoding="utf-8"))
@@ -83,7 +89,11 @@ class DocumentRuleService:
                     "allowed": [prefixed_name(path.name, document_type, self._type_config)],
                 }
             )
-        rules = (profile or self._profiles.resolve(document_type, frontmatter, path)).model_dump()
+        if document_type == "moc":
+            return issues
+        rules = (profile or self._profiles.resolve(document_type, frontmatter, path)).model_dump(
+            self._candidate_sets
+        )
         actual_order = list(frontmatter)
         expected_order = ordered_keys(
             [(key, []) for key in actual_order], list(rules["field_order"])
@@ -198,7 +208,7 @@ class DocumentRuleService:
         for path in paths:
             frontmatter = parse_document(path.read_text(encoding="utf-8")).frontmatter
             document_type = frontmatter.get("type")
-            if document_type not in {"moc", "product-spec"}:
+            if document_type not in {"moc", "prd"}:
                 continue
             if frontmatter.get("document_status") != "current":
                 continue
@@ -337,7 +347,9 @@ class DocumentRuleService:
         return isinstance(value, str) if expected == "string" else isinstance(value, bool)
 
     def _rules(self, document_type: Any, path: Path, frontmatter: dict[str, Any]) -> dict[str, Any]:
-        return self._profiles.resolve(document_type, frontmatter, path).model_dump()
+        return self._profiles.resolve(document_type, frontmatter, path).model_dump(
+            self._candidate_sets
+        )
 
     @staticmethod
     def _state_invariants(
@@ -348,15 +360,14 @@ class DocumentRuleService:
     ) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
         document_status = frontmatter.get("document_status")
-        lifecycle = frontmatter.get("lifecycle")
         in_template_directory = "_模板" in path.parts
         if document_type == "template" and path.parent.name != "_模板":
             issues.append({"code": "template-directory-required", "path": relative})
         elif in_template_directory and document_type != "template":
             issues.append({"code": "template-directory-type-mismatch", "path": relative})
         in_archive = "archive" in path.parts
-        if in_archive != (document_status == "archived" and lifecycle == "archived") and (
-            in_archive or document_status == "archived" or lifecycle == "archived"
+        if in_archive != (document_status == "archived") and (
+            in_archive or document_status == "archived"
         ):
             issues.append({"code": "document-archive-state-mismatch", "path": relative})
         if document_type != "task":

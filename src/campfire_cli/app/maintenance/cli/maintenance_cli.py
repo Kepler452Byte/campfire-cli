@@ -7,8 +7,6 @@ import typer
 HELP_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 maintenance_cli = typer.Typer(help="后续增量文档维护", context_settings=HELP_SETTINGS)
-archive_cli = typer.Typer(help="项目文档两阶段归档", context_settings=HELP_SETTINGS)
-maintenance_cli.add_typer(archive_cli, name="archive")
 
 
 def emit(result: object) -> None:
@@ -39,22 +37,3 @@ def sync(
     campfire --workspace personal maintenance sync --scope "mywork/项目"
     """
     emit(ctx.obj.maintenance.sync(dry_run, scope))
-
-
-@archive_cli.command("check")
-def archive_check(
-    ctx: typer.Context,
-    scope: str | None = typer.Option(None, "--scope", help="只检查指定 Vault 相对路径"),
-) -> None:
-    """只读检查归档候选。"""
-    emit(ctx.obj.maintenance.archive(False, scope))
-
-
-@archive_cli.command("apply")
-def archive_apply(
-    ctx: typer.Context,
-    confirm: bool = typer.Option(False, "--confirm"),
-    scope: str | None = typer.Option(None, "--scope", help="只归档指定 Vault 相对路径"),
-) -> None:
-    """执行已经标记并通过检查的归档请求。"""
-    emit(ctx.obj.maintenance.archive(confirm, scope))

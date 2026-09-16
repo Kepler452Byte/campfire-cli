@@ -10,6 +10,7 @@ import yaml
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.type_apply import (
     rewrite_markdown_links,
     rewrite_wikilinks,
@@ -40,7 +41,11 @@ class RestructureService:
     ) -> None:
         self._settings = settings
         self._repository = repository
-        self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
+        self._rules = DocumentRuleService(
+            settings.document_types,
+            settings.frontmatter_schema,
+            workspace_candidate_sets(settings.vault_root),
+        )
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def inventory(self, batch: str, scope: str) -> RestructureResult:

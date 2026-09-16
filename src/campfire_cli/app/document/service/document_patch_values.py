@@ -12,6 +12,7 @@ def decode_patch_values(
     profile: EffectiveProfile,
     raw_values: dict[str, str],
     path: str,
+    candidate_sets: dict[str, list[str]] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Decode raw assignment values without relying on implicit YAML coercion."""
     values: dict[str, Any] = {}
@@ -34,11 +35,25 @@ def decode_patch_values(
                 continue
             values[field] = value
             continue
+        allowed = _allowed_values(profile, field, expected, candidate_sets)
+        if profile.field(field) and profile.field(field).kind == "enum" and raw not in allowed:
+            issues.append(
+                {
+                    **_invalid_issue(path, field, raw, expected),
+                    "code": "frontmatter-enum-invalid",
+                    "allowed": allowed,
+                }
+            )
+            continue
         values[field] = raw
     return values, issues
 
 
-def enrich_profile_issues(issues: list[dict[str, Any]], profile: EffectiveProfile) -> None:
+def enrich_profile_issues(
+    issues: list[dict[str, Any]],
+    profile: EffectiveProfile,
+    candidate_sets: dict[str, list[str]] | None = None,
+) -> None:
     """Attach machine-readable constraints without inventing missing business values."""
     for issue in issues:
         field = issue.get("field")
@@ -46,7 +61,7 @@ def enrich_profile_issues(issues: list[dict[str, Any]], profile: EffectiveProfil
             continue
         expected = _expected_type(profile, field)
         issue.setdefault("expected_type", expected)
-        issue.setdefault("allowed", _allowed_values(profile, field, expected))
+        issue.setdefault("allowed", _allowed_values(profile, field, expected, candidate_sets))
         if issue.get("code") in {
             "frontmatter-date-invalid",
             "frontmatter-list-invalid",
@@ -63,9 +78,15 @@ def _expected_type(profile: EffectiveProfile, field: str) -> str:
     return profile.value_types.get(field, "string")
 
 
-def _allowed_values(profile: EffectiveProfile, field: str, expected: str) -> list[str]:
-    if field in profile.enums:
-        return list(profile.enums[field])
+def _allowed_values(
+    profile: EffectiveProfile,
+    field: str,
+    expected: str,
+    candidate_sets: dict[str, list[str]] | None = None,
+) -> list[str]:
+    rule = profile.field(field)
+    if rule and rule.kind == "enum":
+        return list(rule.allowed_values(candidate_sets))
     if expected == "date":
         return ["YYYY-MM-DD"]
     return [expected]

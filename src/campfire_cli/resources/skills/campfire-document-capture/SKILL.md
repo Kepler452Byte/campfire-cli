@@ -75,9 +75,7 @@ description: "把对话或 Agent 工作成果沉淀为 Campfire 文档；适用�
 
 | 时刻 | 提议动作 |
 |------|---------|
-| 梳理出多个问题且尚无跟踪文档 | 创建 issue 文档（问题清单 + 状态跟踪表） |
-| 单个问题的根因经源码或运行核验 | 创建或更新对应 issue 文档，补根因与证据 |
-| 修复或变更完成并通过验证 | 更新 issue 文档状态表与解决记录 |
+| 梳理出问题、根因或修复事实 | 创建或更新 record 文档，补事实与证据；后续工作另建 task |
 | 形成影响实现的取舍决策 | 创建 decision 文档 |
 | 发现与既有文档冲突的事实 | 更新该文档并标注来源 |
 | 新文档已落盘 | 执行写入结果返回的 follow-up，确保进入派生视图 |
@@ -99,11 +97,11 @@ campfire --workspace personal maintenance sync --scope "mywork/【某项目】�
 | --- | --- |
 | 当前项目实现、方案、记录 | Project Domain；读取[项目内容沉淀](references/项目内容沉淀.md) |
 | 可跨项目复用的概念、方法、经验 | Knowledge Space；读取[通用知识沉淀](references/通用知识沉淀.md) |
-| 需要跟踪的问题或明确取舍 | Project issue/decision；读取[问题与决策沉淀](references/问题与决策沉淀.md) |
+| 明确取舍 | Project decision；读取[问题与决策沉淀](references/问题与决策沉淀.md) |
 | 有状态、负责人或完成条件的工作 | Project task/plan；读取[任务与计划沉淀](references/任务与计划沉淀.md) |
 | 已有权威文档需要补充或纠正 | 保持原归属；读取[已有文档更新](references/已有文档更新.md) |
 
-无法唯一分类或定位 Project/Domain 时询问用户或创建 Pending Decision，不同时加载多条参考。
+无法唯一分类或定位 Project/Domain 时询问用户，或在 `_收件箱/待用户确认/` 创建 `human-request`，不同时加载多条参考。
 
 预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。创建文档、补齐无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，统一调用一次 `campfire document apply`；它会解析目标 Domain、继承 Project、从 type 推导文件名，并在完整 Profile 校验通过后原子写入。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type 与文件名前缀。
 
@@ -111,13 +109,9 @@ campfire --workspace personal maintenance sync --scope "mywork/【某项目】�
 
 单篇文档在已声明 Domain 之间改名或移动使用一次 `document move`；Domain 合并或逻辑空删除加载 `campfire-workspace-restructure` 并使用 `domain merge/delete`，批量文档迁移或领域拆分才使用持久 restructure 批次。CLI 写入完成后只执行结果中实际返回的 `follow_up`，当前只可能是一个最小 scope 的 `maintenance sync`；没有 follow-up 就结束，不自行追加 dry-run、check 或全 Workspace 扫描。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤。
 
-## Pending Decision
+## 待用户确认
 
-Agent 未获授权而静默保存，或对象、资源、事实、目标文档仍存在关键歧义时，调用 `campfire decision create`。Decision 是 SQLite 中的工作流事实，不是正式知识或项目事实；Agent 不手工创建待确认 Markdown。
-
-Decision 应提供稳定幂等 key、唯一问题、背景与证据、候选选项、推荐方案、关联文档和来源 Session。CLI 在 `_协作/decisions/` 自动生成工作流专属只读投影；它不是正式内容文档，不使用普通 Document Profile，也不新增文档生命周期。
-
-获得回答后调用 `decision answer`；原流程使用答案完成创建或更新后调用 `decision close`。用户拒绝则取消或记录拒绝答案，不晋升为正式文档。正式文档直接使用自身类型的生命周期，不增加通用 `pending-review`。
+对象、资源、事实或目标文档存在关键歧义时，创建 `_收件箱/待用户确认/待确认-*.md` 的 `human-request`。它只记录待回答问题、已确认事实与候选，不替代正式文档；用户回答后将结论写回正式文档，并归档或删除待确认项。
 
 ## 自动沉淀边界
 

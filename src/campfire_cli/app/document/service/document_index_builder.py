@@ -191,9 +191,7 @@ class DocumentIndexBuilder:
 
     def _domain_context(self, path: Path) -> tuple[str | None, str | None]:
         try:
-            context = resolve_domain_context(
-                self._settings.vault_root, path, self._project_roots
-            )
+            context = resolve_domain_context(self._settings.vault_root, path, self._project_roots)
             return context.domain_id, context.project_id
         except DomainContextError:
             return None, None

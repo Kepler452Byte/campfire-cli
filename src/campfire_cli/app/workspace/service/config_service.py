@@ -119,9 +119,7 @@ class WorkspaceConfigService:
             return
         for name, profile in profiles.items():
             if not isinstance(profile, dict):
-                self._issue(
-                    issues, "frontmatter_schema", f"profiles.{name}", "invalid-profile"
-                )
+                self._issue(issues, "frontmatter_schema", f"profiles.{name}", "invalid-profile")
                 continue
             parent = profile.get("extends")
             if parent and (parent != "base" or name == "base"):
@@ -132,27 +130,40 @@ class WorkspaceConfigService:
                     "invalid-profile-inheritance",
                     parent,
                 )
-            self._unique(
-                "frontmatter_schema",
-                f"profiles.{name}.field_order",
-                profile.get("field_order", []),
-                issues,
-            )
-            value_types = profile.get("value_types", {})
-            if not isinstance(value_types, dict) or any(
-                not isinstance(field, str) or expected not in {"string", "boolean"}
-                for field, expected in value_types.items()
-            ):
+            fields = profile.get("fields", {})
+            if not isinstance(fields, dict) or not fields:
                 self._issue(
                     issues,
                     "frontmatter_schema",
-                    f"profiles.{name}.value_types",
-                    "invalid-value-types",
+                    f"profiles.{name}.fields",
+                    "mapping-required",
                 )
+                continue
+            for field, rule in fields.items():
+                if (
+                    not isinstance(field, str)
+                    or not isinstance(rule, dict)
+                    or rule.get("kind", "string")
+                    not in {"string", "boolean", "date", "list", "enum"}
+                ):
+                    self._issue(
+                        issues,
+                        "frontmatter_schema",
+                        f"profiles.{name}.fields.{field}",
+                        "invalid-field-rule",
+                    )
+                if rule.get("kind") == "enum" and bool(rule.get("values")) == bool(
+                    rule.get("values_from")
+                ):
+                    self._issue(
+                        issues,
+                        "frontmatter_schema",
+                        f"profiles.{name}.fields.{field}",
+                        "enum-candidates-required",
+                    )
         resolver = config.get("resolver", {})
         referenced = [resolver.get("fallback")]
         referenced.extend(resolver.get("profile_by_type", {}).values())
-        referenced.extend(resolver.get("profile_by_governance", {}).values())
         for name in referenced:
             if name not in profiles:
                 self._issue(

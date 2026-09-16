@@ -5,7 +5,7 @@ description: "查询、创建、更新和完成 Campfire 任务文档；适用�
 
 # Campfire 任务管理
 
-统一任务文档（`任务-` 前缀）的创建与状态更新。基础 `document_status` 表示文档是否仍有效；task 专属 `task_status` 表示任务进度。`related_project` 是任务的显式关联项目字段：任务位于 Project Domain 时 CLI 自动写入该 Project id；个人或通用 Domain 的任务可按需填写或保持为空。
+统一任务文档（`任务-` 前缀）的创建与状态更新。基础 `document_status` 表示文档是否仍有效；task 专属 `task_status` 表示任务进度。`related_project` 是显式关联项目字段：Agent 根据已确认事实填写；不填表示个人或未关联项目。填写时 CLI 只接受 Manifest 中注册的 Project id，不按 Domain 自动写入或覆盖。
 
 通用写入门禁遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。只查询任务集合时直接使用 `document list`，不加载完整 Project bootstrap。创建、修改 Frontmatter、文件名或归属时才加载 `campfire-context-bootstrap`。
 
@@ -53,14 +53,14 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 
 ### 2. 无项目任务归属
 
-- 无项目任务统一落 `mywork/【工作日志】文档中心/任务/`（个人事务域；该子目录不存在时随首次任务创建，并遵循 `campfire-workspace-maintenance` 的领域检查）。
-- 不虚构项目归属；确有明确关联时填写 `related_project`，否则保持为空。
+- 无项目任务统一落已声明的个人任务 Domain：`mylog/个人任务/`（`log-personal-tasks`）。不在该目录下再创建 `任务/` 子目录。
+- 不虚构项目归属；任务确有明确关联但不属于项目任务时可填写 `related_project`，否则保持为空。
 
 ### 3. 契约获取与写入
 
 1. 只提交任务标题和 `--type task`；CLI 从 type 推导最终文件名，Agent 不手写前缀映射。
 2. 有项目任务落各自文档中心的任务子目录；已有 `任务/` 惯例的项目沿用，无先例时在文档中心根下创建并沿用同规则。
-3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 根据有效 Profile 确定字段类型、枚举和顺序；位于 Project Domain 时自动写入 `related_project`。列表使用严格 JSON 数组。Skill 不硬编码这些可演进契约。
+3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 根据有效 Profile 确定字段类型、枚举和顺序；项目关联明确时显式填写 `related_project`。列表使用严格 JSON 数组。Skill 不硬编码这些可演进契约。
 4. CLI 返回 `needs-input` 时，根据其一次性列出的必填字段与允许值补齐事实，不猜测。
 
 ### 4. 状态流转
@@ -78,4 +78,4 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 - 不负责执行任务本身、不修改代码、不分派或恢复 Agent Session。
 - 任务的讨论与方案沉淀遵循 `campfire-document-capture`，结构治理遵循 `campfire-workspace-maintenance`。
 - 看板类任务清单（`看板-` 前缀）的改造遵循 `campfire-kanban-board`，本 Skill 只处理单篇任务文档。
-- 不确定归属、字段枚举与 Profile 冲突时询问用户或走 Decision，不静默落盘。
+- 不确定归属、字段枚举与 Profile 冲突时询问用户或创建 `human-request`，不静默落盘。

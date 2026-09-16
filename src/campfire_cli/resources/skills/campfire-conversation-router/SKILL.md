@@ -21,7 +21,7 @@ description: "路由用户在对话中表达的问答、任务、学习和文档
           │                          ├── 知识文档
           │                          ├── 项目文档
           │                          ├── 任务计划文档
-          │                          └── Pending Decision
+          │                          └── human-request
           │
           └── 无法判断 ──> 先问一个关键问题
                                 │
@@ -35,7 +35,7 @@ description: "路由用户在对话中表达的问答、任务、学习和文档
 2. 用户说“沉淀一下”“记到项目里”“整理成文档”或要求创建、更新、总结文档时，加载 `campfire-document-capture`。
 3. 领导交办、个人待办、实施计划或“帮我跟进”需要形成任务计划文档时，读取[任务文档接入](references/task-intake.md)，再加载 `campfire-document-capture`。
 4. “深入理解”“系统学习”“做实验并总结”等表达先读取[学习与知识文档接入](references/learning-intake.md)；只有用户要持续保留成果时才加载 `campfire-document-capture`。
-5. 已有文件位于 `_收件箱/` 时加载 `campfire-inbox-triage`；对话中无法及时解决的关键歧义读取[收件箱衔接规则](references/inbox-handoff.md)，并创建 Pending Decision。
+5. 已有文件位于 `_收件箱/` 时加载 `campfire-inbox-triage`；对话中无法及时解决的关键歧义读取[收件箱衔接规则](references/inbox-handoff.md)，并创建 `human-request`。
 
 本 Skill 到路由完成即结束。授权、资源、源码现状和目标文档由 `campfire-document-capture` 检查；成品内容由知识、项目文档或任务 Skill 负责；格式、链接、MOC 和持续检查由 `campfire-workspace-maintenance` 负责。
 

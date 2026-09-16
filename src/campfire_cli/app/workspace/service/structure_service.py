@@ -29,8 +29,7 @@ from campfire_cli.config.defaults import config_section
 SPACE_MARKER = "_空间.md"
 DOMAIN_MARKER = "_领域.md"
 DECLARATION_MANAGED_COMMENT = (
-    "# Frontmatter managed by Campfire CLI; "
-    "edit Markdown outside generated regions freely."
+    "# Frontmatter managed by Campfire CLI; edit Markdown outside generated regions freely."
 )
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 
@@ -71,9 +70,7 @@ def _format_declaration(
             issues=[{"code": code, "path": relative} for code in errors],
         )
     if DECLARATION_MANAGED_COMMENT not in formatted:
-        formatted = formatted.replace(
-            "---\n", f"---\n{DECLARATION_MANAGED_COMMENT}\n", 1
-        )
+        formatted = formatted.replace("---\n", f"---\n{DECLARATION_MANAGED_COMMENT}\n", 1)
     changed = formatted != original
     if changed and confirm:
         with workspace_write_lock(lock_root):
@@ -378,9 +375,7 @@ class DomainService:
                 )
         return domains, issues
 
-    def list(
-        self, space_id: str | None = None, project_id: str | None = None
-    ) -> DomainListResult:
+    def list(self, space_id: str | None = None, project_id: str | None = None) -> DomainListResult:
         domains = self.discover()[0]
         return DomainListResult(
             domains=[

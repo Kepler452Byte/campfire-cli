@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import iter_documents
+from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
     DomainState,
@@ -14,7 +15,6 @@ from campfire_cli.app.maintenance.schema.maintenance_schema import (
     MaintenanceRunRecord,
     SpaceState,
 )
-from campfire_cli.app.maintenance.service import archive_service as project_archive
 from campfire_cli.app.maintenance.service import moc_service as governance_sync
 from campfire_cli.app.maintenance.service.maintenance_protocol import (
     DocumentIndexMaintainerProtocol,
@@ -32,7 +32,6 @@ from campfire_cli.common.filesystem import (
     FileChangeSet,
     FileWrite,
     atomic_write,
-    safe_path,
 )
 from campfire_cli.common.governance import (
     capture_snapshot,
@@ -56,7 +55,11 @@ class MaintenanceService:
         self._settings = settings
         self._repository = repository
         self._document_index = document_index
-        self._rules = DocumentRuleService(settings.document_types, settings.frontmatter_schema)
+        self._rules = DocumentRuleService(
+            settings.document_types,
+            settings.frontmatter_schema,
+            workspace_candidate_sets(settings.vault_root),
+        )
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
     def check(
@@ -73,9 +76,7 @@ class MaintenanceService:
         spaces, domains = self._topology_states(discovered_spaces, discovered_domains)
         documents: list[DocumentState] = []
         issues: list[Issue] = []
-        issues.extend(
-            Issue.model_validate(enrich_issue(item)) for item in domain_issues
-        )
+        issues.extend(Issue.model_validate(enrich_issue(item)) for item in domain_issues)
         paths = self._iter_documents()
         for path in paths:
             documents.append(self._document_state(path))
@@ -343,52 +344,6 @@ class MaintenanceService:
         normalized_scope = scope.strip("/")
         return normalized_path == normalized_scope or normalized_path.startswith(
             normalized_scope + "/"
-        )
-
-    def archive(self, confirm: bool = False, scope: str | None = None) -> MaintenanceResult:
-        items, raw_issues = project_archive.collect_items(
-            self._settings.vault_root, self._settings.governance
-        )
-        if scope is not None:
-            scope_path = safe_path(self._settings.vault_root, scope)
-            items = [
-                item
-                for item in items
-                if item.source == scope_path or scope_path in item.source.parents
-            ]
-            paths = {
-                item.source.relative_to(self._settings.vault_root).as_posix() for item in items
-            }
-            raw_issues = [issue for issue in raw_issues if issue.get("path") in paths]
-        applied: list[dict[str, str]] = []
-        if confirm and items:
-            snapshot = capture_snapshot(
-                self._settings.vault_root,
-                [path for item in items for path in (item.source, item.target)],
-            )
-            with optimistic_write_lock(
-                self._settings.state_root, snapshot, self._settings.vault_root
-            ) as changed:
-                if changed:
-                    return self._concurrent_result(changed)
-                applied = project_archive.apply_items(
-                    self._settings.vault_root,
-                    items,
-                    raw_issues,
-                    __import__("datetime").date.today().isoformat(),
-                    self._rules.field_order_for,
-                )
-        issues = [Issue.model_validate(enrich_issue(item)) for item in raw_issues]
-        return MaintenanceResult(
-            status="issues-found" if issues else ("applied" if confirm else "ok"),
-            document_count=len(items),
-            issue_count=len(issues),
-            issues=issues,
-            issue_counts=self._issue_counts(issues),
-            changed_document_count=len(applied),
-            write_performed=bool(applied),
-            operations=applied,
-            candidates=project_archive.candidate_entries(self._settings.vault_root, items),
         )
 
     def _iter_documents(self) -> list[Path]:

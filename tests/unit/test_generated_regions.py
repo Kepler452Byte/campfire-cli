@@ -30,10 +30,7 @@ def test_generated_region_replaces_only_tagged_content() -> None:
     [
         "没有标记",
         "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n只有开始",
-        (
-            "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n"
-            "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"
-        ),
+        ("<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->\n<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"),
     ],
 )
 def test_generated_region_rejects_ambiguous_boundaries(text: str) -> None:
