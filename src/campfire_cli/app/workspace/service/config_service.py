@@ -34,6 +34,7 @@ class WorkspaceConfigService:
         ):
             if not self.settings.governance.get(field):
                 self._issue(issues, "governance", field, "required-value-missing")
+        self._check_system_scope_roots(issues)
         return WorkspaceConfigCheckResult(
             status="ok" if not issues else "issues-found", checked=checked, issues=issues
         )
@@ -98,6 +99,23 @@ class WorkspaceConfigService:
                         "unknown-reference",
                         name,
                     )
+
+    def _check_system_scope_roots(self, issues: list[dict[str, Any]]) -> None:
+        roots = self.settings.document_types.get("scope_roots")
+        if not isinstance(roots, list) or any(
+            not isinstance(root, str) or not root for root in roots
+        ):
+            self._issue(issues, "document_types", "scope_roots", "non-empty-string-list-required")
+            return
+        human_request_root = self.settings.governance.get("human_request_root")
+        if human_request_root and human_request_root not in roots:
+            self._issue(
+                issues,
+                "document_types",
+                "scope_roots",
+                "required-reference-missing",
+                human_request_root,
+            )
 
     def _check_profiles(self, issues: list[dict[str, Any]]) -> None:
         config = self.settings.frontmatter_schema
