@@ -10,7 +10,8 @@ from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceEntry, W
 
 @pytest.fixture(autouse=True)
 def _isolate_agent_hints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """所有测试的全局资源写入一律落在临时目录。"""
+    """Keep every user-scoped Campfire resource inside the test directory."""
+    monkeypatch.setenv("CAMPFIRE_HOME", str(tmp_path / "campfire-home"))
     monkeypatch.setenv("CAMPFIRE_AGENT_HINT_PATH", str(tmp_path / "agent-hints"))
     monkeypatch.setenv("CAMPFIRE_SKILL_TARGETS", str(tmp_path / "agent-skills"))
 
