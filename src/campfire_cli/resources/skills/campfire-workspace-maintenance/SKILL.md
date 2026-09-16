@@ -91,5 +91,5 @@ Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校�
 ## 内容与任务
 
 - 跨项目可复用的长期认知归入 knowledge 类型 Space；项目当前实现、方案、决策、问题或记录归入 Project 绑定的 Domain。项目事实必须检查已注册源码、配置和测试。
-- `status`、`lifecycle` 和其他字段只从 Document Profile 获取。任务正文需要创建或更新时参考[任务正文结构](references/任务正文结构.md)。
+- `document_status`、`lifecycle`、`task_status` 和其他字段只从 Document Profile 获取。任务正文需要创建或更新时参考[任务正文结构](references/任务正文结构.md)。
 - 归档必须由显式 `archive_requested` 触发；先运行 `maintenance archive check`，审查后执行 `archive apply --confirm`。不得仅因长期未更新而归档。

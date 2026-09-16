@@ -176,6 +176,13 @@ class ProjectArchiveTests(unittest.TestCase):
             '---\nname: 测试项目\ndomain_id: test-project\ndomain_type: project-domain\ngovernance: project-docs\nmoc: "[[MOC-测试项目]]"\nstatus: active\n---\n',
             encoding="utf-8",
         )
+        (root / ".campfire.yaml").write_text(
+            "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+            "  governance_version: 1\nprojects:\n"
+            "- id: test-project\n  name: 测试项目\n  document_domain_id: test-project\n"
+            "  status: active\n",
+            encoding="utf-8",
+        )
         return domain
 
     @staticmethod
@@ -191,7 +198,7 @@ class ProjectArchiveTests(unittest.TestCase):
         # 字段序遵循 project-doc Profile，保持与有效契约一致。
         return (
             "---\nname: 旧计划\ndescription: 测试\ntype: plan\nproject: test-project\ndomain: core\n"
-            "status: current\nlifecycle: proposed\n"
+            "document_status: current\nlifecycle: proposed\n"
             f"related: []\nsuperseded_by: {successor}\narchive_requested: true\narchive_reason: {reason}\n"
             "created: 2026-01-01\nupdated: 2026-01-01\n---\n# 旧计划\n"
         )
@@ -211,7 +218,7 @@ class ProjectArchiveTests(unittest.TestCase):
             self.assertFalse(source.exists())
             self.assertTrue(target.exists())
             text = target.read_text(encoding="utf-8")
-            self.assertIn("status: archived", text)
+            self.assertIn("document_status: archived", text)
             self.assertIn("archive_requested: false", text)
             self.assertIn("archived_at: 2026-09-07", text)
             repeated = build_archive_result(root, self.config(), True, "2026-09-08")
@@ -258,7 +265,7 @@ class ProjectArchiveTests(unittest.TestCase):
                 if re.match(r"^[a-zA-Z_][a-zA-Z0-9_-]*:", line)
             ]
             expected = rules.field_order_for(
-                {"type": "plan", "project": "test-project"}
+                {"type": "plan", "project": "test-project"}, target
             )
             self.assertEqual(
                 [field for field in expected if field in order],
@@ -483,7 +490,7 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             notes = root / "notes"
             notes.mkdir()
             (notes / "知识-测试.md").write_text(
-                "---\ntype: knowledge\nstatus: 当前\ntags: text\n---\n# 测试\n", encoding="utf-8"
+                "---\ntype: knowledge\ndocument_status: 当前\ntags: text\n---\n# 测试\n", encoding="utf-8"
             )
             issues = DocumentRuleService(self.type_config(), self.schema()).check_document(
                 root, notes / "知识-测试.md"
@@ -513,13 +520,35 @@ class FrontmatterGovernanceTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             ProfileRegistry(self.type_config(), schema)
 
+    def test_project_profile_uses_manifest_domain_binding_not_document_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            domain = root / "docs"
+            domain.mkdir()
+            (domain / "_领域.md").write_text(
+                "---\ndomain_id: project-example\ngovernance: project-docs\n---\n",
+                encoding="utf-8",
+            )
+            document = domain / "计划-测试.md"
+            document.write_text("---\ntype: plan\nproject: example\n---\n", encoding="utf-8")
+            registry = ProfileRegistry(config_section("document_types"), config_section("frontmatter_schema"))
+            self.assertEqual("base", registry.resolve("plan", {"project": "example"}, document).name)
+
+            (root / ".campfire.yaml").write_text(
+                "projects:\n- id: example\n  document_domain_id: project-example\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                "project-doc", registry.resolve("plan", {"project": "example"}, document).name
+            )
+
     def test_rule_engine_reports_actionable_fields_and_collection_conflict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             first = root / "产品-a.md"
             second = root / "产品-b.md"
             content = (
-                "---\nname: 产品\ntype: product-spec\nstatus: current\n"
+                "---\nname: 产品\ntype: product-spec\ndocument_status: current\n"
                 "project: p\ndomain: core\ncreated: invalid\ntags: text\n---\n"
             )
             first.write_text(content, encoding="utf-8")
@@ -583,13 +612,13 @@ class FrontmatterGovernanceTests(unittest.TestCase):
             self.assertTrue(text.endswith("# 正文\n内容\n"))
 
     def test_formatter_reorders_blocks_without_changing_values_or_body(self) -> None:
-        text = "---\ntype: prompt\ncreated: 2026-03-26\ndescription: 描述\nname: 提示词\npurpose: 用途\nstatus: current\nupdated: 2026-09-10\ntags:\n  - DB\ncustom: keep\n---\n# 正文\n"
-        order = ["name", "description", "type", "status", "created", "updated", "purpose", "tags"]
+        text = "---\ntype: prompt\ncreated: 2026-03-26\ndescription: 描述\nname: 提示词\npurpose: 用途\ndocument_status: current\nupdated: 2026-09-10\ntags:\n  - DB\ncustom: keep\n---\n# 正文\n"
+        order = ["name", "description", "type", "document_status", "created", "updated", "purpose", "tags"]
         formatted, errors = format_text(text, order)
         self.assertEqual([], errors)
         self.assertTrue(
             formatted.startswith(
-                "---\nname: 提示词\ndescription: 描述\ntype: prompt\nstatus: current\ncreated: 2026-03-26\nupdated: 2026-09-10\npurpose: 用途\ntags:\n  - DB\ncustom: keep\n---\n"
+                "---\nname: 提示词\ndescription: 描述\ntype: prompt\ndocument_status: current\ncreated: 2026-03-26\nupdated: 2026-09-10\npurpose: 用途\ntags:\n  - DB\ncustom: keep\n---\n"
             )
         )
         self.assertTrue(formatted.endswith("# 正文\n"))

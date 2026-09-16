@@ -93,11 +93,13 @@ class ProfileRegistry:
         )
         if direct:
             return self.get(direct)
-        project_types = set(self._type_config.get("profiles", {}).get("project-docs", []))
+        governance_types = set(
+            resolver.get("governance_types", {}).get("project-docs", [])
+        )
         if (
             isinstance(document_type, str)
-            and document_type in project_types
-            and (frontmatter.get("project") or is_project_context(path))
+            and document_type in governance_types
+            and is_project_context(path)
         ):
             profile = resolver.get("profile_by_governance", {}).get("project-docs")
             if profile:

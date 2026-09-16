@@ -200,12 +200,6 @@ class MaintenanceService:
         )
         snapshot = capture_snapshot(self._settings.vault_root, scoped_documents)
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
-        profile = self._settings.document_types.get("profiles", {}).get("project-docs", [])
-        type_mapping = {
-            name: self._settings.document_types["types"][name]
-            for name in profile
-            if name in self._settings.document_types["types"]
-        }
         changes: list[tuple[Path, str]] = []
         generated_snapshot: dict[str, str | None] = {}
         note_count = 0
@@ -247,7 +241,6 @@ class MaintenanceService:
                     notes,
                     templates_by_domain[domain.id],
                     marker_name,
-                    type_mapping,
                 )
             else:
                 relation_page = None
@@ -415,7 +408,7 @@ class MaintenanceService:
             content_hash=file_sha256(path),
             document_type=document_type if isinstance(document_type, str) else None,
             domain_id=self._nearest_domain(path),
-            status=parsed.frontmatter.get("status"),
+            status=parsed.frontmatter.get("document_status"),
         )
 
     def _topology_states(self, spaces, domains) -> tuple[list[SpaceState], list[DomainState]]:

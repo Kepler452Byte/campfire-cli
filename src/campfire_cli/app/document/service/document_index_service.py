@@ -23,8 +23,8 @@ from campfire_cli.common.documents.markdown import MarkdownDocument, parse_docum
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.config.settings import WorkspaceSettings
 
-INDEX_SCHEMA_VERSION = 1
-PARSER_VERSION = "1"
+INDEX_SCHEMA_VERSION = 2
+PARSER_VERSION = "2"
 
 
 class DocumentIndexService:
@@ -52,18 +52,24 @@ class DocumentIndexService:
         project: str | None = None,
         domain: str | None = None,
         document_type: str | None = None,
+        document_status: str | None = None,
         lifecycle: str | None = None,
+        task_status: str | None = None,
         limit: int | None = None,
     ) -> DocumentListResult:
         index = self.reconcile()
-        self._validate_filters(project, domain, document_type, lifecycle)
+        self._validate_filters(
+            project, domain, document_type, document_status, lifecycle, task_status
+        )
         filters = {
             key: value
             for key, value in {
                 "project": project,
                 "domain": domain,
                 "type": document_type,
+                "document_status": document_status,
                 "lifecycle": lifecycle,
+                "task_status": task_status,
             }.items()
             if value is not None
         }
@@ -74,8 +80,12 @@ class DocumentIndexService:
             records = [item for item in records if item.domain_id == domain]
         if document_type is not None:
             records = [item for item in records if item.document_type == document_type]
+        if document_status is not None:
+            records = [item for item in records if item.document_status == document_status]
         if lifecycle is not None:
             records = [item for item in records if item.lifecycle == lifecycle]
+        if task_status is not None:
+            records = [item for item in records if item.task_status == task_status]
         all_items = [self._list_item(item) for item in sorted(records, key=self._record_sort_key)]
         items = all_items[:limit] if limit is not None else all_items
         return DocumentListResult(
@@ -229,7 +239,9 @@ class DocumentIndexService:
         project: str | None,
         domain: str | None,
         document_type: str | None,
+        document_status: str | None,
         lifecycle: str | None,
+        task_status: str | None,
     ) -> None:
         known_domains, known_projects = self._builder.known_scope_ids()
         if project is not None and project not in known_projects:
@@ -242,14 +254,33 @@ class DocumentIndexService:
         ):
             raise ConfigurationError(f"未知文档类型：{document_type}")
         if lifecycle is None:
-            return
-        allowed = {
+            lifecycle_allowed = set()
+        else:
+            lifecycle_allowed = {
             value
             for profile in self._settings.frontmatter_schema["profiles"].values()
             for value in profile.get("enums", {}).get("lifecycle", [])
-        }
-        if lifecycle not in allowed:
-            raise ConfigurationError(f"未知文档 lifecycle：{lifecycle}；allowed={sorted(allowed)}")
+            }
+        if lifecycle is not None and lifecycle not in lifecycle_allowed:
+            raise ConfigurationError(
+                f"未知文档 lifecycle：{lifecycle}；allowed={sorted(lifecycle_allowed)}"
+            )
+        if document_status is not None:
+            allowed = self._settings.frontmatter_schema["profiles"]["base"]["enums"][
+                "document_status"
+            ]
+            if document_status not in allowed:
+                raise ConfigurationError(
+                    f"未知文档 document_status：{document_status}；allowed={sorted(allowed)}"
+                )
+        if task_status is not None:
+            allowed = self._settings.frontmatter_schema["profiles"]["task"]["enums"][
+                "task_status"
+            ]
+            if task_status not in allowed:
+                raise ConfigurationError(
+                    f"未知任务 task_status：{task_status}；allowed={sorted(allowed)}"
+                )
 
     @staticmethod
     def _record_sort_key(item: DocumentIndexRecord) -> str:
@@ -272,8 +303,9 @@ class DocumentIndexService:
             type=item.document_type,
             project=item.project_id,
             domain=item.domain_id,
-            status=item.status,
+            document_status=item.document_status,
             lifecycle=item.lifecycle,
+            task_status=item.task_status,
             priority=item.priority,
             assignee=item.assignee,
             due=item.due,

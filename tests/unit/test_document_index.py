@@ -38,27 +38,22 @@ def write_project_domain(workspace: Path) -> Path:
         )
     )
     (domain / "MOC-Project.md").write_text(
-        "---\nname: Project\ndescription: Index\ntype: moc\nstatus: current\n"
+        "---\nname: Project\ndescription: Index\ntype: moc\ndocument_status: current\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Project\n",
         encoding="utf-8",
     )
     return domain
 
 
-def write_task(path: Path, name: str, lifecycle: str, body: str = "") -> None:
+def write_task(path: Path, name: str, task_status: str, body: str = "") -> None:
     path.write_text(
         "---\n"
         f"name: {name}\n"
         f"description: {name}\n"
         "type: task\n"
-        f"task_id: {name}\n"
-        "project: example\n"
-        "status: current\n"
-        f"lifecycle: {lifecycle}\n"
+        "document_status: current\n"
+        f"task_status: {task_status}\n"
         "priority: medium\n"
-        "assignee: [agent]\n"
-        "task_source: personal\n"
-        "requires_human: false\n"
         "created: 2026-09-15\n"
         "updated: 2026-09-15\n"
         "tags: []\n"
@@ -74,26 +69,22 @@ def test_list_uses_reconciled_index_and_keeps_all_task_lifecycles(workspace: Pat
     done = domain / "任务-Done.md"
     write_task(todo, "Todo", "todo")
     write_task(done, "Done", "completed")
-    done.write_text(
-        done.read_text(encoding="utf-8").replace("project: example", "project: stale"),
-        encoding="utf-8",
-    )
     document = AppContainer.build("test").document
 
     all_tasks = document.list(document_type="task")
 
     assert all_tasks.count == 2
     assert [item.name for item in all_tasks.items] == ["Done", "Todo"]
-    assert {item.lifecycle for item in all_tasks.items} == {"todo", "completed"}
+    assert {item.task_status for item in all_tasks.items} == {"todo", "completed"}
     assert all(item.project == "example" for item in all_tasks.items)
     assert all_tasks.items[0].updated == "2026-09-15"
 
     write_task(todo, "Todo", "blocked")
-    blocked = document.list(project="example", document_type="task", lifecycle="blocked")
+    blocked = document.list(project="example", document_type="task", task_status="blocked")
 
     assert blocked.count == 1
     assert blocked.items[0].name == "Todo"
-    assert blocked.items[0].lifecycle == "blocked"
+    assert blocked.items[0].task_status == "blocked"
     assert blocked.index_generation > all_tasks.index_generation
 
 
@@ -104,21 +95,21 @@ def test_inspect_returns_declared_outgoing_incoming_and_unresolved(workspace: Pa
     incoming = domain / "记录-Incoming.md"
     source.write_text(
         "---\nname: Source\ndescription: Source\ntype: plan\nproject: example\n"
-        "domain: project-example\nstatus: current\nlifecycle: proposed\n"
+        "domain: project-example\ndocument_status: current\nlifecycle: proposed\n"
         "related: [记录-Target]\ncreated: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Source\nSee [[记录-Target]] and [[Missing]].\n",
         encoding="utf-8",
     )
     target.write_text(
         "---\nname: Target\ndescription: Target\ntype: record\nproject: example\n"
-        "domain: project-example\nstatus: current\nlifecycle: maintained\n"
+        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Target\n",
         encoding="utf-8",
     )
     incoming.write_text(
         "---\nname: Incoming\ndescription: Incoming\ntype: record\nproject: example\n"
-        "domain: project-example\nstatus: current\nlifecycle: maintained\n"
+        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Incoming\nSee [[计划-Source]].\n",
         encoding="utf-8",
@@ -146,7 +137,7 @@ def test_reconcile_removes_deleted_documents_and_edges(workspace: Path) -> None:
         path.write_text(
             "---\n"
             f"name: {name}\ndescription: {name}\ntype: record\nproject: example\n"
-            "domain: project-example\nstatus: current\nlifecycle: maintained\n"
+            "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
             "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
             "---\n"
             f"# {name}\n{body}",
@@ -189,14 +180,14 @@ def test_reconcile_removes_edges_when_target_becomes_non_queryable(workspace: Pa
     target = domain / "记录-Target.md"
     source.write_text(
         "---\nname: Source\ndescription: Source\ntype: record\nproject: example\n"
-        "domain: project-example\nstatus: current\nlifecycle: maintained\n"
+        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Source\nSee [[记录-Target]].\n",
         encoding="utf-8",
     )
     target.write_text(
         "---\nname: Target\ndescription: Target\ntype: record\nproject: example\n"
-        "domain: project-example\nstatus: current\nlifecycle: maintained\n"
+        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Target\n",
         encoding="utf-8",
     )
@@ -233,20 +224,20 @@ def test_index_excludes_moc_and_reports_ambiguous_links(workspace: Path) -> None
         encoding="utf-8",
     )
     (second / "MOC-Knowledge.md").write_text(
-        "---\nname: Knowledge\ndescription: Index\ntype: moc\nstatus: current\n"
+        "---\nname: Knowledge\ndescription: Index\ntype: moc\ndocument_status: current\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Knowledge\n",
         encoding="utf-8",
     )
     for directory in (first, second):
         target = directory / "记录-Shared.md"
         target.write_text(
-            "---\nname: Shared\ndescription: Shared\ntype: record\nstatus: current\n"
+            "---\nname: Shared\ndescription: Shared\ntype: record\ndocument_status: current\n"
             "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Shared\n",
             encoding="utf-8",
         )
     source = first / "记录-Source.md"
     source.write_text(
-        "---\nname: Source\ndescription: Source\ntype: record\nstatus: current\n"
+        "---\nname: Source\ndescription: Source\ntype: record\ndocument_status: current\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Source\nSee [[记录-Shared]].\n",
         encoding="utf-8",
@@ -302,16 +293,16 @@ def test_failed_snapshot_replace_keeps_previous_generation(workspace: Path) -> N
         generation = connection.execute(
             "select generation from document_index_state where workspace_id = 'test'"
         ).fetchone()
-        lifecycle = connection.execute(
-            "select lifecycle from documents where workspace_id = 'test' "
+        task_status = connection.execute(
+            "select task_status from documents where workspace_id = 'test' "
             "and path = 'mywork/Project/任务-Todo.md'"
         ).fetchone()
         connection.execute("drop trigger reject_document_snapshot")
     recovered = document.list(document_type="task")
 
     assert generation == (initial.index_generation,)
-    assert lifecycle == ("todo",)
-    assert recovered.items[0].lifecycle == "blocked"
+    assert task_status == ("todo",)
+    assert recovered.items[0].task_status == "blocked"
     assert recovered.index_generation > initial.index_generation
 
 

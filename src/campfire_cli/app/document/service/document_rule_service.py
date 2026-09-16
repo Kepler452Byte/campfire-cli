@@ -200,7 +200,7 @@ class DocumentRuleService:
             document_type = frontmatter.get("type")
             if document_type not in {"moc", "product-spec"}:
                 continue
-            if frontmatter.get("status") != "current":
+            if frontmatter.get("document_status") != "current":
                 continue
             project = frontmatter.get("project")
             domain = frontmatter.get("domain")
@@ -347,7 +347,7 @@ class DocumentRuleService:
         frontmatter: dict[str, Any],
     ) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
-        status = frontmatter.get("status")
+        document_status = frontmatter.get("document_status")
         lifecycle = frontmatter.get("lifecycle")
         in_template_directory = "_模板" in path.parts
         if document_type == "template" and path.parent.name != "_模板":
@@ -355,20 +355,10 @@ class DocumentRuleService:
         elif in_template_directory and document_type != "template":
             issues.append({"code": "template-directory-type-mismatch", "path": relative})
         in_archive = "archive" in path.parts
-        if in_archive != (status == "archived" and lifecycle == "archived") and (
-            in_archive or status == "archived" or lifecycle == "archived"
+        if in_archive != (document_status == "archived" and lifecycle == "archived") and (
+            in_archive or document_status == "archived" or lifecycle == "archived"
         ):
             issues.append({"code": "document-archive-state-mismatch", "path": relative})
         if document_type != "task":
             return issues
-        if status == "draft":
-            issues.append({"code": "task-status-draft-invalid", "path": relative})
-        if lifecycle not in {"completed", "archived"} and frontmatter.get("completed"):
-            issues.append(
-                {
-                    "code": "task-completed-date-premature",
-                    "path": relative,
-                    "detail": str(lifecycle),
-                }
-            )
         return issues

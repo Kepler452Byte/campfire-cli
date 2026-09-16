@@ -8,7 +8,7 @@ SPEC:
   behavior:
     - check 模式只读列出归档请求、路径状态和阻塞问题
     - apply 模式只移动校验通过的请求到同领域扁平 archive 目录
-    - 完成归档时统一 status、lifecycle、archive_requested 和 archived_at
+    - 完成归档时统一 document_status、lifecycle、archive_requested 和 archived_at
   safety:
     - 不依据更新时间自动归档
     - 不覆盖同名目标，不删除文档，不处理治理范围外文件
@@ -178,9 +178,12 @@ def collect_items(
                     }
                 )
             if in_archive:
-                if meta.get("status") != "archived" or meta.get("lifecycle") != "archived":
+                if (
+                    meta.get("document_status") != "archived"
+                    or meta.get("lifecycle") != "archived"
+                ):
                     issues.append({"code": "archive-path-state-mismatch", "path": rel})
-            elif meta.get("status") == "archived" or meta.get("lifecycle") == "archived":
+            elif meta.get("document_status") == "archived" or meta.get("lifecycle") == "archived":
                 issues.append({"code": "archive-request-state-premature", "path": rel})
     return sorted(items, key=lambda item: str(item.source)), issues
 
@@ -263,7 +266,7 @@ def apply_items(
         current_meta = parse_frontmatter(item.source)
         if (
             item.in_archive
-            and current_meta.get("status") == "archived"
+            and current_meta.get("document_status") == "archived"
             and current_meta.get("lifecycle") == "archived"
             and not is_true(current_meta.get("archive_requested", "false"))
             and current_meta.get("archived_at")
@@ -274,7 +277,7 @@ def apply_items(
         updated = replace_frontmatter_fields(
             item.source.read_text(encoding="utf-8"),
             {
-                "status": "archived",
+                "document_status": "archived",
                 "lifecycle": "archived",
                 "archive_requested": "false",
                 "archived_at": effective_archived_at,

@@ -141,6 +141,18 @@ class DocumentMoveService:
                 structural_patch["project"] = target_domain.project_id
             elif not target_domain.project_id and "project" in parsed.frontmatter:
                 removed.add("project")
+            if document_type == "task" and target_domain.project_id:
+                requested_project = values.get("related_project")
+                if requested_project and requested_project != target_domain.project_id:
+                    issues.append(
+                        {
+                            "code": "task-related-project-context-mismatch",
+                            "path": target_name,
+                            "expected": target_domain.project_id,
+                            "actual": requested_project,
+                        }
+                    )
+                structural_patch["related_project"] = target_domain.project_id
             if source_domain != target_domain or values or unset_fields:
                 structural_patch["updated"] = date.today().isoformat()
 

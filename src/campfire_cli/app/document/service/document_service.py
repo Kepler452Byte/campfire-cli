@@ -117,14 +117,18 @@ class DocumentService:
         project: str | None = None,
         domain: str | None = None,
         document_type: str | None = None,
+        document_status: str | None = None,
         lifecycle: str | None = None,
+        task_status: str | None = None,
         limit: int | None = None,
     ) -> DocumentListResult:
         return self._index.list_documents(
             project=project,
             domain=domain,
             document_type=document_type,
+            document_status=document_status,
             lifecycle=lifecycle,
+            task_status=task_status,
             limit=limit,
         )
 

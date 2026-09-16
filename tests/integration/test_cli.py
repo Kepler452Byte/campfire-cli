@@ -312,14 +312,14 @@ def test_document_set_rejects_duplicate_fields_before_dispatch() -> None:
             "--path",
             "mynote/知识-示例.md",
             "--set",
-            "status=current",
+            "document_status=current",
             "--set",
-            "status=draft",
+            "document_status=draft",
         ],
     )
 
     assert result.exit_code != 0
-    assert "--set 字段重复：status" in strip_ansi(result.output)
+    assert "--set 字段重复：document_status" in strip_ansi(result.output)
 
 
 def test_document_set_rejects_an_empty_field_before_dispatch() -> None:
@@ -477,16 +477,15 @@ def test_document_list_and_inspect_expose_reconciled_query_contract(
     register_project("example", "project-example")
     task = left / "任务-Ship.md"
     task.write_text(
-        "---\nname: Ship\ndescription: Ship\ntype: task\ntask_id: ship\n"
-        "project: example\nstatus: current\nlifecycle: todo\npriority: high\n"
-        "assignee: [agent]\ntask_source: personal\nrequires_human: false\n"
+        "---\nname: Ship\ndescription: Ship\ntype: task\n"
+        "document_status: current\ntask_status: todo\npriority: high\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Ship\nSee [[知识-Guide]].\n",
         encoding="utf-8",
     )
     guide = right / "知识-Guide.md"
     guide.write_text(
-        "---\nname: Guide\ndescription: Guide\ntype: knowledge\nstatus: current\n"
+        "---\nname: Guide\ndescription: Guide\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Guide\n",
         encoding="utf-8",
@@ -548,7 +547,7 @@ def test_document_list_and_inspect_expose_reconciled_query_contract(
     assert [item["id"] for item in project_domains["domains"]] == ["project-example"]
 
     task.write_text(
-        task.read_text(encoding="utf-8").replace("lifecycle: todo", "lifecycle: blocked"),
+        task.read_text(encoding="utf-8").replace("task_status: todo", "task_status: blocked"),
         encoding="utf-8",
     )
     refreshed = runner.invoke(
@@ -560,7 +559,7 @@ def test_document_list_and_inspect_expose_reconciled_query_contract(
             "list",
             "--type",
             "task",
-            "--lifecycle",
+            "--task-status",
             "blocked",
         ],
     )
@@ -606,7 +605,7 @@ def test_document_index_covers_multiple_projects_and_nested_domains(
         (directory / f"任务-{name}.md").write_text(
             "---\n"
             f"name: {name}\ndescription: {name}\ntype: task\ntask_id: {name.lower()}\n"
-            f"project: stale-frontmatter\nstatus: current\nlifecycle: {lifecycle}\n"
+            f"project: stale-frontmatter\ndocument_status: current\nlifecycle: {lifecycle}\n"
             "priority: medium\nassignee: [agent]\ntask_source: personal\n"
             "requires_human: false\ncreated: 2026-09-15\nupdated: 2026-09-15\n"
             "tags: []\n---\n"
@@ -620,14 +619,14 @@ def test_document_index_covers_multiple_projects_and_nested_domains(
     target = beta / "记录-Target.md"
     target.write_text(
         "---\nname: Target\ndescription: Target\ntype: record\nproject: beta\n"
-        "domain: project-beta\nstatus: current\nlifecycle: maintained\n"
+        "domain: project-beta\ndocument_status: current\nlifecycle: maintained\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Target\n",
         encoding="utf-8",
     )
     source = alpha_child / "计划-Source.md"
     source.write_text(
         "---\nname: Source\ndescription: Source\ntype: plan\nproject: alpha\n"
-        "domain: project-alpha-design\nstatus: current\nlifecycle: proposed\n"
+        "domain: project-alpha-design\ndocument_status: current\nlifecycle: proposed\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Source\nSee [[记录-Target]].\n",
         encoding="utf-8",
@@ -776,14 +775,14 @@ def test_new_device_rebuilds_equivalent_document_index_from_markdown(
     write_domain_marker(domain, "knowledge", "Knowledge", governance="knowledge-docs")
     source = domain / "知识-Source.md"
     source.write_text(
-        "---\nname: Source\ndescription: Source\ntype: knowledge\nstatus: current\n"
+        "---\nname: Source\ndescription: Source\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
         "---\n# Source\nSee [[知识-Target]].\n",
         encoding="utf-8",
     )
     target = domain / "知识-Target.md"
     target.write_text(
-        "---\nname: Target\ndescription: Target\ntype: knowledge\nstatus: current\n"
+        "---\nname: Target\ndescription: Target\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Target\n",
         encoding="utf-8",
     )
@@ -1236,7 +1235,7 @@ def test_unified_database_isolates_document_state_by_workspace(tmp_path: Path, m
         )
         note.write_text(
             "---\nname: 相同路径\ndescription: test\ntype: knowledge\n"
-            "status: current\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
+            "document_status: current\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
             encoding="utf-8",
         )
         checked = runner.invoke(app, ["--workspace", workspace_id, "maintenance", "check"])
@@ -1266,7 +1265,9 @@ def test_base_sync_is_idempotent_and_preserves_unknown_base(workspace: Path) -> 
     assert applied.exit_code == 0, applied.output
     assert custom.read_text(encoding="utf-8") == "views: []\n"
     assert len(list(target.glob("*.base"))) == 6
-    managed = target / "任务工作台.base"
+    managed = target / "任务工作台-项目.base"
+    assert "file.path.startsWith" not in managed.read_text(encoding="utf-8")
+    assert "!related_project.isEmpty()" in managed.read_text(encoding="utf-8")
     managed.write_text(
         yaml.safe_dump(yaml.safe_load(managed.read_text(encoding="utf-8")), allow_unicode=True),
         encoding="utf-8",
@@ -1340,12 +1341,13 @@ def test_document_profiles_are_compiled_and_resolved(workspace: Path) -> None:
     )
     payload = json.loads(task.output)["profile"]
     assert payload["required"][:3] == ["name", "description", "type"]
-    assert "blocked_reason" in payload["optional"]
+    assert payload["required"][-1] == "task_status"
+    assert payload["optional"] == ["priority", "related_project"]
     assert len(payload["field_order"]) == len(payload["allowed"])
 
     note = workspace / "mynote/知识-Profile.md"
     note.write_text(
-        "---\nname: Profile\ndescription: test\ntype: knowledge\nstatus: current\n"
+        "---\nname: Profile\ndescription: test\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
         encoding="utf-8",
     )
@@ -1402,7 +1404,7 @@ def test_document_type_list_reads_effective_user_config(workspace: Path) -> None
 def test_single_document_check_and_format_require_confirmation(workspace: Path) -> None:
     note = workspace / "mynote/知识-单篇治理.md"
     original = (
-        "---\ntype: knowledge\nname: 单篇治理\ndescription: test\nstatus: current\n"
+        "---\ntype: knowledge\nname: 单篇治理\ndescription: test\ndocument_status: current\n"
         "created: 2026-09-12\nupdated: 2026-09-12\ntags: []\n---\n# 单篇治理\n"
     )
     note.write_text(original, encoding="utf-8")
@@ -1466,7 +1468,7 @@ def test_single_document_check_and_format_require_confirmation(workspace: Path) 
 def test_maintenance_check_creates_sqlite_current_state(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-Test.md"
     note.write_text(
-        "---\nname: Test\ndescription: test\ntype: knowledge\nstatus: current\n"
+        "---\nname: Test\ndescription: test\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# Test\n",
         encoding="utf-8",
     )
@@ -1486,33 +1488,26 @@ def test_maintenance_check_validates_task_business_rules(workspace: Path) -> Non
         {
             "version": 1,
             "frontmatter_schema": {
-                "profiles": {"task": {"enums": {"lifecycle": ["blocked", "completed"]}}}
+                "profiles": {"task": {"enums": {"task_status": ["blocked", "completed"]}}}
             },
         },
     )
     note = workspace / "mywork/任务-跟进事项.md"
     note.write_text(
-        "---\nname: 跟进事项\ndescription: test\ntype: task\ntask_id: task-test-001\n"
-        "status: current\nlifecycle: blocked\ntask_source: assigned\nsource_channel: im\n"
-        "assignee: [agent]\nrequires_human: true\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
+        "---\nname: 跟进事项\ndescription: test\ntype: task\n"
+        "document_status: current\ntask_status: blocked\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
         "tags: []\n---\n# 跟进事项\n",
         encoding="utf-8",
     )
     result = runner.invoke(app, ["--workspace", "test", "maintenance", "check"])
     payload = json.loads(result.output)
-    missing = {
-        issue["field"]
-        for issue in payload["issues"]
-        if issue["code"] == "frontmatter-field-missing"
-    }
-    assert "requested_by" not in missing
-    assert "blocked_reason" in missing
+    assert payload["issue_count"] == 0
 
 
 def test_restructure_plan_is_unapproved_and_hash_change_blocks_apply(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-【Test】标题.md"
     note.write_text(
-        "---\nname: 标题\ndescription: test\ntype: knowledge\nstatus: current\n"
+        "---\nname: 标题\ndescription: test\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 标题\n",
         encoding="utf-8",
     )
@@ -1668,7 +1663,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
 ) -> None:
     source = workspace / "mynote" / "知识-迁移.md"
     source.write_text(
-        "---\nname: 迁移\ndescription: test\ntype: knowledge\nstatus: current\n"
+        "---\nname: 迁移\ndescription: test\ntype: knowledge\ndocument_status: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 迁移\n",
         encoding="utf-8",
     )
@@ -1694,7 +1689,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
         "  - source: mynote/知识-迁移.md\n"
         "    target: mywork/知识-迁移.md\n"
         "    frontmatter:\n"
-        "      status: draft\n"
+        "      document_status: draft\n"
         "    reason: explicit project move\n"
         "    approved: true\n",
         encoding="utf-8",
@@ -1760,7 +1755,7 @@ def test_restructure_plan_spec_supports_cross_directory_move_and_metadata(
     ]
     target = workspace / "mywork" / "知识-迁移.md"
     assert target.is_file() and not source.exists()
-    assert "status: draft" in target.read_text(encoding="utf-8")
+    assert "document_status: draft" in target.read_text(encoding="utf-8")
     assert "mywork/知识-迁移.md" in reference.read_text(encoding="utf-8")
 
 
@@ -1842,7 +1837,7 @@ def test_restructure_rewrites_unique_wikilink_without_replacing_plain_text(works
 
 def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> None:
     source = workspace / "mynote/知识-非法状态.md"
-    source.write_text("---\ntype: knowledge\nstatus: current\n---\n", encoding="utf-8")
+    source.write_text("---\ntype: knowledge\ndocument_status: current\n---\n", encoding="utf-8")
     runner.invoke(
         app,
         [
@@ -1861,7 +1856,7 @@ def test_restructure_spec_rejects_invalid_enum_during_plan(workspace: Path) -> N
     spec.write_text(
         "operations:\n"
         "  - source: mynote/知识-非法状态.md\n"
-        "    frontmatter: {status: not-a-state}\n"
+    "    frontmatter: {document_status: not-a-state}\n"
         "    reason: invalid\n",
         encoding="utf-8",
     )
@@ -1931,7 +1926,7 @@ def test_restructure_spec_rejects_unknown_schema_fields_with_json_error(
 def test_maintenance_check_filters_enriches_and_summarizes(workspace: Path) -> None:
     note = workspace / "mynote" / "知识-坏状态.md"
     note.write_text(
-        "---\nname: Test\ndescription: test\ntype: knowledge\nstatus: done\n"
+        "---\nname: Test\ndescription: test\ntype: knowledge\ndocument_status: done\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
         encoding="utf-8",
     )
@@ -1997,7 +1992,7 @@ def test_required_field_distinguishes_missing_from_empty(workspace: Path) -> Non
     )
     note = workspace / "mynote/基础知识/知识-空字段.md"
     note.write_text(
-        "---\nname: 空字段\ndescription: \ntype: knowledge\nstatus: current\n"
+        "---\nname: 空字段\ndescription: \ntype: knowledge\ndocument_status: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n",
         encoding="utf-8",
     )
@@ -2275,7 +2270,7 @@ def test_document_apply_replaces_semantic_maintenance_plan(workspace: Path) -> N
             "--set",
             "description=理解 goroutine 与 channel 的协作模型",
             "--set",
-            "status=current",
+            "document_status=current",
             "--set",
             "created=2026-09-12",
             "--set",
@@ -2313,13 +2308,13 @@ def test_maintenance_check_validates_skill_template_enums(workspace: Path) -> No
         {
             "version": 1,
             "frontmatter_schema": {
-                "profiles": {"task": {"enums": {"lifecycle": ["todo", "completed"]}}}
+                "profiles": {"task": {"enums": {"task_status": ["todo", "completed"]}}}
             },
         },
     )
     template = workspace / "_global_skills" / "task" / "references" / "任务模板.md"
     template.parent.mkdir(parents=True)
-    template.write_text("---\ntype: task\nlifecycle: proposed\n---\n", encoding="utf-8")
+    template.write_text("---\ntype: task\ntask_status: proposed\n---\n", encoding="utf-8")
     result = runner.invoke(
         app,
         ["--workspace", "test", "maintenance", "check", "--code", "template-enum-invalid"],
@@ -2501,7 +2496,7 @@ def test_archive_scope_does_not_apply_other_candidates(workspace: Path) -> None:
     second = _create_domain(workspace, "Second")
     frontmatter = (
         "---\nname: done\ndescription: done\ntype: issue\nproject: test\n"
-        "domain: test\nstatus: current\nlifecycle: completed\nrelated: []\n"
+        "domain: test\ndocument_status: current\nlifecycle: completed\nrelated: []\n"
         "archive_requested: true\narchive_reason: completed\ncreated: 2026-01-01\n"
         "updated: 2026-01-01\ntags: []\n---\n# done\n"
     )
@@ -3538,7 +3533,7 @@ def test_archive_check_lists_candidates_with_reason_and_related(
         encoding="utf-8",
     )
     (domain / "MOC-归档测试.md").write_text(
-        "---\nname: 归档测试总览\ndescription: 测试。\ntype: moc\nstatus: current\n"
+        "---\nname: 归档测试总览\ndescription: 测试。\ntype: moc\ndocument_status: current\n"
         "lifecycle: maintained\ncreated: 2026-09-14\nupdated: 2026-09-14\ntags: []\n---\n"
         "# 归档测试总览\n"
         "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->\n"
@@ -3549,7 +3544,7 @@ def test_archive_check_lists_candidates_with_reason_and_related(
     (domain / "计划-待归档.md").write_text(
         "---\nname: 待归档\ndescription: 测试\ntype: plan\nproject: archive-test\n"
         "domain: archive-test\n"
-        "status: current\nlifecycle: proposed\n"
+        "document_status: current\nlifecycle: proposed\n"
         'related:\n  - "[[看板-某清单]]"\n'
         "superseded_by: []\narchive_requested: true\narchive_reason: completed\n"
         "created: 2026-09-14\nupdated: 2026-09-14\n---\n# 待归档\n",
@@ -3571,7 +3566,7 @@ def test_document_kanban_check_validates_renderability_contract(workspace: Path)
     domain.mkdir(parents=True)
     plain = domain / "看板-普通清单.md"
     plain.write_text(
-        "---\nname: 普通清单\ndescription: 测试。\ntype: board\nstatus: current\n"
+        "---\nname: 普通清单\ndescription: 测试。\ntype: board\ndocument_status: current\n"
         "lifecycle: proposed\ncreated: 2026-09-14\nupdated: 2026-09-14\ntags: []\n---\n"
         "## 看板\n\n### 未排期\n\n- [ ] 事项\n",
         encoding="utf-8",
@@ -3579,7 +3574,7 @@ def test_document_kanban_check_validates_renderability_contract(workspace: Path)
     rendered = domain / "看板-可渲染.md"
     rendered.write_text(
         "---\nname: 可渲染\ndescription: 测试。\ntype: board\nkanban-plugin: basic\n"
-        "status: current\nlifecycle: proposed\ncreated: 2026-09-14\nupdated: 2026-09-14\n"
+        "document_status: current\nlifecycle: proposed\ncreated: 2026-09-14\nupdated: 2026-09-14\n"
         "tags: []\n---\n## 未排期\n\n- [ ] 事项\n",
         encoding="utf-8",
     )

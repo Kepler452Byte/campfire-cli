@@ -80,7 +80,7 @@ def make_domain(vault: Path, domain_id: str, doc_count: int) -> None:
         f'name: {domain_id}总览\n'
         'description: 测试领域导航入口。\n'
         "type: moc\n"
-        "status: current\n"
+        "document_status: current\n"
         "lifecycle: maintained\n"
         "created: 2026-09-14\n"
         "updated: 2026-09-14\n"

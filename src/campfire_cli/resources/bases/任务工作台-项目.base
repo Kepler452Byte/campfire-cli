@@ -1,0 +1,24 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'type == "task"'
+    - '!related_project.isEmpty()'
+properties:
+  file.name: {displayName: 任务}
+  related_project: {displayName: 关联项目}
+  task_status: {displayName: 任务状态}
+  priority: {displayName: 优先级}
+  updated: {displayName: 更新时间}
+views:
+  - type: table
+    name: 项目任务
+    groupBy: {property: related_project, direction: ASC}
+    order: [file.name, related_project, task_status, priority, updated]
+  - type: table
+    name: 未完成
+    filters: 'task_status != "completed" && task_status != "cancelled"'
+    order: [file.name, related_project, task_status, priority, updated]
+  - type: table
+    name: 当前阻塞
+    filters: 'task_status == "blocked"'
+    order: [file.name, related_project, priority, updated]

@@ -28,7 +28,7 @@ def test_upgrade_removes_obsolete_adoption_batch_state(tmp_path: Path) -> None:
         adoption_table = connection.execute(
             "select name from sqlite_master where type = 'table' and name = 'adoption_batches'"
         ).fetchone()
-    assert version == ("010",)
+    assert version == ("011",)
     assert adoption_table is None
 
     with sqlite3.connect(database) as connection:
@@ -45,7 +45,7 @@ def test_upgrade_removes_obsolete_adoption_batch_state(tmp_path: Path) -> None:
             row[1]
             for row in connection.execute("pragma table_info(document_index_state)").fetchall()
         }
-    assert {"lifecycle", "project_id", "source_mtime_ns"} <= document_columns
+    assert {"document_status", "task_status", "project_id", "source_mtime_ns"} <= document_columns
     assert {"topology_hash", "rebuilt_at"} <= state_columns
     assert edge_table == ("document_edges",)
     assert state_table == ("document_index_state",)

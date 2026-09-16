@@ -33,6 +33,13 @@ def project_domain(workspace: Path) -> Path:
         "---\n",
         encoding="utf-8",
     )
+    (workspace / ".campfire.yaml").write_text(
+        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "  governance_version: 1\nprojects:\n"
+        "- id: example\n  name: Example\n  document_domain_id: project-example\n"
+        "  status: active\n",
+        encoding="utf-8",
+    )
     SqliteWorkspaceRepository(campfire_home()).save_project(
         ProjectEntry(
             id="example",
@@ -111,7 +118,7 @@ def test_apply_creates_base_profile_template_in_domain_template_directory(
         "name",
         "description",
         "type",
-        "status",
+        "document_status",
         "created",
         "updated",
         "tags",
@@ -190,7 +197,7 @@ def test_apply_retypes_and_renames_one_document_atomically(workspace: Path) -> N
     source = domain / "任务-发布.md"
     source.write_text(
         "---\nname: 发布\ndescription: 发布任务\ntype: task\ntask_id: TASK-1\n"
-        "project: example\ndomain: project-example\nstatus: current\nlifecycle: todo\n"
+        "project: example\ndomain: project-example\ndocument_status: current\nlifecycle: todo\n"
         "task_source: personal\nassignee: [agent]\nrequires_human: false\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 发布\n",
         encoding="utf-8",
@@ -232,7 +239,7 @@ def test_apply_retypes_issue_to_record(workspace: Path) -> None:
     source = domain / "问题-发布.md"
     source.write_text(
         "---\nname: 发布\ndescription: 发布问题\ntype: issue\n"
-        "project: example\ndomain: project-example\nstatus: current\n"
+        "project: example\ndomain: project-example\ndocument_status: current\n"
         "lifecycle: proposed\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
         "tags: []\n---\n# 发布\n",
         encoding="utf-8",
@@ -258,7 +265,7 @@ def test_apply_retype_rejects_stale_source_hash(workspace: Path) -> None:
     source = domain / "问题-发布.md"
     source.write_text(
         "---\nname: 发布\ndescription: 发布问题\ntype: issue\n"
-        "project: example\ndomain: project-example\nstatus: current\n"
+        "project: example\ndomain: project-example\ndocument_status: current\n"
         "lifecycle: proposed\ncreated: 2026-01-01\nupdated: 2026-01-01\n"
         "tags: []\n---\n# 发布\n",
         encoding="utf-8",
@@ -292,7 +299,7 @@ def test_apply_retype_requires_target_profile_fields_before_moving(workspace: Pa
     source = domain / "知识-发布.md"
     source.write_text(
         "---\nname: 发布\ndescription: 发布知识\ntype: knowledge\n"
-        "project: example\ndomain: project-example\nstatus: current\n"
+        "project: example\ndomain: project-example\ndocument_status: current\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 发布\n",
         encoding="utf-8",
     )
@@ -308,13 +315,7 @@ def test_apply_retype_requires_target_profile_fields_before_moving(workspace: Pa
     assert result.status == "needs-input"
     assert result.action == "retype"
     assert result.target == "mywork/【Example】文档中心/任务-发布.md"
-    assert {
-        "task_id",
-        "lifecycle",
-        "task_source",
-        "assignee",
-        "requires_human",
-    } <= set(result.missing_fields)
+    assert result.missing_fields == ["task_status"]
     assert source.is_file()
     assert not (domain / "任务-发布.md").exists()
     assert result.follow_up == []
@@ -325,7 +326,7 @@ def test_apply_retype_blocks_existing_target_without_writing(workspace: Path) ->
     source = domain / "任务-发布.md"
     source.write_text(
         "---\nname: 发布\ndescription: 发布任务\ntype: task\ntask_id: TASK-1\n"
-        "project: example\ndomain: project-example\nstatus: current\nlifecycle: todo\n"
+        "project: example\ndomain: project-example\ndocument_status: current\nlifecycle: todo\n"
         "task_source: personal\nassignee: [agent]\nrequires_human: false\n"
         "created: 2026-01-01\nupdated: 2026-01-01\ntags: []\n---\n# 发布任务\n",
         encoding="utf-8",
@@ -495,27 +496,16 @@ def test_apply_returns_all_missing_fields_without_writing(workspace: Path) -> No
         DocumentApplyRequest(path=relative, document_type="task", confirm=True)
     )
     assert result.status == "needs-input"
-    required = {
-        "description",
-        "task_id",
-        "lifecycle",
-        "task_source",
-        "assignee",
-        "requires_human",
-    }
+    required = {"description", "task_status"}
     assert required <= set(result.missing_fields)
     constraints = {item.get("field"): item.get("allowed") for item in result.issues}
-    assert constraints["lifecycle"] == [
+    assert constraints["task_status"] == [
         "todo",
         "in-progress",
         "blocked",
-        "review",
         "completed",
         "cancelled",
-        "archived",
     ]
-    assert constraints["assignee"] == ["list"]
-    assert constraints["requires_human"] == ["boolean"]
     assert all("argument_example" not in issue for issue in result.issues)
     assert not (workspace / relative).exists()
 
@@ -529,22 +519,15 @@ def test_apply_creates_task_without_skill_owned_enum_defaults(workspace: Path) -
             document_type="task",
             values={
                 "description": "验证任务创建",
-                "task_id": "001",
-                "lifecycle": "todo",
-                "task_source": "assigned",
-                "assignee": '["codex"]',
-                "requires_human": "false",
-                "due": "2026-09-15",
+                "task_status": "todo",
             },
             confirm=True,
         )
     )
     assert result.status == "applied"
     parsed = parse_document((workspace / relative).read_text(encoding="utf-8"))
-    assert parsed.frontmatter["task_id"] == "001"
-    assert parsed.frontmatter["assignee"] == ["codex"]
-    assert parsed.frontmatter["requires_human"] is False
-    assert str(parsed.frontmatter["due"]) == "2026-09-15"
+    assert parsed.frontmatter["task_status"] == "todo"
+    assert parsed.frontmatter["related_project"] == "example"
     assert service(workspace).check(relative)["status"] == "ok"
 
 
@@ -564,7 +547,7 @@ def test_apply_rejects_invalid_enum_before_writing(workspace: Path) -> None:
     assert not (workspace / relative).exists()
 
 
-def test_apply_rejects_invalid_scalar_type_before_writing(workspace: Path) -> None:
+def test_apply_rejects_invalid_task_enum_before_writing(workspace: Path) -> None:
     project_domain(workspace)
     relative = "mywork/【Example】文档中心/任务-示例.md"
 
@@ -574,21 +557,17 @@ def test_apply_rejects_invalid_scalar_type_before_writing(workspace: Path) -> No
             document_type="task",
             values={
                 "description": "验证任务创建",
-                "task_id": "TASK-001",
-                "lifecycle": "todo",
-                "task_source": "assigned",
-                "assignee": '["codex"]',
-                "requires_human": "no",
+                "task_status": "todo",
+                "priority": "invalid",
             },
             confirm=True,
         )
     )
 
     assert result.status == "blocked"
-    issue = next(item for item in result.issues if item["code"] == "frontmatter-type-invalid")
-    assert issue["field"] == "requires_human"
-    assert issue["allowed"] == ["boolean"]
-    assert issue["argument_example"] == {"--set": "requires_human=true"}
+    issue = next(item for item in result.issues if item["code"] == "frontmatter-enum-invalid")
+    assert issue["field"] == "priority"
+    assert issue["allowed"] == ["urgent", "high", "medium", "low"]
     assert not (workspace / relative).exists()
 
 
@@ -791,7 +770,7 @@ def test_move_same_domain_preserves_frontmatter_bytes(workspace: Path) -> None:
         "type: plan\n"
         "project: example\n"
         "domain: project-example\n"
-        "status: draft\n"
+        "document_status: draft\n"
         "lifecycle: proposed\n"
         "created: 2026-09-15\n"
         "updated: '2026-09-15'\n"
@@ -894,7 +873,7 @@ def test_move_cross_domain_returns_all_missing_target_profile_fields(workspace: 
     source = other / "计划-迁入项目.md"
     source.write_text(
         "---\nname: 迁入项目\ndescription: 示例\ntype: plan\n"
-        "domain: other\nstatus: draft\ncreated: 2026-09-15\nupdated: 2026-09-15\n"
+        "domain: other\ndocument_status: draft\ncreated: 2026-09-15\nupdated: 2026-09-15\n"
         "tags: []\n---\n# 迁入项目\n",
         encoding="utf-8",
     )
@@ -972,11 +951,7 @@ def test_move_uses_the_same_profile_driven_value_decoder(workspace: Path) -> Non
             document_type="task",
             values={
                 "description": "移动任务",
-                "task_id": "001",
-                "lifecycle": "todo",
-                "task_source": "assigned",
-                "assignee": '["codex"]',
-                "requires_human": "false",
+                "task_status": "todo",
             },
             confirm=True,
         )
@@ -986,22 +961,22 @@ def test_move_uses_the_same_profile_driven_value_decoder(workspace: Path) -> Non
         source,
         "project-example",
         name="任务-新名称.md",
-        values={"assignee": '["human"]', "requires_human": "true"},
+        values={"priority": "high"},
     )
     result = document.move(
         source,
         "project-example",
         name="任务-新名称.md",
-        values={"assignee": '["human"]', "requires_human": "true"},
+        values={"priority": "high"},
         expected_hash=preview.expected_hash,
         confirm=True,
     )
 
     assert result.status == "moved"
     parsed = parse_document((workspace / target).read_text(encoding="utf-8"))
-    assert parsed.frontmatter["task_id"] == "001"
-    assert parsed.frontmatter["assignee"] == ["human"]
-    assert parsed.frontmatter["requires_human"] is True
+    assert parsed.frontmatter["task_status"] == "todo"
+    assert parsed.frontmatter["priority"] == "high"
+    assert parsed.frontmatter["related_project"] == "example"
 
 
 def test_move_rejects_target_name_with_directory_components(workspace: Path) -> None:

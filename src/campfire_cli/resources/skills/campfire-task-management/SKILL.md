@@ -5,7 +5,7 @@ description: "查询、创建、更新和完成 Campfire 任务文档；适用�
 
 # Campfire 任务管理
 
-统一任务文档（`任务-` 前缀）的创建、状态更新与完成闭环。任务分两类：有项目任务（关联已注册 Project）与无项目任务（个人待办、跨项目事务）。两类任务都不得虚构归属：`project` 字段只在能唯一解析到已注册 Project 时填写。
+统一任务文档（`任务-` 前缀）的创建与状态更新。基础 `document_status` 表示文档是否仍有效；task 专属 `task_status` 表示任务进度。`related_project` 是任务的显式关联项目字段：任务位于 Project Domain 时 CLI 自动写入该 Project id；个人或通用 Domain 的任务可按需填写或保持为空。
 
 通用写入门禁遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。只查询任务集合时直接使用 `document list`，不加载完整 Project bootstrap。创建、修改 Frontmatter、文件名或归属时才加载 `campfire-context-bootstrap`。
 
@@ -39,8 +39,8 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 
 ### 0. 任务发现
 
-- 查看当前 Workspace 全部任务时运行 `campfire document list --type task`，不隐式排除 completed、blocked 或其他 lifecycle。
-- 用户明确了 Project、Domain 或 lifecycle 时追加对应筛选；多个筛选条件是 AND 关系。用户语义不明确时先澄清，不把 mtime、文件名或正文措辞解释成业务状态。
+- 查看当前 Workspace 全部任务时运行 `campfire document list --type task`，不隐式排除 completed、blocked 或其他 `task_status`。
+- 用户明确了 Project、Domain 或 `task_status` 时追加对应筛选；多个筛选条件是 AND 关系。用户语义不明确时先澄清，不把 mtime、文件名或正文措辞解释成业务状态。
 - CLI 会在查询前自动 reconcile 本地索引，不先跑 `maintenance check/sync`。需要阅读详情时只读取返回路径对应的正文；需要判断单篇任务的上下游时使用 `document inspect --path <path>`。
 - `document list` 不做正文关键词或模糊检索。无法用结构化字段表达的内容检索暂时使用 Agent 自带文件搜索，并以 Markdown 正文为准。
 
@@ -54,19 +54,19 @@ document apply 取契约并写入 → 只执行返回的 follow_up → 回报路
 ### 2. 无项目任务归属
 
 - 无项目任务统一落 `mywork/【工作日志】文档中心/任务/`（个人事务域；该子目录不存在时随首次任务创建，并遵循 `campfire-workspace-maintenance` 的领域检查）。
-- frontmatter 的 `project` 字段留空，`domain` 填实际所在领域；不虚构项目归属，不把跨项目事务挂到某一个项目下。
+- 不虚构项目归属；确有明确关联时填写 `related_project`，否则保持为空。
 
 ### 3. 契约获取与写入
 
 1. 只提交任务标题和 `--type task`；CLI 从 type 推导最终文件名，Agent 不手写前缀映射。
 2. 有项目任务落各自文档中心的任务子目录；已有 `任务/` 惯例的项目沿用，无先例时在文档中心根下创建并沿用同规则。
-3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 根据有效 Profile 确定字段类型、枚举和顺序；列表使用严格 JSON 数组。Skill 不硬编码这些可演进契约。
+3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 根据有效 Profile 确定字段类型、枚举和顺序；位于 Project Domain 时自动写入 `related_project`。列表使用严格 JSON 数组。Skill 不硬编码这些可演进契约。
 4. CLI 返回 `needs-input` 时，根据其一次性列出的必填字段与允许值补齐事实，不猜测。
 
 ### 4. 状态流转
 
 - 更新任务：Frontmatter 契约已知时直接使用 `document apply --set`；字段类型或合法值未知时先对该文档执行一次 `document inspect`，再 apply，不从 `tree` 或逐层 help 开始。进展记录使用 `document apply --append-section`；只修正文的小范围改动可使用 edit。
-- 完成或取消任务时，以 CLI 返回的当前 Task Profile 为准补齐状态、结果与验证信息，不在 Skill 中复制枚举。
+- 完成或取消任务时，只更新 `task_status`；结果、阻塞说明和进展记录写入正文，不固化为任务字段。字段类型或合法值以 CLI 当前 Profile 为准。
 - 用户口头报进度时主动提议同步对应任务文档；一次汇报合并提议，不逐条打断。
 
 ### 5. 验证闭环

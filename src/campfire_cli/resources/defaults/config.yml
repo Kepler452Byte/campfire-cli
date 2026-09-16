@@ -66,16 +66,6 @@ document_types:
   - CLAUDE.md
   - AGENTS.md
   - COMMAND.md
-  profiles:
-    project-docs:
-    - moc
-    - product-spec
-    - tech-spec
-    - decision
-    - plan
-    - issue
-    - record
-    - board
   types:
     moc:
       prefix: MOC-
@@ -141,6 +131,16 @@ frontmatter_schema:
       template: base
     profile_by_governance:
       project-docs: project-doc
+    governance_types:
+      project-docs:
+      - moc
+      - product-spec
+      - tech-spec
+      - decision
+      - plan
+      - issue
+      - record
+      - board
   profiles:
     base:
       unknown_fields: preserve
@@ -148,7 +148,7 @@ frontmatter_schema:
       - name
       - description
       - type
-      - status
+      - document_status
       - created
       - updated
       - tags
@@ -156,13 +156,13 @@ frontmatter_schema:
       - name
       - description
       - type
-      - status
+      - document_status
       - created
       - updated
       - tags
       optional: []
       enums:
-        status:
+        document_status:
         - draft
         - current
         - archived
@@ -170,7 +170,7 @@ frontmatter_schema:
         name: string
         description: string
         type: string
-        status: string
+        document_status: string
       lists:
       - tags
       dates:
@@ -182,7 +182,7 @@ frontmatter_schema:
       - name
       - description
       - type
-      - status
+      - document_status
       - sources
       - related
       - created
@@ -203,7 +203,7 @@ frontmatter_schema:
       - type
       - project
       - domain
-      - status
+      - document_status
       - lifecycle
       - related
       - superseded_by
@@ -246,85 +246,65 @@ frontmatter_schema:
       - name
       - description
       - type
-      - task_id
-      - project
-      - status
-      - lifecycle
+      - document_status
+      - task_status
       - priority
-      - assignee
-      - task_source
-      - requested_by
-      - requires_human
-      - due
-      - completed
-      - blocked_reason
-      - result_summary
-      - verification
-      - related
+      - related_project
       - created
       - updated
       - tags
       required:
-      - task_id
-      - project
-      - lifecycle
-      - task_source
-      - assignee
-      - requires_human
+      - task_status
       optional:
       - priority
-      - requested_by
-      - due
-      - completed
-      - blocked_reason
-      - result_summary
-      - verification
-      - related
+      - related_project
       enums:
-        lifecycle:
+        task_status:
         - todo
         - in-progress
         - blocked
-        - review
         - completed
         - cancelled
-        - archived
-        task_source:
-        - personal
-        - assigned
         priority:
         - urgent
         - high
         - medium
         - low
       value_types:
-        task_id: string
-        project: string
-        lifecycle: string
+        task_status: string
         priority: string
-        task_source: string
-        requested_by: string
-        requires_human: boolean
-        blocked_reason: string
-        result_summary: string
-      lists:
-      - assignee
-      - verification
-      - related
-      dates:
-      - due
-      - completed
-      conditional_required:
-      - when:
-          lifecycle: blocked
-        require:
-        - blocked_reason
-      - when:
-          lifecycle: completed
-        require:
-        - completed
-        - result_summary
-        - verification
+        related_project: string
+      lists: []
+      dates: []
+moc:
+  project_groups:
+  - label: 任务
+    types:
+    - task
+  - label: 索引
+    types:
+    - moc
+  - label: 产品
+    types:
+    - product-spec
+  - label: 技术
+    types:
+    - tech-spec
+  - label: 决策
+    types:
+    - decision
+  - label: 计划
+    types:
+    - plan
+  - label: 问题
+    types:
+    - issue
+  - label: 记录
+    types:
+    - record
+  - label: 看板
+    types:
+    - board
 project:
   version: 1
   statuses:
@@ -376,13 +356,7 @@ issues:
     - 将叙述信息移入正文，或确认文档类型和领域归属是否正确。
     frontmatter-enum-invalid:
     - Frontmatter 使用了契约之外的枚举值。
-    - '使用 issue 的 allowed 值；任务完成语义应写入 lifecycle: completed。'
-    task-blocked-reason-missing:
-    - 阻塞任务缺少阻塞原因。
-    - 填写 blocked_reason，或将 lifecycle 修正为实际状态。
-    task-completion-evidence-missing:
-    - 完成任务缺少结果或验证证据。
-    - 补齐 completed、result_summary 和 verification 后再标记完成。
+    - 使用 issue 的 allowed 值；任务进度写入 task_status，文档状态写入 document_status。
     document-archive-state-mismatch:
     - 文档状态、生命周期和 archive 路径不一致。
     - 使用两阶段归档流程统一修复，不要只修改其中一个字段。
@@ -468,8 +442,8 @@ bases:
   managed_bases:
   - 项目文档.base
   - 待归档文档.base
-  - 任务工作台.base
-  - Agent执行工作台.base
+  - 任务工作台-项目.base
+  - 任务工作台-个人.base
   - 决策工作台.base
   unknown_base_policy: ignore
   orphaned_base_policy: report

@@ -558,7 +558,7 @@ class DomainService:
                 f"description: {json.dumps(domain.name + '领域导航入口。', ensure_ascii=False)}\n",
                 "type: moc\n",
                 project_identity,
-                "status: current\n",
+                "document_status: current\n",
                 project_lifecycle,
                 f"created: {today}\nupdated: {today}\n",
                 "tags: []\n---\n\n",

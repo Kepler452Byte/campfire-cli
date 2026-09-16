@@ -60,8 +60,9 @@ class DocumentIndexRecord(BaseModel):
     document_type: str | None = None
     domain_id: str | None = None
     project_id: str | None = None
-    status: str | None = None
+    document_status: str | None = None
     lifecycle: str | None = None
+    task_status: str | None = None
     priority: str | None = None
     assignee: list[str] = Field(default_factory=list)
     due: str | None = None
@@ -115,8 +116,9 @@ class DocumentListItem(BaseModel):
     type: str | None = None
     project: str | None = None
     domain: str | None = None
-    status: str | None = None
+    document_status: str | None = None
     lifecycle: str | None = None
+    task_status: str | None = None
     priority: str | None = None
     assignee: list[str] = Field(default_factory=list)
     due: str | None = None

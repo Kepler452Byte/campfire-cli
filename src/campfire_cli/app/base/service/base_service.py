@@ -29,7 +29,9 @@ class BaseService:
                 status="not-found", issues=[{"code": "base-missing", "path": str(path)}]
             )
         return BaseResult(
-            status="ok", bases=[self._info(path, root)], content=self._repository.read(path)
+            status="ok",
+            bases=[self._info(path, root)],
+            content=self._render(path) if source == "ssot" else self._repository.read(path),
         )
 
     def check(self) -> BaseResult:
@@ -58,7 +60,7 @@ class BaseService:
             if not source.is_file():
                 continue
             target = self._target_root() / name
-            content = self._repository.read(source)
+            content = self._render(source)
             current = self._repository.read(target) if target.is_file() else None
             if current is not None and self._same_definition(current, content):
                 continue
@@ -105,7 +107,7 @@ class BaseService:
         target = self._target_root() / path.name
         status = "missing-or-stale"
         if target.is_file() and self._same_definition(
-            self._repository.read(target), self._repository.read(path)
+            self._repository.read(target), self._render(path)
         ):
             status = "current"
         return BaseInfo(
@@ -120,6 +122,9 @@ class BaseService:
 
     def _managed_names(self) -> list[str]:
         return list(config_section("bases").get("managed_bases", []))
+
+    def _render(self, source: Path) -> str:
+        return self._repository.read(source)
 
     @staticmethod
     def _same_definition(left: str, right: str) -> bool:

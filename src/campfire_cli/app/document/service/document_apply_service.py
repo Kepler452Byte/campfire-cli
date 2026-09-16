@@ -145,9 +145,23 @@ class DocumentApplyService:
                 raise GovernanceBlockedError(
                     f"--set {key} 与目标 Domain 上下文不一致；请使用专用重构命令"
                 )
+        if document_type == "task" and context.project_id:
+            if (
+                "related_project" in values
+                and values["related_project"] != context.project_id
+            ):
+                raise GovernanceBlockedError(
+                    "--set related_project 与目标 Project Domain 不一致；"
+                    "请移动到对应项目领域或使用无项目任务领域"
+                )
+            values["related_project"] = context.project_id
         frontmatter.update(values)
         frontmatter["type"] = document_type
         frontmatter["updated"] = today
+        task_project_linked = (
+            document_type == "task"
+            and parsed.frontmatter.get("related_project") != frontmatter.get("related_project")
+        )
 
         next_body = self._next_body(request, parsed.body, exists)
         if exists and parsed.has_frontmatter:
@@ -225,7 +239,12 @@ class DocumentApplyService:
                 "write_performed": True,
                 "updated_references": updated_references,
                 "follow_up": self._follow_up(
-                    request, exists, parsed.has_frontmatter, context, changes_type
+                    request,
+                    exists,
+                    parsed.has_frontmatter,
+                    context,
+                    changes_type,
+                    task_project_linked,
                 ),
             }
         )
@@ -240,7 +259,7 @@ class DocumentApplyService:
         values: dict[str, Any] = {
             "name": path.stem[len(prefix) :] if path.stem.startswith(prefix) else path.stem,
             "type": document_type,
-            "status": "current" if document_type == "task" else "draft",
+            "document_status": "current" if document_type == "task" else "draft",
             "created": today,
             "updated": today,
             "tags": [],
@@ -320,12 +339,24 @@ class DocumentApplyService:
         had_frontmatter: bool,
         context: DomainContext,
         changes_type: bool,
+        task_project_linked: bool,
     ) -> list[CommandFollowUp]:
-        derived_fields = {"name", "type", "status", "lifecycle", "domain", "project", "related"}
+        derived_fields = {
+            "name",
+            "type",
+            "document_status",
+            "lifecycle",
+            "task_status",
+            "domain",
+            "project",
+            "related",
+            "related_project",
+        }
         needs_sync = not exists or not had_frontmatter
         needs_sync = needs_sync or bool(set(request.values) & derived_fields)
         needs_sync = needs_sync or request.body is not None
         needs_sync = needs_sync or changes_type
+        needs_sync = needs_sync or task_project_linked
         return (
             maintenance_sync_follow_up(
                 self._settings.workspace_id,

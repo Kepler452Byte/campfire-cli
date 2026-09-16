@@ -72,16 +72,20 @@ def list_documents(
     project: str | None = typer.Option(None, "--project", help="精确 Project id"),
     domain: str | None = typer.Option(None, "--domain", help="精确 Domain id"),
     document_type: str | None = typer.Option(None, "--type", help="精确文档类型"),
-    lifecycle: str | None = typer.Option(None, "--lifecycle"),
+    document_status: str | None = typer.Option(None, "--document-status"),
+    lifecycle: str | None = typer.Option(None, "--lifecycle", help="项目文档生命周期"),
+    task_status: str | None = typer.Option(None, "--task-status"),
     limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
-    """按 Project、Domain、类型和生命周期列出受管内容文档。"""
+    """按 Project、Domain、类型与状态列出受管内容文档。"""
     invoke(
         lambda: service(ctx).list(
             project=project,
             domain=domain,
             document_type=document_type,
+            document_status=document_status,
             lifecycle=lifecycle,
+            task_status=task_status,
             limit=limit,
         )
     )
