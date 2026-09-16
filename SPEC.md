@@ -34,6 +34,7 @@ SQLite / Filesystem Implementation
 - 命令不得读取“最近一次操作”等隐式 Session 状态推导对象或作用域；跨命令后续动作只使用当前结果显式返回的结构化 `follow_up`。
 - 所有写入默认预检，语义计划默认未审批。
 - 写入用例必须在治理锁内复核生成计划时的内容哈希，发现外部变化时拒绝覆盖。
+- Domain 在 `_模板/` 中持有基础 Profile 的 `template` 文档；同名模板仅按目标 Domain 到祖先 Domain 的最近路径选择，不保存继承状态或合并模板。
 
 代码风格参考 `templates/fastapi-template`，但不引入 HTTP、WebSocket、认证和异步数据库等无关能力。
 
@@ -84,6 +85,7 @@ Campfire 使用语义化版本：
 - 删除或重命名公共命令、改变不可兼容的数据格式时增加主版本；`0.x` 阶段仍应显式记录破坏性变化。
 - 配置文件的 `version` 独立于 Python 包版本；只有配置结构或解释语义变化时递增。
 - PyPI、源码标签、构建产物和 CLI 报告的版本必须一致。
+- 发布标签必须先通过三平台测试、构建与 wheel 隔离安装；Release workflow 不得在质量门禁失败时发布。
 
 ## 设备边界
 

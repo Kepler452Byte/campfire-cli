@@ -14,7 +14,8 @@ HINT_BODY = """## Campfire 文档治理
 当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时：
 
 1. 用户已给出唯一存在路径，且只读取或小范围修改人工正文时，
-   直接使用文件工具；不加载 bootstrap，不调用 Campfire CLI。
+   先读取文档开头和最近 `_领域.md` 的人工规则，再直接使用文件工具；
+   不加载 bootstrap，不调用 Campfire CLI。
 2. 新建、Frontmatter、文件名、归属、移动、归档、派生维护或结构治理
    需要 Workspace、Project、Domain 或 Profile 上下文；当前 Session
    首次进入这类治理流程时加载 `campfire-context-bootstrap`。
@@ -33,10 +34,15 @@ HINT_BODY = """## Campfire 文档治理
 7. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
    不为通过检查而猜测。
+8. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
+   `_模板/模板-<用途>.md`，使用找到的第一份；不合并模板，不修改模板源文档。
+   模板不存在时使用对应 Skill 的最小结构，不自行发明复杂格式。
 
 `.campfire.yaml`、声明 Frontmatter、自动生成区域、Base、关系页和 SQLite
 是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；缺少
 对应命令时停止并报告能力缺口，不直接编辑。声明文件标记外正文不受此限制。
+`_空间.md` 与 `_领域.md` 的人工正文维护局部业务规则；通用结构事实和索引
+由 CLI 生成，不手工重复维护。
 
 不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
 字段、枚举和顺序以 Campfire Profile 为唯一事实来源。

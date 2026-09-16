@@ -86,6 +86,8 @@ campfire document type list                      # 文档类型与前缀
 campfire decision create / list / answer / close # 持久决策通道
 ```
 
+Domain 可在 `_模板/` 中维护基础属性的 `template` 文档。Agent 创建结构化文档时按当前 Domain 到祖先 Domain 的顺序使用最近同名模板；模板只提供正文骨架，不替代目标文档 Profile。
+
 结构治理命令默认只输出计划，追加 `--confirm` 才执行：
 
 ```bash

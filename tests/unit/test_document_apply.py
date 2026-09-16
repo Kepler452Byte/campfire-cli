@@ -87,6 +87,52 @@ def test_apply_derives_create_filename_from_type(workspace: Path) -> None:
     assert [item.scope for item in result.follow_up] == ["mywork/【Example】文档中心"]
 
 
+def test_apply_creates_base_profile_template_in_domain_template_directory(
+    workspace: Path,
+) -> None:
+    domain = project_domain(workspace)
+    relative = "mywork/【Example】文档中心/_模板/版本发布清单.md"
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path=relative,
+            document_type="template",
+            values={"description": "版本发布清单模板"},
+            body="# 版本发布清单\n",
+            confirm=True,
+        )
+    )
+
+    target = domain / "_模板" / "模板-版本发布清单.md"
+    parsed = parse_document(target.read_text(encoding="utf-8"))
+    assert result.status == "applied"
+    assert result.profile == "base"
+    assert set(parsed.frontmatter) == {
+        "name",
+        "description",
+        "type",
+        "status",
+        "created",
+        "updated",
+        "tags",
+    }
+
+
+def test_apply_rejects_template_outside_domain_template_directory(workspace: Path) -> None:
+    project_domain(workspace)
+
+    result = service(workspace).apply(
+        DocumentApplyRequest(
+            path="mywork/【Example】文档中心/发布清单.md",
+            document_type="template",
+            values={"description": "版本发布清单模板"},
+        )
+    )
+
+    assert result.status == "blocked"
+    assert {issue["code"] for issue in result.issues} == {"template-directory-required"}
+
+
 def test_apply_normalizes_missing_markdown_extension_and_type_prefix(
     workspace: Path,
 ) -> None:

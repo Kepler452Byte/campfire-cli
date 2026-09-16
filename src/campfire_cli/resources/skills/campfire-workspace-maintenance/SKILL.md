@@ -34,6 +34,8 @@ campfire workspace rebuild --confirm
 6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页并校正本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
 7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，调用 `campfire decision create`；获得回答后调用 `decision answer`，答案被原任务消费后调用 `decision close`。
 
+Domain 可在 `_模板/` 中持有 `template` 类型文档。创建结构化文档时从目标 Domain 向父 Domain 查找同名模板并使用最近的一份；不合并模板，也不持久化继承结果。模板只使用 base Profile，创建和 Frontmatter 更新仍走 `document apply`。Maintenance 只在 Domain MOC 中列出当前 Domain 实际持有的模板。
+
 ## 路由
 
 ```text
@@ -76,6 +78,7 @@ Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校�
 - 整个 Workspace 只有一个根 `_收件箱/`；语义无法唯一判断时进入待用户确认，不为追求检查通过而猜测。
 - `_空间.md` 声明 Space，`_领域.md` 声明可多级嵌套的 Domain；保留目录不是 Space 或 Domain。
 - `.campfire.yaml`、声明 Frontmatter、`AUTO-GENERATED` 标记区域、Base、关系页和 SQLite 可读但不可由 Agent 直接写入；必须使用对应 Campfire 语义命令。`_空间.md` 和 `_领域.md` 标记外的 Markdown 正文可由人或 Agent 自由编辑。
+- `_空间.md` 与 `_领域.md` 标记外正文维护当前作用域的特殊规则；可从结构和索引确定的通用事实由 CLI 生成，不在正文重复维护。
 - 自动生成内容必须位于成对、唯一且闭合的 `AUTO-GENERATED` 标记内；CLI 只替换标记内部，标记异常时停止，不猜测边界。
 - Project 单向绑定稳定根 Domain id；Domain 移动不改变绑定，子 Domain 通过祖先拓扑继承 Project。
 - 一篇文档只有一个主物理 Domain，可以出现在多个自动索引中。

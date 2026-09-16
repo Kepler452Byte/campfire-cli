@@ -107,6 +107,8 @@ campfire --workspace personal maintenance sync --scope "mywork/【某项目】�
 
 预检通过后，知识、项目事实、方案、决策、问题、记录和任务统一交给 `campfire-workspace-maintenance` 选择 Space、Domain 与文档类型。创建文档、补齐无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，统一调用一次 `campfire document apply`；它会解析目标 Domain、继承 Project、从 type 推导文件名，并在完整 Profile 校验通过后原子写入。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type 与文件名前缀。
 
+创建结构化文档时，根据用户意图确定简短模板名，从目标 Domain 开始沿父 Domain 查找 `_模板/模板-<名称>.md`，使用第一份匹配模板。模板只提供正文骨架：目标 Frontmatter 仍由实际文档类型的 Profile 生成；删除不适用章节，不虚构内容，不修改模板源文件。同级存在歧义时询问用户，找不到时使用当前垂直 Skill 的最小结构。模板只能在用户明确要求或确认后创建、修改、移动或删除。
+
 单篇文档在已声明 Domain 之间改名或移动使用一次 `document move`；Domain 合并或逻辑空删除加载 `campfire-workspace-restructure` 并使用 `domain merge/delete`，批量文档迁移或领域拆分才使用持久 restructure 批次。CLI 写入完成后只执行结果中实际返回的 `follow_up`，当前只可能是一个最小 scope 的 `maintenance sync`；没有 follow-up 就结束，不自行追加 dry-run、check 或全 Workspace 扫描。本 Skill 不复制文档 Profile、生命周期、字段枚举或结构重构步骤。
 
 ## Pending Decision

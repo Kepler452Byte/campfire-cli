@@ -99,9 +99,16 @@ class DocumentApplyService:
 
         today = date.today().isoformat()
         frontmatter = dict(parsed.frontmatter)
+        profile = None
         if not exists or not parsed.has_frontmatter:
-            frontmatter.update(self._creation_defaults(target, context, document_type, today))
-        profile = self._profiles.resolve(document_type, frontmatter, target)
+            defaults = self._creation_defaults(target, document_type, today)
+            profile = self._profiles.resolve(document_type, defaults, target)
+            if "domain" in profile.allowed:
+                defaults["domain"] = context.domain_id
+            if context.project_id and "project" in profile.allowed:
+                defaults["project"] = context.project_id
+            frontmatter.update(defaults)
+        profile = profile or self._profiles.resolve(document_type, frontmatter, target)
         actual_hash = file_sha256(source) if exists else "missing"
         unknown = sorted(set(request.values) - set(profile.allowed))
         if unknown:
@@ -226,7 +233,6 @@ class DocumentApplyService:
     def _creation_defaults(
         self,
         path: Path,
-        context: DomainContext,
         document_type: str,
         today: str,
     ) -> dict[str, Any]:
@@ -239,9 +245,6 @@ class DocumentApplyService:
             "updated": today,
             "tags": [],
         }
-        values["domain"] = context.domain_id
-        if context.project_id:
-            values["project"] = context.project_id
         return values
 
     @staticmethod

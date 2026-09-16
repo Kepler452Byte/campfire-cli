@@ -45,6 +45,7 @@ document/
 - `list`：按 Project、Domain、类型和生命周期对索引做精确 AND 筛选；返回全部生命周期，不读取或复制正文。
 - `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile、具体问题，以及 declared、outgoing、incoming、unresolved 四类确定关系。
 - `apply`：根据目标路径和类型解析 Profile，不存在时生成文档，已有 Frontmatter 时只应用显式补丁，无 Frontmatter 时保留正文并补齐完整契约；先完整渲染并校验，追加 `--confirm` 后原子写入。
+- `template`：只继承 base Profile，必须位于所属 Domain 的 `_模板/`；Domain 归属由物理路径解析，不在 Frontmatter 复制模板作用域或继承关系。
 - `move`：在任意已声明 Domain 之间移动或改名一篇文档，按目标 Profile 对齐可确定的 `domain`/`project` 归属，并更新可确定解析的 Wiki、Markdown 和路径引用。目标 Profile 缺少业务字段时返回 `needs-input`，不猜测。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。
 

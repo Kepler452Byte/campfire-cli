@@ -26,6 +26,7 @@ workspace:
   - archive
   - generated
   - _总览
+  - _模板
   - 记录
   - 任务
   - a_skill
@@ -48,6 +49,7 @@ governance:
   - 记录
   - archive
   - _总览
+  - _模板
   - a_skill
 document_types:
   version: 2
@@ -105,6 +107,9 @@ document_types:
     board:
       prefix: 看板-
       label: 看板
+    template:
+      prefix: 模板-
+      label: 模板
     requirement-doc:
       prefix: 需求-
       label: 需求
@@ -133,6 +138,7 @@ frontmatter_schema:
     profile_by_type:
       knowledge: knowledge
       task: task
+      template: base
     profile_by_governance:
       project-docs: project-doc
   profiles:

@@ -18,6 +18,7 @@ SPEC:
 
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -126,6 +127,26 @@ def direct_notes(domain: Domain, marker_name: str) -> list[Path]:
     )
 
 
+def direct_templates(domain: Domain) -> list[Path]:
+    """Return templates physically owned by this Domain."""
+    directory = domain.path / "_模板"
+    if not directory.is_dir():
+        return []
+    return sorted(directory.glob("模板-*.md"), key=lambda path: path.name.casefold())
+
+
+def template_link(domain: Domain, template: Path) -> str:
+    moc_directory = (domain.path / f"{domain.moc}.md").parent
+    return Path(os.path.relpath(template.with_suffix(""), moc_directory)).as_posix()
+
+
+def append_template_section(lines: list[str], domain: Domain, templates: list[Path]) -> None:
+    if not templates:
+        return
+    lines.extend(["", "## 文档模板", ""])
+    lines.extend(f"- [[{template_link(domain, item)}|{item.stem}]]" for item in templates)
+
+
 def generate_relations(
     notes: list[Path],
     domain_by_note: dict[Path, str],
@@ -232,7 +253,11 @@ def write_if_changed(
 
 
 def generate_domain_content(
-    domain: Domain, domains: list[Domain], notes: list[Path], relation_page: Path | None
+    domain: Domain,
+    domains: list[Domain],
+    notes: list[Path],
+    templates: list[Path],
+    relation_page: Path | None,
 ) -> str:
     children = sorted(
         [item for item in domains if item.parent_domain == domain.id],
@@ -245,6 +270,7 @@ def generate_domain_content(
     lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
     lines.extend(["", "## 本领域文档", ""])
     lines.extend([f"- [[{note.stem}]]" for note in notes] or ["- 暂无"])
+    append_template_section(lines, domain, templates)
     lines.extend(["", "## 自动关系", ""])
     lines.append(f"- [[{relation_page.stem}|相关文档计算结果]]" if relation_page else "- 暂无")
     return "\n".join(lines)
@@ -254,6 +280,7 @@ def generate_project_domain_content(
     domain: Domain,
     domains: list[Domain],
     notes: list[Path],
+    templates: list[Path],
     marker_name: str,
     project_doc_types: dict[str, dict[str, str]] | None = None,
 ) -> str:
@@ -316,6 +343,8 @@ def generate_project_domain_content(
                 rel = archived_note.relative_to(domain.path).with_suffix("")
                 lines.append(f"- [[{rel}|{archived_note.stem}]]：`{reason}`{suffix}")
             lines.append("")
+    append_template_section(lines, domain, templates)
+    lines.append("")
     return "\n".join(lines).rstrip()
 
 

@@ -349,6 +349,11 @@ class DocumentRuleService:
         issues: list[dict[str, Any]] = []
         status = frontmatter.get("status")
         lifecycle = frontmatter.get("lifecycle")
+        in_template_directory = "_模板" in path.parts
+        if document_type == "template" and path.parent.name != "_模板":
+            issues.append({"code": "template-directory-required", "path": relative})
+        elif in_template_directory and document_type != "template":
+            issues.append({"code": "template-directory-type-mismatch", "path": relative})
         in_archive = "archive" in path.parts
         if in_archive != (status == "archived" and lifecycle == "archived") and (
             in_archive or status == "archived" or lifecycle == "archived"

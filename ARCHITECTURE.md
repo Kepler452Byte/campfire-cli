@@ -82,6 +82,8 @@ Document App 同时拥有设备本地的文档查询投影。Indexer 从 Markdow
 
 Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`knowledge`、`project-doc`、`task` 只允许一层继承。Profile Loader 将配置编译为完整 EffectiveProfile，Resolver 根据文档类型和领域上下文选择 Profile，Validator 与 Formatter 共同消费该结果。字段规则不使用每种文档一个 Python 子类，也不在 Skill 中复制。
 
+`template` 直接使用 base Profile，物理存放在 Domain 的 `_模板/`。模板作用域由 Domain 拓扑和路径确定；Skill 从目标 Domain 向祖先查找同名模板并使用最近的一份，系统不建立模板注册表或继承状态。
+
 ### CLI 设计理念：治理原语 + Skill SOP
 
 Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合成熟 CLI 经验形成的独立设计。它在资源心智模型、`apply` 语义和机器可读接口上借鉴 kubectl，在“计划—审查—执行”上借鉴 Terraform，在稳定原语与上层工作流分离上借鉴 Git/Unix；Markdown SSOT、Agent 语义判断和显式 Maintenance 则是 Campfire 自身边界。

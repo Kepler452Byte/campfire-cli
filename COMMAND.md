@@ -51,6 +51,8 @@ Space、Domain、Project 的 `create`/`adopt`，以及文档移动、重构、�
 
 `document apply` 可新建、更新、为已有正文补齐 Frontmatter，或通过显式 `--type` 原子转换文档类型。创建或唯一更新时可省略 `.md`；创建和类型转换时还可省略类型前缀。CLI 在 `normalization` 中返回每项标准化，并在 `target` 中返回最终路径；调用方不手工同步类型、前缀与 Markdown 后缀。`document move` 可在任意已声明 Domain 之间移动单篇文档并对齐可确定的 `domain`/`project`。目标 Profile 缺少语义字段时返回 `missing_fields`，调用方补齐明确业务值。只有实际写入成功的结果才可返回零或一个、且可直接执行的 scoped `maintenance sync` follow-up；Domain 内部路径会归一化为对应 Domain，预览、阻塞或无派生影响时返回空列表。具体参数以对应命令的 `-h` 为准。
 
+`template` 使用 base Profile，必须位于 Domain 的 `_模板/`。模板查找与应用由 Skill 按最近 Domain 规则完成，不新增模板专用命令。
+
 `--set` 的值类型由有效 Profile 决定，不使用 YAML 隐式类型推断。enum、string 和 date 保留原始字符串，boolean 只接受 `true` 或 `false`，list 只接受严格 JSON 数组。标量可写为 `--set lifecycle=completed`，列表在 Shell 中使用单引号保护，例如 `--set 'tags=["tag1","tag2"]'`。CLI 不把 `tag1,tag2` 猜成列表；格式错误时通过稳定错误码、期望类型和参数示例说明修复方式。字段与枚举不在本命令清单重复登记。
 
 `document list` 是 SQLite 查询投影上的精确集合枚举，多个筛选条件使用 AND 语义，`--type task` 不隐式排除任何 lifecycle。`document inspect` 在原有 Profile 和问题上下文之外返回 declared、outgoing、incoming 与 unresolved 确定关系。两条读取命令查询前自动 reconcile；Agent 取得路径后用文件工具读取正文，不需要先跑 Maintenance。未来正文关键词、模糊匹配和相关性排序使用独立 `document search`，不改变 list/inspect 的确定语义。

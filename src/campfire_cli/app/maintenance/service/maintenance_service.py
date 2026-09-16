@@ -212,6 +212,9 @@ class MaintenanceService:
         notes_by_domain = {
             domain.id: governance_sync.direct_notes(domain, marker_name) for domain in domains
         }
+        templates_by_domain = {
+            domain.id: governance_sync.direct_templates(domain) for domain in domains
+        }
         project_domain_ids = {
             domain.id for domain in domains if domain.governance == "project-docs"
         }
@@ -239,7 +242,12 @@ class MaintenanceService:
             note_count += len(notes)
             if domain.governance == "project-docs":
                 generated = governance_sync.generate_project_domain_content(
-                    domain, domains, notes, marker_name, type_mapping
+                    domain,
+                    domains,
+                    notes,
+                    templates_by_domain[domain.id],
+                    marker_name,
+                    type_mapping,
                 )
             else:
                 relation_page = None
@@ -256,7 +264,7 @@ class MaintenanceService:
                     if existing != relation_content:
                         changes.append((relation_page, relation_content))
                 generated = governance_sync.generate_domain_content(
-                    domain, domains, notes, relation_page
+                    domain, domains, notes, templates_by_domain[domain.id], relation_page
                 )
             moc = domain.path / f"{domain.moc}.md"
             if not moc.is_file():
