@@ -4,8 +4,9 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolution, selector
+from campfire_cli.app.workspace.cli.workspace_cli import resolution, selector
 from campfire_cli.app.workspace.service.structure_service import DomainService
+from campfire_cli.common.cli_output import emit, invoke
 from campfire_cli.config.settings import campfire_home
 from campfire_cli.container import AppContainer
 

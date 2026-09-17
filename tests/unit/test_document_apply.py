@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from campfire_cli.app.document.repository.document_profile_repository import (
+    DocumentProfileRepository,
+)
 from campfire_cli.app.document.schema import DocumentApplyRequest
+from campfire_cli.app.document.service.document_profile_service import DocumentProfileService
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.documents.markdown import parse_document
@@ -81,6 +85,63 @@ def test_task_dynamic_project_value_is_validated_not_injected(workspace: Path) -
         )
     )
     assert rejected.issues[0]["code"] == "frontmatter-enum-invalid"
+    assert rejected.issues[0]["expected_type"] == "enum"
+    assert rejected.issues[0]["allowed"] == ["example"]
+
+
+def test_profile_candidates_and_defaults_are_consistent(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    container = AppContainer.build("test")
+    document = container.document
+    task = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/task",
+            document_type="task",
+            values={"description": "任务", "task_status": "todo"},
+            confirm=True,
+        )
+    )
+    plan = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/plan",
+            document_type="plan",
+            values={"description": "计划"},
+            confirm=True,
+        )
+    )
+    assert task.status == plan.status == "applied"
+
+    profiles = DocumentProfileService(
+        "test",
+        workspace,
+        container.settings.document_types,
+        DocumentProfileRepository(container.settings.state_root),
+    )
+    shown = profiles.show_profile("task")["profile"]
+    resolved = profiles.resolve("mywork/Example/任务-task.md")["profile"]
+    inspected = document.inspect("mywork/Example/任务-task.md")["profile"]
+    for profile in (shown, resolved, inspected):
+        assert profile["enums"]["related_project"] == ["example"]
+        assert profile["enums"]["task_status"] == [
+            "todo",
+            "in-progress",
+            "blocked",
+            "completed",
+            "cancelled",
+        ]
+    assert shown["defaults"]["document_status"] == "current"
+    assert (
+        parse_document((domain / "任务-task.md").read_text(encoding="utf-8")).frontmatter[
+            "document_status"
+        ]
+        == "current"
+    )
+    assert (
+        parse_document((domain / "计划-plan.md").read_text(encoding="utf-8")).frontmatter[
+            "document_status"
+        ]
+        == "draft"
+    )
 
 
 def test_human_request_is_restricted_to_global_request_root(workspace: Path) -> None:

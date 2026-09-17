@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import invoke
+from campfire_cli.common.cli_output import emit as emit_json
+from campfire_cli.common.cli_output import invoke
 from campfire_cli.common.governance import enrich_issue
 from campfire_cli.container import AppContainer
 
@@ -18,7 +18,7 @@ restructure_cli = typer.Typer(
 def emit(result: object) -> None:
     payload = result.model_dump(mode="json")
     payload["issues"] = [enrich_issue(issue) for issue in payload.get("issues", [])]
-    typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    emit_json(payload)
 
 
 def service(ctx: typer.Context):

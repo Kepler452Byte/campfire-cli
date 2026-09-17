@@ -29,6 +29,13 @@ class WorkspaceResult(BaseModel):
     created_directories: list[str] = Field(default_factory=list)
 
 
+class WorkspaceCreateResult(WorkspaceResult):
+    manifest: str
+    resources: dict[str, Any] = Field(default_factory=dict)
+    health: dict[str, Any] = Field(default_factory=dict)
+    demo: dict[str, Any] | None = None
+
+
 class WorkspaceResolution(BaseModel):
     status: str = "ok"
     workspace_id: str

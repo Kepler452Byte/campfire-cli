@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import typer
 
@@ -15,7 +12,7 @@ from campfire_cli.app.document.service.document_profile_service import (
 )
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.cli_output import emit, invoke
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
@@ -40,27 +37,19 @@ def service(ctx: typer.Context) -> DocumentProfileService:
     )
 
 
-def invoke(operation: Callable[[], dict[str, Any]]) -> None:
-    try:
-        typer.echo(json.dumps(operation(), ensure_ascii=False, indent=2))
-    except AppError as exc:
-        typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
-        raise typer.Exit(exc.exit_code) from exc
-
-
 @profile_cli.command("list")
 def list_profiles(ctx: typer.Context) -> None:
     """列出所有有效 Profile。"""
-    invoke(lambda: service(ctx).list_profiles())
+    emit(invoke(lambda: service(ctx).list_profiles()))
 
 
 @profile_cli.command("show")
 def show_profile(ctx: typer.Context, name: str) -> None:
     """显示继承合并后的完整 Profile。"""
-    invoke(lambda: service(ctx).show_profile(name))
+    emit(invoke(lambda: service(ctx).show_profile(name)))
 
 
 @profile_cli.command("resolve")
 def resolve(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
     """解析一篇文档最终使用的 Profile。"""
-    invoke(lambda: service(ctx).resolve(path))
+    emit(invoke(lambda: service(ctx).resolve(path)))

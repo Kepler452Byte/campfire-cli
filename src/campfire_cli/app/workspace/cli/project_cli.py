@@ -4,10 +4,11 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolution
+from campfire_cli.app.workspace.cli.workspace_cli import resolution
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectRegistrationRequest
 from campfire_cli.app.workspace.service.project_service import ProjectService
+from campfire_cli.common.cli_output import emit, invoke
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import campfire_home

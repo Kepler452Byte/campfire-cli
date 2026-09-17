@@ -100,6 +100,9 @@ class EffectiveProfile:
                 for field in self.fields
                 if field.kind == "enum"
             },
+            "defaults": {
+                field.name: field.default for field in self.fields if field.default is not None
+            },
             "value_types": dict(self.value_types),
             "lists": list(self.lists),
             "dates": list(self.dates),
@@ -158,18 +161,24 @@ class ProfileRegistry:
         raw_fields = raw.get("fields", {})
         if not isinstance(raw_fields, dict):
             raise ConfigurationError(f"Profile {name}.fields 必须是映射")
-        existing = {field.name for field in fields}
+        positions = {field.name: index for index, field in enumerate(fields)}
         for field_name, declaration in raw_fields.items():
-            fields.append(self._field(name, field_name, declaration, existing))
-            existing.add(field_name)
+            field = self._field(name, field_name, declaration)
+            if field_name in positions:
+                if parent is None:
+                    raise ConfigurationError(f"Profile {name} 字段声明无效：{field_name}")
+                fields[positions[field_name]] = field
+            else:
+                positions[field_name] = len(fields)
+                fields.append(field)
         unknown_fields = raw.get("unknown_fields", parent.unknown_fields if parent else "report")
         if unknown_fields not in {"preserve", "report"}:
             raise ConfigurationError(f"Profile {name} unknown_fields 必须是 preserve 或 report")
         return EffectiveProfile(name, tuple(fields), unknown_fields)
 
     @staticmethod
-    def _field(profile: str, name: str, declaration: Any, existing: set[str]) -> FieldRule:
-        if name in existing or not isinstance(declaration, dict):
+    def _field(profile: str, name: str, declaration: Any) -> FieldRule:
+        if not isinstance(declaration, dict):
             raise ConfigurationError(f"Profile {profile} 字段声明无效：{name}")
         kind = declaration.get("kind", "string")
         if kind not in {"string", "boolean", "date", "list", "enum"}:

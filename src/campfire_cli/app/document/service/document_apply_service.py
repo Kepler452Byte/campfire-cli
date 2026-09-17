@@ -266,7 +266,6 @@ class DocumentApplyService:
         values: dict[str, Any] = {
             "name": path.stem[len(prefix) :] if path.stem.startswith(prefix) else path.stem,
             "type": document_type,
-            "document_status": "current" if document_type == "task" else "draft",
             "created": today,
             "updated": today,
             "tags": [],

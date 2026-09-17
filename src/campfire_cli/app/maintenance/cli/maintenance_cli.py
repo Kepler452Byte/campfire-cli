@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import json
-
 import typer
+
+from campfire_cli.common.cli_output import emit
 
 HELP_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 maintenance_cli = typer.Typer(help="后续增量文档维护", context_settings=HELP_SETTINGS)
-
-
-def emit(result: object) -> None:
-    typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 
 
 @maintenance_cli.command("check")

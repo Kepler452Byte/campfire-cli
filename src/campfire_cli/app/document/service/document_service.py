@@ -43,9 +43,9 @@ class DocumentService:
     ) -> None:
         self._settings = settings
         self._index = index
-        candidates = workspace_candidate_sets(settings.vault_root)
+        self._candidate_sets = workspace_candidate_sets(settings.vault_root)
         self._rules = DocumentRuleService(
-            settings.document_types, settings.frontmatter_schema, candidates
+            settings.document_types, settings.frontmatter_schema, self._candidate_sets
         )
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
         self._project_roots = project_roots
@@ -116,7 +116,7 @@ class DocumentService:
             "domain_id": context.domain_id if context else None,
             "project_id": context.project_id if context else None,
             "type": document_type if isinstance(document_type, str) else None,
-            "profile": profile.model_dump(),
+            "profile": profile.model_dump(self._candidate_sets),
             "index_generation": generation,
             "relations": relations,
             "issues": issues,

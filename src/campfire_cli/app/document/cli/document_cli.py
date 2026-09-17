@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
-from typing import Any
-
 import typer
-from pydantic import BaseModel
 
 from campfire_cli.app.document.cli.profile_cli import profile_cli
 from campfire_cli.app.document.cli.type_cli import type_cli
 from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.document_service import DocumentService
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.cli_output import emit, invoke
+from campfire_cli.common.exceptions import InputError
 
 document_cli = typer.Typer(
     help="创建、检查和维护文档及其规则",
@@ -34,26 +30,16 @@ def service(ctx: typer.Context) -> DocumentService:
     return AppContainer.build(selector).document
 
 
-def invoke(operation: Callable[[], dict[str, Any] | BaseModel]) -> None:
-    try:
-        result = operation()
-        payload = result.model_dump(mode="json") if isinstance(result, BaseModel) else result
-        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
-    except AppError as exc:
-        typer.echo(json.dumps(exc.payload(), ensure_ascii=False))
-        raise typer.Exit(exc.exit_code) from exc
-
-
 @document_cli.command("check")
 def check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
     """检查一篇 Markdown 文档是否符合当前类型与 Profile 契约。"""
-    invoke(lambda: service(ctx).check(path))
+    emit(invoke(lambda: service(ctx).check(path)))
 
 
 @document_cli.command("kanban-check")
 def kanban_check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
     """检查文档是否满足 Obsidian Kanban 插件的渲染契约。"""
-    invoke(lambda: service(ctx).kanban_check(path))
+    emit(invoke(lambda: service(ctx).kanban_check(path)))
 
 
 @document_cli.command("inspect")
@@ -62,7 +48,7 @@ def inspect(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None
 
     示例：campfire document inspect --path "mywork/项目/记录-进展.md"
     """
-    invoke(lambda: service(ctx).inspect(path))
+    emit(invoke(lambda: service(ctx).inspect(path)))
 
 
 @document_cli.command("list")
@@ -76,7 +62,7 @@ def list_documents(
     limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
     """按 Project、Domain、类型与状态列出受管内容文档。"""
-    invoke(
+    emit(invoke(
         lambda: service(ctx).list(
             project=project,
             domain=domain,
@@ -85,7 +71,7 @@ def list_documents(
             task_status=task_status,
             limit=limit,
         )
-    )
+    ))
 
 
 @document_cli.command("format")
@@ -95,20 +81,27 @@ def format_document(
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或执行一篇文档的 Frontmatter 字段排序。"""
-    invoke(lambda: service(ctx).format(path, confirm))
+    emit(invoke(lambda: service(ctx).format(path, confirm)))
 
 
 def parse_values(items: list[str]) -> dict[str, str]:
     values: dict[str, str] = {}
     for item in items:
         if "=" not in item:
-            raise typer.BadParameter(f"--set 必须使用 field=value：{item}")
+            raise InputError(
+                f"--set 必须使用 field=value：{item}",
+                code="invalid-set",
+                option="--set",
+                actual=item,
+            )
         key, raw = item.split("=", 1)
         if not key.strip():
-            raise typer.BadParameter("--set 字段名不能为空")
+            raise InputError("--set 字段名不能为空", code="invalid-set", option="--set")
         key = key.strip()
         if key in values:
-            raise typer.BadParameter(f"--set 字段重复：{key}")
+            raise InputError(
+                f"--set 字段重复：{key}", code="invalid-set", option="--set", field=key
+            )
         values[key] = raw
     return values
 
@@ -134,8 +127,8 @@ def apply_document(
     CLI 在 normalization 中解释变换，并返回最终 target。
     已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。
     """
-    values = parse_values(set_values or [])
-    invoke(
+    values = invoke(lambda: parse_values(set_values or []))
+    emit(invoke(
         lambda: service(ctx).apply(
             DocumentApplyRequest(
                 path=path,
@@ -145,7 +138,7 @@ def apply_document(
                 confirm=confirm,
             )
         )
-    )
+    ))
 
 
 @document_cli.command("move")
@@ -160,8 +153,8 @@ def move_document(
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或移动一篇文档，并按目标 Domain 契约更新归属与引用。"""
-    values = parse_values(set_values or [])
-    invoke(
+    values = invoke(lambda: parse_values(set_values or []))
+    emit(invoke(
         lambda: service(ctx).move(
             source,
             target_domain,
@@ -171,4 +164,4 @@ def move_document(
             expected_hash=expected_hash,
             confirm=confirm,
         )
-    )
+    ))

@@ -4,8 +4,9 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.cli.workspace_cli import emit, invoke, resolution
+from campfire_cli.app.workspace.cli.workspace_cli import resolution
 from campfire_cli.app.workspace.service.structure_service import SpaceService
+from campfire_cli.common.cli_output import emit, invoke
 from campfire_cli.config.settings import campfire_home
 
 space_cli = typer.Typer(

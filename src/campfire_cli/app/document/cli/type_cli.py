@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import typer
 
@@ -13,7 +10,7 @@ from campfire_cli.app.document.repository.document_type_repository import (
 from campfire_cli.app.document.service.document_type_service import DocumentTypeService
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.cli_output import emit, invoke
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import WorkspaceSettings, campfire_home
 
@@ -36,15 +33,7 @@ def service(ctx: typer.Context) -> DocumentTypeService:
     )
 
 
-def invoke(operation: Callable[[], dict[str, Any]]) -> None:
-    try:
-        typer.echo(json.dumps(operation(), ensure_ascii=False, indent=2))
-    except AppError as exc:
-        typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
-        raise typer.Exit(exc.exit_code) from exc
-
-
 @type_cli.command("list")
 def list_types(ctx: typer.Context) -> None:
     """列出当前 Workspace 的单选文档类型和文件名前缀。"""
-    invoke(lambda: service(ctx).list_types())
+    emit(invoke(lambda: service(ctx).list_types()))

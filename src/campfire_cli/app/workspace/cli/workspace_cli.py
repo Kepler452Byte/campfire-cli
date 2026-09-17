@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
 from pathlib import Path
 
 import typer
-from pydantic import BaseModel
 
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
-from campfire_cli.app.workspace.schema.workspace_schema import WorkspaceCreateRequest
+from campfire_cli.app.workspace.schema.workspace_schema import (
+    ProjectRegistrationRequest,
+    WorkspaceCreateRequest,
+    WorkspaceCreateResult,
+)
+from campfire_cli.app.workspace.service.project_service import ProjectService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.cli_output import emit, invoke
+from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.config.settings import campfire_home
+from campfire_cli.container import AppContainer
 
 workspace_cli = typer.Typer(
     help="注册、初始化和解析多个 Workspace",
@@ -33,29 +37,62 @@ def resolution(ctx: typer.Context):
     return service().resolve(selector(ctx), safe_cwd())
 
 
-def emit(result: BaseModel) -> None:
-    typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
-
-
-def invoke[ResultT: BaseModel](operation: Callable[[], ResultT]) -> ResultT:
-    try:
-        return operation()
-    except AppError as exc:
-        typer.echo(json.dumps(exc.payload(), ensure_ascii=False), err=True)
-        raise typer.Exit(exc.exit_code) from exc
-
-
 @workspace_cli.command("create")
 def create(
     workspace_id: str = typer.Option(..., "--id"),
     path: Path = typer.Option(..., "--path"),
     make_default: bool = typer.Option(False, "--default"),
+    demo: str | None = typer.Option(None, "--demo", help="可选演示项目：hello-world"),
 ) -> None:
     """从零创建 Workspace 基础目录，并注册和初始化治理能力。"""
     request = WorkspaceCreateRequest(
         workspace_id=workspace_id, path=path, make_default=make_default
     )
-    emit(invoke(lambda: service().create(request)))
+    demo_request = invoke(lambda: _demo_request(demo, workspace_id))
+    created = invoke(lambda: service().create(request))
+    setup = invoke(lambda: AppContainer.setup(Path(created.workspace), make_default, workspace_id))
+    demo_result = (
+        invoke(
+            lambda: ProjectService(
+                campfire_home(), SqliteWorkspaceRepository(campfire_home())
+            ).create(demo_request, confirm=True)
+        )
+        if demo_request
+        else None
+    )
+    emit(
+        WorkspaceCreateResult(
+            **created.model_dump(),
+            manifest=setup["manifest"],
+            resources=setup["resources"],
+            health=setup["health"],
+            demo=(
+                {
+                    "id": demo,
+                    "project": demo_result.project.model_dump(mode="json"),
+                    "document_domain_path": demo_result.document_domain_path,
+                }
+                if demo_result
+                else None
+            ),
+        )
+    )
+
+
+def _demo_request(demo: str | None, workspace_id: str) -> ProjectRegistrationRequest | None:
+    if demo is None:
+        return None
+    if demo != "hello-world":
+        raise ConfigurationError("--demo 仅支持：hello-world")
+    return ProjectRegistrationRequest(
+        project_id="hello-world",
+        workspace_id=workspace_id,
+        name="Hello World",
+        document_domain_id="project-hello-world",
+        document_domain_path="mywork/【Hello World】文档中心",
+        git_remote_url="https://github.com/octocat/Hello-World.git",
+        default_branch="master",
+    )
 
 
 @workspace_cli.command("list")
@@ -89,16 +126,12 @@ def rebuild(
 ) -> None:
     """从 Manifest 和 Markdown SSOT 重建本机派生索引。"""
     if not confirm:
-        typer.echo(
-            json.dumps(
-                {
-                    "status": "ready",
-                    "operation": "replace-workspace-derived-indexes",
-                    "write_performed": False,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+        emit(
+            {
+                "status": "ready",
+                "operation": "replace-workspace-derived-indexes",
+                "write_performed": False,
+            }
         )
         return
     from campfire_cli.container import AppContainer

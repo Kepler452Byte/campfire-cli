@@ -6,6 +6,7 @@
 
 ```text
 conversation-router → 已知路径的正文小改 → edit
+                    → 首次创建或接入 Workspace → workspace-onboarding
                     → 治理流程 → context-bootstrap
                     → document-capture / task-management
                     → document apply → workspace-maintenance
@@ -20,6 +21,7 @@ conversation-router → 已知路径的正文小改 → edit
 - `document list` 不承担正文关键词、模糊匹配或相关性排序；需要正文内容时由 Agent 按返回路径读取或使用文件搜索。
 - 写入命令保持原子性；Skill 只执行命令实际返回的 scoped `maintenance sync`，诊断或发布验收时再显式 `check`。
 - 已存在的 Workspace、Space、Domain 和 Project 使用稳定 ID 选择；路径只用于新位置、具体文件、外部输入和显式扫描范围。
+- 首次 Workspace 接入由 `workspace-onboarding` 路由；它不接管 Domain、不执行日常治理，也不修复损坏的 Manifest。
 
 ## 新增或修改 Skill checklist
 

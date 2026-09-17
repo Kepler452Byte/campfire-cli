@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -20,6 +19,7 @@ from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
 from campfire_cli.app.workspace.cli.workspace_cli import workspace_cli
+from campfire_cli.common.cli_output import JsonTyperGroup, emit, invoke
 from campfire_cli.common.exceptions import AppError, ConfigurationError
 from campfire_cli.container import AppContainer
 
@@ -52,10 +52,7 @@ class LazyContainer:
             try:
                 self._container = AppContainer.build(self._workspace)
             except AppError as exc:
-                typer.echo(
-                    json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False),
-                    err=True,
-                )
+                emit(exc.payload(), err=True)
                 raise typer.Exit(exc.exit_code) from exc
         return getattr(self._container, name)
 
@@ -64,6 +61,7 @@ app = typer.Typer(
     help="人类与 Agent 共用的 Workspace 文档治理 CLI",
     no_args_is_help=True,
     context_settings=CONTEXT_SETTINGS,
+    cls=JsonTyperGroup,
 )
 workspace_cli.add_typer(project_cli, name="project")
 workspace_cli.add_typer(space_cli, name="space")
@@ -130,18 +128,16 @@ def setup(
     make_default: bool = typer.Option(False, "--default", help="设为默认 Workspace"),
 ) -> None:
     """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
-    try:
+    def operation() -> dict[str, object]:
         if path is None and workspace_id is not None:
-            raise ConfigurationError("--id 只能与 --path 一起使用")
-        result = (
+            raise ConfigurationError("--id 只能与 --path 一起使用", code="invalid-option")
+        return (
             AppContainer.setup_global_resources()
             if path is None
             else AppContainer.setup(path, make_default, workspace_id)
         )
-    except AppError as exc:
-        typer.echo(json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False))
-        raise typer.Exit(exc.exit_code) from exc
-    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+    emit(invoke(operation))
 
 
 @app.command("upgrade")
@@ -151,12 +147,4 @@ def upgrade(
     ),
 ) -> None:
     """一条幂等命令升级 campfire：更新包并对齐治理资源（Skill、Base、提示词、Schema）。"""
-    try:
-        result = AppContainer.upgrade(skip_package=skip_package)
-    except AppError as exc:
-        typer.echo(
-            json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False),
-            err=True,
-        )
-        raise typer.Exit(exc.exit_code) from exc
-    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    emit(invoke(lambda: AppContainer.upgrade(skip_package=skip_package)))

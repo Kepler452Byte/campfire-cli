@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import json
-
 import typer
+
+from campfire_cli.common.cli_output import emit
 
 skill_cli = typer.Typer(
     help="发现、加载、校验和同步 Agent SOP Skill",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-
-
-def emit(result: object) -> None:
-    typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 
 
 @skill_cli.command("list")

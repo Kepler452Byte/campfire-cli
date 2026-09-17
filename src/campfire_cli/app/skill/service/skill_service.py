@@ -29,7 +29,11 @@ class SkillService:
             return SkillResult(
                 status="not-found", issues=[{"code": "skill-missing", "path": str(path)}]
             )
-        info = self._parse_skill(path, root)
+        info = (
+            next(item for item in self._skills() if item.name == name)
+            if source == "ssot"
+            else self._parse_skill(path, root)
+        )
         return SkillResult(status="ok", skills=[info], content=self._repository.read(path))
 
     def resolve(self, path: str) -> SkillResult:

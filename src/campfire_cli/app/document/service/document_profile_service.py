@@ -6,6 +6,7 @@ from typing import Any
 from campfire_cli.app.document.repository.document_profile_repository import (
     DocumentProfileRepository,
 )
+from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
@@ -43,7 +44,7 @@ class DocumentProfileService:
         return {
             "status": "ok",
             "workspace_id": self._workspace_id,
-            "profile": self._profiles().get(name).model_dump(),
+            "profile": self._profiles().get(name).model_dump(self._candidate_sets()),
         }
 
     def resolve(self, relative_path: str) -> dict[str, Any]:
@@ -59,8 +60,11 @@ class DocumentProfileService:
             "workspace_id": self._workspace_id,
             "path": path.relative_to(self._vault_root).as_posix(),
             "type": frontmatter.get("type"),
-            "profile": profile.model_dump(),
+            "profile": profile.model_dump(self._candidate_sets()),
         }
 
     def _profiles(self) -> ProfileRegistry:
         return ProfileRegistry(self._type_config, self._repository.load())
+
+    def _candidate_sets(self) -> dict[str, list[str]]:
+        return workspace_candidate_sets(self._vault_root)

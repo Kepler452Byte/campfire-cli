@@ -15,6 +15,18 @@ workspace:
     name: 工作
     path: mywork
     type: work
+  - id: log
+    name: 日志
+    path: mylog
+    type: log
+  - id: research
+    name: 研究
+    path: myresearch
+    type: research
+  - id: blog
+    name: 创作
+    path: myblog
+    type: content
   reserved_directories:
   - _收件箱
   - _待用户确认
@@ -118,7 +130,7 @@ frontmatter_schema:
         name: {kind: string, required: true}
         description: {kind: string, required: true}
         type: {kind: string, required: true}
-        document_status: {kind: enum, required: true, values: [draft, current, archived]}
+        document_status: {kind: enum, required: true, default: draft, values: [draft, current, archived]}
         created: {kind: date, required: true}
         updated: {kind: date, required: true}
         tags: {kind: list, required: true, items: string}
@@ -126,6 +138,7 @@ frontmatter_schema:
       extends: base
       unknown_fields: report
       fields:
+        document_status: {kind: enum, required: true, default: current, values: [draft, current, archived]}
         task_status: {kind: enum, required: true, values: [todo, in-progress, blocked, completed, cancelled]}
         priority: {kind: enum, required: false, values: [urgent, high, medium, low]}
         related_project: {kind: enum, required: false, values_from: workspace.project_ids}
@@ -265,6 +278,7 @@ skills:
   - "~/.claude/skills"
   - "~/.agents/skills"
   managed_skills:
+  - campfire-workspace-onboarding
   - campfire-workspace-adoption
   - campfire-workspace-maintenance
   - campfire-workspace-restructure

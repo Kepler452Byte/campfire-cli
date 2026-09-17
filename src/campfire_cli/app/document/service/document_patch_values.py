@@ -71,6 +71,9 @@ def enrich_profile_issues(
 
 
 def _expected_type(profile: EffectiveProfile, field: str) -> str:
+    rule = profile.field(field)
+    if rule and rule.kind == "enum":
+        return "enum"
     if field in profile.lists:
         return "list"
     if field in profile.dates:

@@ -13,31 +13,34 @@ HINT_BODY = """## Campfire 文档治理
 本机装有 campfire CLI（`campfire --help`），Obsidian Vault 已注册为文档工作区。
 当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时：
 
-1. 用户已给出唯一存在路径，且只读取或小范围修改人工正文时，
+1. 用户首次要求创建、接入或修复一个文档 Workspace 时，先加载
+   `campfire-workspace-onboarding`。它决定新目录、已有目录、无 Manifest
+   或损坏 Manifest 的安全入口；不要直接创建或编辑 `.campfire.yaml`。
+2. 用户已给出唯一存在路径，且只读取或小范围修改人工正文时，
    先读取文档开头和最近 `_领域.md` 的人工规则，再直接使用文件工具；
    不加载 bootstrap，不调用 Campfire CLI。
-2. 新建、Frontmatter、文件名、归属、移动、归档、派生维护或结构治理
+3. 新建、Frontmatter、文件名、归属、移动、归档、派生维护或结构治理
    需要 Workspace、Project、Domain 或 Profile 上下文；当前 Session
    首次进入这类治理流程时加载 `campfire-context-bootstrap`。
-3. 发现文档集合使用 `campfire document list`，理解单篇文档的确定关系使用
+4. 发现文档集合使用 `campfire document list`，理解单篇文档的确定关系使用
    `campfire document inspect`；两者不要求预先运行 Maintenance。
-4. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
-5. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
+5. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
+6. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
    契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
    `document inspect` 后 apply，不从 `tree` 开始逐层探索。创建或唯一更新时
    `--path` 可省略 `.md` 和类型前缀，由 CLI 返回最终 target。
-6. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
+7. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
    `AUTO-GENERATED` 标记区域只能由 CLI 修改；标记外 Markdown 正文可以直接
    使用文件工具编辑。CLI 写命令完成后只执行结果实际返回的
    `follow_up`；正文编辑会影响关系计算时执行一次局部 `maintenance sync`。
    没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
-7. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
+8. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
    不为通过检查而猜测。
-8. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
+9. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
    `_模板/模板-<用途>.md`，使用找到的第一份；不合并模板，不修改模板源文档。
    模板不存在时使用对应 Skill 的最小结构，不自行发明复杂格式。
-9. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
+10. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
    `--confirm` 只确认 CLI 写入，不代表归档授权。
 
 `.campfire.yaml`、声明 Frontmatter、自动生成区域、Base、关系页和 SQLite
