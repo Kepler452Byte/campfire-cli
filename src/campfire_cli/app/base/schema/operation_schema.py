@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from os import PathLike
 from pathlib import PurePosixPath
 from typing import Literal
 
@@ -13,10 +14,13 @@ class CommandFollowUp(BaseModel):
     scope: str
 
 
-def maintenance_sync_follow_up(workspace: str, scopes: Iterable[str]) -> list[CommandFollowUp]:
+def maintenance_sync_follow_up(
+    workspace: str, scopes: Iterable[str | PathLike[str]]
+) -> list[CommandFollowUp]:
     """Build one sync follow-up at the smallest scope containing all changes."""
 
-    paths = [PurePosixPath(scope.strip("/")) for scope in dict.fromkeys(scopes) if scope]
+    normalized = (str(scope).replace("\\", "/").strip("/") for scope in scopes if scope)
+    paths = [PurePosixPath(scope) for scope in dict.fromkeys(normalized)]
     if not paths:
         return []
     common = list(paths[0].parts)

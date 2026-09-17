@@ -65,6 +65,6 @@ CLI 维护：稳定 `id`、`workspace_id`、显示 `name`、根 Domain 的稳定
 
 向后续流程提供一张紧凑上下文卡：Workspace id 与路径、Space、Project id 与名称、源码路径、项目根 Domain、匹配依据、检查状态和待用户确认项。未匹配到代码项目不阻止处理纯知识文档，但必须明确 Project 为空。
 
-目标文档位于嵌套 Domain 时，不在 Skill 中手工遍历 `parent_domain` 或复制 Project 继承规则；`document apply`、`document move` 和 Domain 检查统一使用 CLI 的上下文解析结果，冲突或断链按结构化 issue 处理。
+目标文档位于嵌套 Domain 时，不在 Skill 中手工遍历 `parent_domain` 或复制 Project 继承规则；`document apply`、`document move`、`document rename` 和 Domain 检查统一使用 CLI 的上下文解析结果，冲突或断链按结构化 issue 处理。
 
 本 Skill 不创建知识、项目或任务文档，不执行代码任务，也不分派、恢复或跟踪 Agent Session。

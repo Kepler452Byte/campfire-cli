@@ -29,7 +29,7 @@ campfire workspace rebuild --confirm
 
 声明 Frontmatter 顺序分别使用 `workspace space format --space <id>` 和 `workspace domain format --domain <id>`；两者默认预览，追加 `--confirm` 后只调整 Frontmatter，Markdown 正文逐字节保留。
 3. 创建正式文档、接管无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，使用一次 `campfire document apply`。创建或唯一更新时 `--path` 可省略 `.md` 和类型前缀；CLI 根据目标 Domain 与 type 返回最终 target，并一次返回所有缺失字段。契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type、文件名前缀或 Markdown 后缀。格式顺序单独使用 `document format`。
-4. 单篇文档改名或跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`；批量文档迁移使用 `workspace restructure`。不要让 Agent 拼目标目录，不要为单篇修改创建批次计划。
+4. 单篇文档只改标题时使用 `document rename --path <source> --name <标题>`；跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id>`。前者保留原目录并同步标题、文件名和引用；后者由 CLI 推导目标路径。批量文档迁移使用 `workspace restructure`。
 5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
 6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页并校正本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
 7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，在 `_待用户确认/` 创建 `human-request`；得到回答后把结论写入正式文档。归档或删除必须得到用户针对该文档的明确要求或同意；CLI 的 `--confirm` 不是归档授权。
@@ -49,7 +49,10 @@ Domain 可在 `_模板/` 中持有 `template` 类型文档。创建结构化文�
    |      -> 已知唯一路径时直接 edit
    |      -> 显式链接、生成视图或用户要求即时刷新时才 sync 一次
    |
-   +-- 单篇文档改名或跨 Domain 移动
+   +-- 单篇文档只改标题
+   |      -> document rename 预览 -> 原命令加 --expected-hash ... --confirm
+   |
+   +-- 单篇文档跨 Domain 移动
    |      -> document move 预览 -> 必要时 --set/--unset 补齐
    |      -> document move --confirm -> 仅执行返回的 follow_up
    |

@@ -5,7 +5,7 @@ description: "把 Vault 内外已有文档文件夹首次接管为 Campfire Doma
 
 # Campfire Workspace Adoption
 
-本 Skill 只负责把一个尚未受管的已有文件夹接入 Campfire。接管完成后，格式治理交给 `campfire-workspace-maintenance`，后续移动、改名、拆分或合并交给 `campfire-workspace-restructure`。
+本 Skill 只负责把一个尚未受管的已有文件夹接入 Campfire。接管完成后，日常格式、单篇改名或移动交给 `campfire-workspace-maintenance`；领域拆分或合并交给 `campfire-workspace-restructure`。
 
 ## 路由
 

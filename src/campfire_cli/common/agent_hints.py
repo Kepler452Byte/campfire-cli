@@ -29,18 +29,21 @@ HINT_BODY = """## Campfire 文档治理
    契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
    `document inspect` 后 apply，不从 `tree` 开始逐层探索。创建或唯一更新时
    `--path` 可省略 `.md` 和类型前缀，由 CLI 返回最终 target。
-7. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
+7. 只改一篇文档标题时使用 `campfire document rename --path <source> --name <标题>`；
+   它保留原目录并同步标题、规范文件名和受管引用。跨 Domain 移动才使用
+   `campfire document move`。
+8. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
    `AUTO-GENERATED` 标记区域只能由 CLI 修改；标记外 Markdown 正文可以直接
    使用文件工具编辑。CLI 写命令完成后只执行结果实际返回的
    `follow_up`；正文编辑会影响关系计算时执行一次局部 `maintenance sync`。
    没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
-8. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
+9. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
    不为通过检查而猜测。
-9. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
+10. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
    `_模板/模板-<用途>.md`，使用找到的第一份；不合并模板，不修改模板源文档。
    模板不存在时使用对应 Skill 的最小结构，不自行发明复杂格式。
-10. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
+11. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
    `--confirm` 只确认 CLI 写入，不代表归档授权。
 
 `.campfire.yaml`、声明 Frontmatter、自动生成区域、Base、关系页和 SQLite

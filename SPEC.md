@@ -41,7 +41,7 @@ SQLite / Filesystem Implementation
 ## CLI 输出契约
 
 - 正常输出 indent JSON；错误输出单行 JSON 并写 stderr，退出码非 0。
-- `status` 字段是 Agent 依赖的公共契约，只允许复用既有词汇，不得发明近义词。命令级词汇：ok、error、blocked、needs-input、needs-review、dry-run、synced、planned、ready、applied、issues-found、formatted、archived、up-to-date。文档、领域与 Decision 各有自己的字段词汇表。需要新状态先在本节登记。
+- `status` 字段是 Agent 依赖的公共契约，只允许复用既有词汇，不得发明近义词。命令级词汇：ok、error、blocked、needs-input、needs-review、dry-run、synced、planned、ready、applied、moved、renamed、issues-found、formatted、archived、up-to-date。文档、领域与 Decision 各有自己的字段词汇表。需要新状态先在本节登记。
 - 可恢复的输入错误必须包含稳定 `code`、对应字段和机器可读的期望类型；当正确序列化方式不直观时，同时返回示例值或修复提示。自然语言 message 与示例可以演进，不作为调用方分支判断依据。
 - 前置条件缺失时优先降级执行：能完成的部分照常完成，输出 `needs-input` 并以 `skipped` 字段显式列出被跳过的步骤，而非整体报错退出。
 

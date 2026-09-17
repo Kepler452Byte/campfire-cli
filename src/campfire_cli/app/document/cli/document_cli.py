@@ -165,3 +165,22 @@ def move_document(
             confirm=confirm,
         )
     ))
+
+
+@document_cli.command("rename")
+def rename_document(
+    ctx: typer.Context,
+    source: str = typer.Option(..., "--path", help="源文档的 Workspace 相对路径"),
+    name: str = typer.Option(..., "--name", help="新标题；不含类型前缀和 .md 后缀"),
+    expected_hash: str | None = typer.Option(None, "--expected-hash"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """预览或原地改名一篇文档，并同步标题、文件名与受管引用。"""
+    emit(invoke(
+        lambda: service(ctx).rename(
+            source,
+            name,
+            expected_hash=expected_hash,
+            confirm=confirm,
+        )
+    ))

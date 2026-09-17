@@ -34,7 +34,7 @@ class DocumentApplyResult(BaseModel):
 
 
 class DocumentMoveResult(BaseModel):
-    status: Literal["ready", "needs-input", "blocked", "moved"]
+    status: Literal["ready", "needs-input", "blocked", "moved", "renamed", "up-to-date"]
     workspace_id: str
     source: str
     target: str

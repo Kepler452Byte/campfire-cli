@@ -173,3 +173,64 @@ def test_archived_document_does_not_require_an_archive_directory(workspace: Path
     assert result.status == "applied"
     document = parse_document((domain / "计划-已完成方案.md").read_text(encoding="utf-8"))
     assert document.frontmatter["document_status"] == "archived"
+
+
+def test_rename_keeps_directory_and_updates_name_and_references(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    document = AppContainer.build("test").document
+    created = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/notes/旧标题",
+            document_type="record",
+            values={"description": "重命名测试"},
+            confirm=True,
+        )
+    )
+    assert created.status == "applied"
+    source = domain / "notes" / "记录-旧标题.md"
+    reference = domain / "记录-引用.md"
+    reference.write_text(
+        "---\nname: 引用\ndescription: 引用测试\ntype: record\ndocument_status: draft\n"
+        "created: '2026-09-17'\nupdated: '2026-09-17'\ntags: []\n---\n\n"
+        "[[记录-旧标题]]\n[路径](notes/记录-旧标题.md)\n",
+        encoding="utf-8",
+    )
+
+    planned = document.rename("mywork/Example/notes/记录-旧标题.md", "新标题")
+    assert planned.status == "ready"
+    assert planned.target == "mywork/Example/notes/记录-新标题.md"
+    assert planned.frontmatter_changes["name"] == "新标题"
+
+    applied = document.rename(
+        "mywork/Example/notes/记录-旧标题.md",
+        "新标题",
+        expected_hash=planned.expected_hash,
+        confirm=True,
+    )
+    target = domain / "notes" / "记录-新标题.md"
+    assert applied.status == "renamed"
+    assert applied.write_performed is True
+    assert not source.exists()
+    assert parse_document(target.read_text(encoding="utf-8")).frontmatter["name"] == "新标题"
+    assert "[[记录-新标题]]" in reference.read_text(encoding="utf-8")
+    assert "notes/记录-新标题.md" in reference.read_text(encoding="utf-8")
+
+
+def test_rename_rejects_existing_target(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    document = AppContainer.build("test").document
+    for title in ("旧标题", "新标题"):
+        result = document.apply(
+            DocumentApplyRequest(
+                path=f"mywork/Example/{title}",
+                document_type="record",
+                values={"description": title},
+                confirm=True,
+            )
+        )
+        assert result.status == "applied"
+
+    result = document.rename("mywork/Example/记录-旧标题.md", "新标题")
+    assert result.status == "blocked"
+    assert result.issues == [{"code": "target-exists", "path": "mywork/Example/记录-新标题.md"}]
+    assert (domain / "记录-旧标题.md").is_file()

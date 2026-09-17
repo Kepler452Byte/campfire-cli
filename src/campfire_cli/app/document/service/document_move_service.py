@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.schema import DocumentMoveResult
@@ -23,7 +23,7 @@ from campfire_cli.common.documents.domain_context import (
 from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
-from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, safe_path
+from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
 from campfire_cli.common.hashing import file_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -31,7 +31,7 @@ STRUCTURAL_FIELDS = {"updated"}
 
 
 class DocumentMoveService:
-    """Move one document between declared Domains and preserve document invariants."""
+    """Relocate or rename one document while preserving document invariants."""
 
     def __init__(
         self,
@@ -56,9 +56,66 @@ class DocumentMoveService:
         expected_hash: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
+        return self._relocate(
+            source_name,
+            target_name,
+            values=values,
+            unset_fields=unset_fields,
+            expected_hash=expected_hash,
+            confirm=confirm,
+            operation="move",
+        )
+
+    def rename(
+        self,
+        source_name: str,
+        name: str,
+        *,
+        expected_hash: str | None = None,
+        confirm: bool = False,
+    ) -> DocumentMoveResult:
+        """Rename one document in place from a logical title."""
+        title = name.strip()
+        if not title or Path(title).name != title or title.endswith(".md"):
+            raise ConfigurationError("document rename 的 --name 必须是不含路径和 .md 后缀的标题")
+        source = safe_path(self._settings.vault_root, source_name)
+        if not source.is_file() or source.suffix.lower() != ".md":
+            raise ConfigurationError(f"Markdown 文档不存在：{source_name}")
+        document_type = parse_document(source.read_text(encoding="utf-8")).frontmatter.get("type")
+        target_name = f"{title}.md"
+        normalized_title = title
+        if (
+            isinstance(document_type, str)
+            and document_type in self._settings.document_types["types"]
+        ):
+            target_name = prefixed_name(target_name, document_type, self._settings.document_types)
+            prefix = self._settings.document_types["types"][document_type]["prefix"]
+            normalized_title = Path(target_name).stem.removeprefix(prefix)
+        target = source.with_name(target_name).relative_to(self._settings.vault_root).as_posix()
+        return self._relocate(
+            source_name,
+            target,
+            values={"name": normalized_title},
+            unset_fields=(),
+            expected_hash=expected_hash,
+            confirm=confirm,
+            operation="rename",
+        )
+
+    def _relocate(
+        self,
+        source_name: str,
+        target_name: str,
+        *,
+        values: dict[str, str],
+        unset_fields: tuple[str, ...],
+        expected_hash: str | None,
+        confirm: bool,
+        operation: Literal["move", "rename"],
+    ) -> DocumentMoveResult:
         source = safe_path(self._settings.vault_root, source_name)
         target = safe_path(self._settings.vault_root, target_name)
-        if source == target:
+        if source == target and operation == "move":
             raise ConfigurationError("document move 的源路径和目标路径不能相同")
         if not source.is_file():
             raise ConfigurationError(f"Markdown 文档不存在：{source_name}")
@@ -71,7 +128,7 @@ class DocumentMoveService:
         source_domain, source_domain_issue = self._domain_context(source)
         target_domain, target_domain_issue = self._domain_context(target)
         issues: list[dict[str, Any]] = []
-        if target.exists():
+        if target.exists() and target != source:
             issues.append({"code": "target-exists", "path": target_name})
         if source_domain is None:
             issues.append(
@@ -94,7 +151,7 @@ class DocumentMoveService:
                 {"code": "document-type-invalid", "path": source_name, "detail": document_type}
             )
         elif document_type == "moc":
-            issues.append({"code": "document-move-type-owned", "path": source_name})
+            issues.append({"code": f"document-{operation}-type-owned", "path": source_name})
         elif (
             prefixed_name(target.name, document_type, self._settings.document_types) != target.name
         ):
@@ -223,22 +280,32 @@ class DocumentMoveService:
         if issues or not confirm:
             return result
 
-        writes, updated_references, expected = prepare_document_relocation(
-            self._settings.vault_root, source, target, rendered
-        )
-        expected[source] = actual_hash
-        expected[target] = None
+        if source == target and rendered == original:
+            return result.model_copy(update={"status": "up-to-date"})
+
+        if source == target:
+            writes = [FileWrite(source, rendered)]
+            updated_references: list[str] = []
+            expected = {source: actual_hash}
+            deletes: tuple[Path, ...] = ()
+        else:
+            writes, updated_references, expected = prepare_document_relocation(
+                self._settings.vault_root, source, target, rendered
+            )
+            expected[source] = actual_hash
+            expected[target] = None
+            deletes = (source,)
         self._executor.execute(
             FileChangeSet(
                 writes=tuple(writes),
-                deletes=(source,),
-                label="document move",
+                deletes=deletes,
+                label=f"document {operation}",
                 expected=expected,
             )
         )
         return result.model_copy(
             update={
-                "status": "moved",
+                "status": "renamed" if operation == "rename" else "moved",
                 "write_performed": True,
                 "updated_references": updated_references,
                 "follow_up": follow_up,

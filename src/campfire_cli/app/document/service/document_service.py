@@ -222,6 +222,21 @@ class DocumentService:
             confirm=confirm,
         )
 
+    def rename(
+        self,
+        source: str,
+        name: str,
+        *,
+        expected_hash: str | None = None,
+        confirm: bool = False,
+    ) -> DocumentMoveResult:
+        return self._movement.rename(
+            source,
+            name,
+            expected_hash=expected_hash,
+            confirm=confirm,
+        )
+
     def _document_path(self, relative_path: str) -> Path:
         path = safe_path(self._settings.vault_root, relative_path)
         if not path.is_file() or path.suffix.lower() != ".md":
