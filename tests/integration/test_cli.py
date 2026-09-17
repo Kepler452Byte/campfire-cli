@@ -42,11 +42,10 @@ def test_document_apply_does_not_expose_body_editing_options() -> None:
 
 
 def test_document_rename_exposes_title_not_target_domain() -> None:
-    result = runner.invoke(app, ["document", "rename", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--path" in result.output
-    assert "--name" in result.output
-    assert "--domain" not in result.output
+    command = get_command(app).commands["document"].commands["rename"]
+    parameter_names = {parameter.name for parameter in command.params}
+    assert {"source", "name"} <= parameter_names
+    assert "target_domain" not in parameter_names
 
 
 def test_cli_errors_use_one_json_envelope() -> None:
