@@ -7,7 +7,7 @@ operations:
   - source: mynote/旧领域/知识-并发.md
     target: mywork/目标领域/知识-并发.md
     frontmatter:
-      status: current
+      document_status: current
     reason: 并入项目文档中心
     approved: true
 ```

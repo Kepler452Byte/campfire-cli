@@ -3,30 +3,57 @@ name: campfire-workspace-adoption
 description: "把 Vault 内外已有文档文件夹首次接管为 Campfire Domain；适用于安全盘点、结构判断、一次性接管和验收，不用于已受管领域的日常维护或再次重构。"
 ---
 
-# Campfire Workspace Adoption
+# Campfire Workspace 接管
 
-本 Skill 只负责把一个尚未受管的已有文件夹接入 Campfire。接管完成后，日常格式、单篇改名或移动交给 `campfire-workspace-maintenance`；领域拆分或合并交给 `campfire-workspace-restructure`。
+把尚未受管的已有文件夹接入一个粗粒度 Domain，不在同一次接管中做语义拆分。已受管领域的迁移与合并使用 workspace-restructure。
 
-## 路由
+## 执行门禁
 
-```text
-来源文件夹 → Agent 阅读内容并设计一个粗粒度 Domain
-          → domain adopt 预览 → 同命令追加 --confirm
-          → 按 follow_up 同步 / 必要时再拆分
-```
+来源、目标和接管授权明确，领域身份与归属有依据。存在关键歧义先询问；待确认文档也需记录授权。外部来源必须保持不变，不因接管授权删除原文件。
+
+## 上下文与契约
+
+Workspace 已知直接复用，未知才 resolve。Vault 内来源可原地接管，外部来源需目标 Workspace 相对路径。CLI 推导 Space 与最近父 Domain；Project 由 Manifest 绑定和祖先拓扑解析，不写入 Domain 声明。
 
 ## SOP
 
-1. 运行 `campfire workspace resolve`，确认唯一 Workspace。
-2. 阅读真实文档，确认目标位置、稳定 `domain_id`、领域名称和领域类型。CLI 从目标路径推导 Space 与最近父 Domain；Project 通过 Manifest 根 Domain 绑定和祖先拓扑解析，不写入 Domain 声明。无法确定唯一归属时先询问用户或创建 `human-request`。
-3. Vault 内原地接管运行一次 `campfire workspace domain adopt --source <folder> --id <id> --name <name> --type <type> [--governance <policy>]`；外部来源额外提供 `--target-path <workspace-relative-path>`。审查文件清单、推导出的目标和 issues。
-4. 用户已授权且没有冲突时，对完全相同的命令追加 `--confirm`。不要拆成 inventory/plan/apply/verify，也不要创建持久化接管批次。
-5. 成功后只执行结果返回的 `follow_up`；需要多个子领域时，再加载 Restructure Skill。
+### 流程总览
 
-## 安全边界
+```text
+阅读来源，明确一个目标 Domain
+|-- 归属或授权不明 -> 询问，暂不写入
+`-- 已明确 -> domain adopt 预览
+               |-- issues / 冲突 -> 停止并处理，不手工绕过
+               `-- 计划一致且已授权 -> 原命令追加 --confirm
+                                      |-- 失败或结果不明 -> 核查实际状态
+                                      `-- adopted -> 实际 follow_up -> 回报
+```
 
-- 外部来源经临时隐藏目录完成复制与哈希校验，成功后直接落到目标 Domain；绝不修改或删除原目录，也不保留接管批次状态。
-- 软链接、目标冲突、暂存内容冲突或源哈希变化必须阻塞。
-- 接管计划一次建立一个粗粒度 Domain；语义拆分由 Agent 提案并走独立重构计划。
-- CLI 原子管理复制、哈希、声明、初始 MOC 与 Project/Manifest 联动；派生视图和索引由 `follow_up` 显式刷新，Agent 负责理解正文。
-- 命令成功返回 `adopted` 且目标声明、MOC 与清单文件均通过校验后才宣称完成；报告文件数量、目标 Domain、剩余治理问题和原始来源是否保留。
+### 执行步骤
+
+1. 阅读授权范围内真实文档，确定稳定 id、名称、类型与目标位置，不凭目录名推断项目。
+2. Vault 内使用 `domain adopt --source`；外部来源额外提供 `--target-path`。根 Domain 提供治理策略；未知参数查当前命令帮助。
+3. 审查预览清单、目标和 issues。用户已授权且无问题时，对同一输入追加 `--confirm`，不另建接管批次。
+4. 成功后只执行实际 follow_up；需要子领域拆分时另走重构流程，不能把进一步治理算作已完成。
+
+### 命令示例
+
+假设 Workspace demo 已存在，`mynote/待接管示例` 是用户授权原地接管、尚无领域声明的文件夹：
+
+```bash
+campfire --workspace demo workspace domain adopt --source "mynote/待接管示例" --id knowledge-example --name "接管示例" --type knowledge-domain --governance knowledge-base
+campfire --workspace demo workspace domain adopt --source "mynote/待接管示例" --id knowledge-example --name "接管示例" --type knowledge-domain --governance knowledge-base --confirm
+```
+
+仅在预览无阻塞且符合授权时执行第二条。确认返回 adopted 后才按返回的 scope 维护派生物。
+
+## 异常与停止条件
+
+- 软链接、目标冲突、暂存冲突和源哈希变化必须阻塞，不绕过检查。
+- 外部内容由 CLI 暂存、复制和核验，Agent 不手工移动或删除来源。
+- 执行结果不确定时核查声明和文件状态，不盲目重复接管。
+- 纯接管不授权语义拆分、内容改写或来源清理。
+
+## 完成条件与回报
+
+以 adopted 和实际清单校验为依据，报告目标 Domain、文件数量、原始来源保留情况、follow_up 结果和剩余治理问题。日常文档问题不伪装成已全部修复。

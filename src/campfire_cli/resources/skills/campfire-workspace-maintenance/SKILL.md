@@ -3,95 +3,71 @@ name: campfire-workspace-maintenance
 description: "持续维护 Campfire Workspace 的结构与文档合规；适用于 Space/Domain 声明、文档检查与格式化、MOC 同步、归档和日常维护，不用于跨领域批量重构。"
 ---
 
-# Campfire Workspace Maintenance
+# Campfire Workspace 日常维护
 
-`.campfire.yaml` 是 Workspace 与 Project 注册事实源，其中 `projects[].document_domain_id` 是 Project 到根 Domain 绑定的唯一事实。`_空间.md`、`_领域.md` 和内容文档是结构与内容事实源；SQLite 中的 Workspace 拓扑与文档数据只是本机可重建索引。首次接入使用 `campfire setup --path <vault>`，它会自动扫描并建立索引，不要求用户单独初始化数据库。Workspace 已注册后，显式选择只使用根级 `campfire --workspace <id> ...`；在该 Workspace 内运行时可省略。
+诊断结构和文档问题，修复明确范围并更新派生物；不做跨领域批量重构，不把每次文档操作变成全库治理。
 
-日常运行 `campfire maintenance check` 时会同步刷新 Space、Domain 和 Document 索引。仅在 SQLite 被删除、怀疑索引漂移或 CLI 升级修复时使用低频恢复入口：
+## 执行门禁
 
-```bash
-campfire workspace rebuild
-campfire workspace rebuild --confirm
-```
+操作范围已获授权、目标明确、业务修正有依据。检查不等于授权修复全部问题；归档和删除需要用户对具体对象明确同意。待确认文档也需记录授权，不能因歧义自动落盘。
 
-`rebuild` 不修改 Vault 文档；它从 Manifest 和 Markdown SSOT 完整替换本机派生索引。不要直接修改 SQLite，也不要把数据库提交到 Git 或跨设备同步。
+## 上下文与契约
 
-发现受管文档集合使用 `document list`，理解单篇文档的显式关联、出链、反向链接和失效引用使用 `document inspect`。两者查询前自动 reconcile，不要求 Agent 先执行 Maintenance；正文仍由 Agent 按返回路径读取。
+- 已知 Workspace、目标和契约直接复用，缺失才 bootstrap。根级 `--workspace` 选择环境，路径以 Workspace 根为基准。
+- Manifest 管注册事实，Markdown 管内容与声明，SQLite 和生成视图是派生状态；不直接编辑数据库、Base、关系页或自动生成区域。
+- 普通文档归属 Domain，系统受管区按配置处理；Project 由 Manifest 的稳定 Domain 绑定推导，不向 Domain 声明重复写入项目字段。
+- list / inspect 自行对账索引；check 用于诊断，不是每次查询或写入的前置步骤。
 
-目标是允许人类低成本记录，同时让 Agent 以可审阅、可重复执行的方式保持 Workspace 合规。
+## SOP
 
-进入需要 Workspace、Domain、Project 或 Profile 上下文的治理流程时，先加载 `campfire-context-bootstrap`。用户已给出唯一存在路径，且只读取或小范围修改人工正文时，直接使用文件工具，不启动 bootstrap。诊断配置、结构或文档问题时分别使用 `workspace config check`、`workspace space/domain check` 或 `maintenance check`；不要把全量检查当作每次写文档的固定步骤。
-
-## 工作流
-
-1. 通过 `workspace space/domain list` 和声明文件理解现有结构。正式文档必须归入 Domain，Space 不直接承载正式文档。
-2. 新目录使用 `space/domain create`；已有目录使用 `space/domain adopt`。CLI 根据目标路径推导所属 Space 和最近父 Domain。Project 从 Manifest 绑定的稳定根 Domain id 与祖先拓扑推导，Domain 声明不保存 Project 字段。默认先预览，用户确认后追加 `--confirm`。
-
-声明 Frontmatter 顺序分别使用 `workspace space format --space <id>` 和 `workspace domain format --domain <id>`；两者默认预览，追加 `--confirm` 后只调整 Frontmatter，Markdown 正文逐字节保留。
-3. 创建正式文档、接管无 Frontmatter 的既有正文、修改 Frontmatter 或显式变更类型，使用一次 `campfire document apply`。创建或唯一更新时 `--path` 可省略 `.md` 和类型前缀；CLI 根据目标 Domain 与 type 返回最终 target，并一次返回所有缺失字段。契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply，不从 `tree` 开始逐层探索。Agent 不手工同步 type、文件名前缀或 Markdown 后缀。格式顺序单独使用 `document format`。
-4. 单篇文档只改标题时使用 `document rename --path <source> --name <标题>`；跨 Domain 移动使用 `document move --path <source> --domain <target-domain-id>`。前者保留原目录并同步标题、文件名和引用；后者由 CLI 推导目标路径。批量文档迁移使用 `workspace restructure`。
-5. 只在结果明确表示已实际写入后读取结构化 `follow_up`：有 `maintenance sync` 就直接执行一次；没有就结束。预览、阻塞或缺输入结果的 `follow_up` 必须为空。只有用户要求预览派生变化时才加 `--dry-run`，只有诊断合规问题或发布验收时才运行 scoped `maintenance check`。
-6. `maintenance sync --scope <path>` 只扫描 scope 内的 Domain 和文档，一次刷新 MOC、关系页并校正本机索引；不要随后无条件重复 sync 或扩大到整个 Workspace。
-7. 报告原始笔记变化、自动生成物和仍需用户确认的事项。无法从正文、领域上下文或项目事实唯一决定时，在 `_待用户确认/` 创建 `human-request`；得到回答后把结论写入正式文档。归档或删除必须得到用户针对该文档的明确要求或同意；CLI 的 `--confirm` 不是归档授权。
-
-Domain 可在 `_模板/` 中持有 `template` 类型文档。创建结构化文档时从目标 Domain 向父 Domain 查找同名模板并使用最近的一份；不合并模板，也不持久化继承结果。模板只使用 base Profile，创建和 Frontmatter 更新仍走 `document apply`。Maintenance 只在 Domain MOC 中列出当前 Domain 实际持有的模板。
-
-## 路由
+### 流程总览
 
 ```text
-发现对象
-   |
-   +-- 新建、补 Frontmatter 或修改字段
-   |      -> document apply 预览 -> 补齐 missing_fields
-   |      -> document apply --confirm -> 仅执行返回的 follow_up
-   |
-   +-- 只改正文
-   |      -> 已知唯一路径时直接 edit
-   |      -> 显式链接、生成视图或用户要求即时刷新时才 sync 一次
-   |
-   +-- 单篇文档只改标题
-   |      -> document rename 预览 -> 原命令加 --expected-hash ... --confirm
-   |
-   +-- 单篇文档跨 Domain 移动
-   |      -> document move 预览 -> 必要时 --set/--unset 补齐
-   |      -> document move --confirm -> 仅执行返回的 follow_up
-   |
-   +-- 已有目录但没有声明
-   |      -> space/domain adopt
-   |
-   +-- 需要新 Space 或 Domain
-   |      -> space/domain create
-   |
-   +-- 已声明 Domain 合并或删除逻辑空领域
-   |      -> campfire-workspace-restructure
-   |      -> domain merge/delete 预览 -> 同命令 --confirm
-   |
-   +-- 需要批量迁移文档或拆分领域
-   |      -> campfire-workspace-restructure
-   |
-   `-- 归属或语义不能唯一确定
-          -> document apply --type human-request
-          -> _待用户确认/待确认-*.md
+维护目标
+|-- 查集合 / 单篇关系 -> list / inspect，不先 sync
+|-- 诊断问题 -> 选择 config / space / domain / maintenance check
+|-- 只改人工正文 -> Read -> Edit -> 核对
+|-- 字段或类型 -> apply；仅字段顺序 -> format
+|-- 单篇改名 / 跨领域移动 -> rename / move
+|-- 接管目录 -> workspace-adoption
+|-- 领域或批量重构 -> workspace-restructure
+`-- 刷新派生物 -> 明确 scope 后 maintenance sync
+
+写入需预览的命令 -> 计划符合授权且无阻塞 -> 确认
+                 `-- 有歧义 / 冲突 -> 暂停，不猜测
+实际写入成功 -> 仅执行实际 follow_up -> 回报
 ```
 
-Agent 负责理解正文、项目事实和业务语义；CLI 负责 Profile 校验、预览、哈希保护、原子执行、引用更新和索引刷新；用户负责确认歧义与高风险归属。批量内容迁移必须进入 Workspace Restructure 计划。
+### 执行步骤
 
-## 不变量
+1. 选择最窄的操作范围。诊断用对应 check；新建 Space/Domain 用 create，已有目录接管用 adopt；不要手写声明。
+2. 修改文档结构时只查询尚未知的 Profile；apply 负责结构，正文由 Edit 维护。新建后用返回的 target 补正文，不手工同步类型前缀。
+3. 只改标题用 rename，跨 Domain 用 move；按各命令预览结果和哈希确认。批量语义迁移使用重构流程，不逐文件绕过计划。
+4. 声明顺序异常时使用诊断返回的 format 修复入口，不把 formatter 列为日常必经步骤。声明标记外的人工正文可直接编辑。
+5. sync 自身直接写入派生物；用户要求预览时才使用 --dry-run，不传不存在的 --confirm。使用实际 follow_up 的 scope 或用户明确的治理范围，不无条件扩大全库。
+6. 只有索引损坏或明确恢复需求才使用 workspace rebuild 预览和确认；不把 rebuild 放入普通维护链。
+7. 模板只从目标 Domain 向祖先查找最近同名文件；不合并模板、不维护继承副本，模板变更需明确授权。
 
-- 整个 Workspace 只有一个根 `_收件箱/`；语义无法唯一判断时进入待用户确认，不为追求检查通过而猜测。
-- `_空间.md` 声明 Space，`_领域.md` 声明可多级嵌套的 Domain；保留目录不是 Space 或 Domain。
-- `.campfire.yaml`、声明 Frontmatter、`AUTO-GENERATED` 标记区域、Base、关系页和 SQLite 可读但不可由 Agent 直接写入；必须使用对应 Campfire 语义命令。`_空间.md` 和 `_领域.md` 标记外的 Markdown 正文可由人或 Agent 自由编辑。
-- `_空间.md` 与 `_领域.md` 标记外正文维护当前作用域的特殊规则；可从结构和索引确定的通用事实由 CLI 生成，不在正文重复维护。
-- 自动生成内容必须位于成对、唯一且闭合的 `AUTO-GENERATED` 标记内；CLI 只替换标记内部，标记异常时停止，不猜测边界。
-- Project 单向绑定稳定根 Domain id；Domain 移动不改变绑定，子 Domain 通过祖先拓扑继承 Project。
-- 一篇文档只有一个主物理 Domain，可以出现在多个自动索引中。
-- MOC 自动区域、相关文档、反向链接、关系和统计由 CLI 生成，不手工维护。
-- Maintenance 只检查文档、刷新派生内容和执行已获用户明确授权的归档，不改变文档主物理归属，不进行跨领域移动、领域合并或拆分。
-- 写入返回 `concurrent-change` 时停止并重新检查，不覆盖其他会话的新内容。
-- Markdown 是内容事实来源，用户级配置是治理契约；SQLite 只保存索引与工作流状态。
-- 待用户确认事项是位于全局系统受管区 `_待用户确认/` 的 `human-request` 文档，不属于 Space、Domain 或 Project；不写入 SQLite 工作流或 `_协作/` 投影。
+### 命令示例
 
-## 内容与任务
+已知 demo 中需要诊断 Hello World 领域：
 
-- 跨项目可复用的长期认知归入 knowledge 类型 Space；项目当前实现、方案、决策、问题或记录归入 Project 绑定的 Domain。项目事实必须检查已注册源码、配置和测试。
-- `document_status`、`task_status` 和其他字段只从 Document Profile 获取。任务正文需要创建或更新时，优先使用目标 Domain 的 `_模板/模板-任务.md`；没有模板时只写真实需要的最小正文，不套用全局正文模板。
+```bash
+campfire --workspace demo maintenance check --scope "mywork/【Hello World】文档中心"
+```
+
+用户已授权刷新同一领域的派生物，或写命令实际返回该 scope：
+
+```bash
+campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文档中心"
+```
+
+两条不是固定串行步骤。读取 status、issues 和实际写入结果；失败时不宣称维护完成。
+
+## 异常与停止条件
+
+自动生成标记异常、结构断链或并发变化时停止对应写入，按 issue 处理，不手改生成区。业务语义无法唯一确定时询问；缺 CLI 能力则报告，不直接改 Manifest 或数据库。只在核实状态并消除原因后重试。
+
+## 完成条件与回报
+
+报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。纯正文编辑无关系变化时无需同步。

@@ -1,70 +1,58 @@
 ---
 name: campfire-context-bootstrap
-description: "在 Agent 进入需要 Workspace、Project、Domain 或 Profile 上下文的 Campfire 治理流程时解析当前环境并检查项目漂移；已知路径的正文读取和小改不加载。"
+description: "补齐 Campfire 治理流程缺少的 Workspace、Domain 或 Project 上下文；仅涉及已知路径正文、或治理上下文已明确时不加载。"
 ---
 
 # Campfire 上下文启动
 
-仅在当前 Session 首次进入需要治理上下文的 Campfire 流程时运行一次。新建、Frontmatter、文件名、归属、移动、归档、派生维护和结构治理都需要该上下文。用户已给出唯一存在路径，且只读取或小范围修改人工正文时，直接使用文件工具，不加载本 Skill。
+只补齐当前任务缺少的治理上下文，不创建文档、不执行代码任务、不调度 Agent Session。已知信息直接复用；目标或相关结构变化时重新确认受影响部分，不维护隐式 Session 缓存。
 
-目标是向后续文档 Skill 提供可靠的 Workspace、Project、源码路径和文档中心，不把运行态 Session 信息写进 Project 元数据。
+## 上下文与契约
 
-## 状态机
+Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路径基于 Workspace 根，不是 cwd。Profile 拥有字段规则，CLI 解析 Domain 祖先与 Project 归属，不在 Skill 复制继承逻辑。
+
+本流程以查询为主。发现漂移不等于获得修复授权；`.campfire.yaml`、声明 Frontmatter 和自动生成区只能通过 CLI 修改。
+
+## SOP
+
+### 流程总览
 
 ```text
-首次需要 Campfire 文档能力
-            │
-            ▼
-  campfire workspace resolve
-            │
-            ▼
-当前目录是否属于已注册 Project？
-            │
-  campfire workspace project resolve --path <cwd>
-        │                    │
-      matched          unmatched / ambiguous
-        │                    │
-        ▼                    ▼
- project check       自动读取 Git 与候选项目
-        │                    │
-    ┌───┴───┐          能唯一确定？
-    │       │            │       │
-   ok   needs-review     是       否
-    │       │            │       │
-    ▼       ▼            ▼       ▼
-完成上下文  提议修复   提议注册  询问用户
-                \        /          │
-                 用户确认           │
-                     │               │
-                     ▼               ▼
-            project adopt/update  停止猜测
-                     │
-                     ▼
-                  重新 check
+当前任务缺什么？
+|-- 不缺上下文 -> 直接返回原任务
+|-- Workspace -> resolve
+|-- 目标领域 -> domain list，已知项目则缩小范围
+|-- 代码项目 -> project resolve / show，事实核验需要时才 check
+`-- 字段契约 -> 新建查 profile show；已有文档 inspect
+                  |
+                  +-- 唯一明确 -> 返回所需上下文
+                  `-- 缺失或冲突 -> 说明问题并询问，不猜测或顺手修复
 ```
 
-## 工作流
+### 执行步骤
 
-1. 运行 `campfire workspace resolve`，随后运行 `campfire workspace space list`。无法唯一解析 Workspace 时询问用户，不擅自使用无关默认值。
-2. 在当前工作目录运行 `campfire workspace project resolve --path <cwd>`。`matched` 才表示唯一项目（依据是 local-path 匹配）；`unmatched` 和 `ambiguous` 都不能猜测。`unmatched` 且带 `remote_matches` 时，表示该目录仅与这些项目共享 Git remote（monorepo 子目录或未绑定本机路径的项目），不能当作其中任何一个工作：同一项目换机未绑路径时提议 `project bind`，monorepo 子目录则提议注册新项目，提示见返回的 `hint`。
-3. 唯一匹配后运行 `campfire workspace project check <id>`，把 Project 元信息和实际源码、Git、文档中心进行比较。
-4. CLI 能读取的信息先自行读取：Git 根目录、origin remote、默认分支、注册项目列表和现有文档中心。只询问用户无法可靠推断的稳定身份与归属。
-5. Project 未注册且文档中心不存在时，向用户展示建议的 `id`、`name`、Workspace、目标路径、`local_path`、remote、默认分支和依据。先运行不带 `--confirm` 的 `campfire workspace project create --id <id> --name <name> --path <workspace-relative-path>` 展示计划，用户确认后追加 `--confirm`；命令只初始化项目根领域和项目总览，不虚构业务子领域。已有文档中心使用 `project adopt --domain <domain-id>` 接入，不传领域路径。
-6. Project 已注册但发生漂移时，区分定位信息与稳定身份。local path、同仓库 remote 或默认分支变化可以建议 `project update --id <id>`，只传需要修改的字段；文档中心变更使用 `--domain <domain-id>`。Project id、Workspace、文档中心、合并关系或归档状态必须明确确认。
-7. 写入后重新运行 `project check`。只有结果为 `ok`，或已向用户明确说明不影响当前文档工作的剩余问题，才把上下文交给后续 Skill。
+1. Workspace 不明确才运行 `workspace resolve`；无法唯一确定时询问，首次接入交给 onboarding。
+2. 目录未知才查 `workspace domain list`；项目已知使用 `--project <id>`。普通知识与个人任务不强制搜索代码项目。
+3. 确实依赖当前代码项目时才运行 `workspace project resolve --path <cwd>`。只有 `matched` 是唯一匹配，`remote_matches` 只是候选，不能替代本机路径绑定。
+4. 写项目当前事实或诊断漂移时按需 `project show <id>` / `project check <id>`，读取相关证据。不因无关漂移阻断普通文档操作。
+5. 契约未知才查目标 Profile 或 inspect；list / inspect 自动对账索引，不先跑 Maintenance。
 
-新设备首次 `setup` 会从 Markdown 自动建立文档查询索引。不要让 Agent 手工初始化 SQLite，也不要把 `maintenance check/sync` 固定放在 `document list/inspect` 前；读取命令会自行 reconcile。
+### 命令示例
 
-## 当前 Project 元信息
+已知注册 Workspace 为 demo，仅需查看任务契约：
 
-CLI 维护：稳定 `id`、`workspace_id`、显示 `name`、根 Domain 的稳定 `document_domain_id`、`git_remote_url`、本机 `local_path`、`default_branch` 和 `status`。Project 单向绑定根 Domain；Domain 声明不保存 Project 字段，子 Domain 归属由祖先拓扑推导。合法状态以 CLI 为准；本 Skill 不复制枚举。
+```bash
+campfire --workspace demo document profile show task
+```
 
-`.campfire.yaml`、Space/Domain 声明 Frontmatter 和 `AUTO-GENERATED` 标记区域属于 CLI 管理资源。Agent 可以读取，但只能用对应语义命令修改；声明文件标记外 Markdown 正文可以直接编辑。缺少结构命令时停止并报告能力缺口，不直接修改受管部分。
+消费返回的有效字段与候选；不把示例中的 Workspace id 当作默认值。
 
-## 输出
+## 异常与停止条件
 
-向后续流程提供一张紧凑上下文卡：Workspace id 与路径、Space、Project id 与名称、源码路径、项目根 Domain、匹配依据、检查状态和待用户确认项。未匹配到代码项目不阻止处理纯知识文档，但必须明确 Project 为空。
+- unmatched / ambiguous：澄清身份或归属，不因 remote 相同就选择某个 monorepo 项目。
+- 发现未注册项目或漂移：先说明影响；经授权后才选择 create、adopt、bind 或 update，并按该命令真实契约操作，不统一假设都有预览参数。
+- 关键事实无证据：标明限制或询问，不返回伪造的已核验状态。
 
-目标文档位于嵌套 Domain 时，不在 Skill 中手工遍历 `parent_domain` 或复制 Project 继承规则；`document apply`、`document move`、`document rename` 和 Domain 检查统一使用 CLI 的上下文解析结果，冲突或断链按结构化 issue 处理。
+## 完成条件与回报
 
-本 Skill 不创建知识、项目或任务文档，不执行代码任务，也不分派、恢复或跟踪 Agent Session。
+只返回本次所需的 Workspace、Domain、必要的 Project、字段契约和未决项，不要求完整上下文卡。Project 物理归属不代表自动填写任务的 `related_project`。

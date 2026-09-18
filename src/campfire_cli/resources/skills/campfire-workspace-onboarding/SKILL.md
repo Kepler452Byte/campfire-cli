@@ -5,53 +5,63 @@ description: "首次创建或接入 Campfire Workspace；适用于用户给出�
 
 # Campfire Workspace 首次接入
 
-只把用户给出的路径安全地变成可用 Workspace，随后交给已有专项 Skill。不要接管 Domain、创建业务文档、猜测项目归属，或直接编辑 `.campfire.yaml`。
+将用户指定的新目录或已有目录接入为 Workspace，不自动接管存量业务文件，也不猜测项目归属。
 
-## 路由
+## 执行门禁
 
-```text
-目标路径
-├── 不存在
-│   └── 用户明确要新建 → workspace create
-├── 存在且 Manifest 合法
-│   └── setup
-├── 存在但没有 Manifest
-│   └── 用户确认作为 Workspace → setup --id
-│       └── 存量目录需要纳管 → workspace-adoption
-└── Manifest 无法解析或结构冲突
-    └── 报告 CLI 错误并停止，不手改或覆盖 Manifest
-```
+路径、稳定 Workspace id 和接入意图明确；已有授权不重复询问。create / setup 会直接写入，不虚构预览或 confirm 参数。只有用户要求切换默认工作区时才加 --default；演示项目也需用户要求。
+
+## 上下文与契约
+
+先读取目标目录是否存在及 Manifest 状态，不手写或覆盖 `.campfire.yaml`。新建目录用 create，接入已有目录用 setup。显式 Workspace 选择是根参数 `--workspace <id>`。
 
 ## SOP
 
-1. 确认目标路径与用户意图：是新建空 Workspace，还是接入已有目录。稳定 Workspace id 不明确时，基于目录名提出一个候选并请求确认。
-2. 路径不存在时，只有用户明确要求创建后才运行：
+### 流程总览
 
-   ```bash
-   campfire workspace create --id <workspace-id> --path <path> --default
-   ```
+```text
+目标路径与意图
+|-- 不明确 -> 询问，暂不写入
+|-- 路径不存在 -> 已授权新建 -> workspace create
+|-- 已有合法 Manifest -> 已授权接入 -> setup
+|-- 已有目录无 Manifest -> 确认身份与接入 -> setup --id
+`-- Manifest 损坏或身份冲突 -> 报告错误，停止，不覆盖
+                                     |
+入口成功 -> 查看返回的资源与健康结果 -> 回报
+             `-- 存量内容未受管 -> 明确剩余范围，按授权转 Adoption
+```
 
-   该命令会创建基础目录、首份 Manifest 和本机注册；不要先手工创建目录或声明文件。
-   用户明确要求采用标准初始布局时，再读取[标准 Workspace 蓝图](references/标准工作区结构.md)，按其中命令补充可选 Space 并验收 Base。不要据此猜测或创建 Project、Domain、业务文档或正文模板。
-3. 路径已存在且 Manifest 合法时运行：
+### 执行步骤
 
-   ```bash
-   campfire setup --path <path> --default
-   ```
+1. 复用已知路径与身份，缺稳定 id 才提出候选并询问；不把默认 Workspace 当成用户选择。
+2. 新目录通过 create 生成基础布局、Manifest 和本机资源；不要先手工复制受管文件。
+3. 已有目录通过 setup 接入，保留已有内容；无 Manifest 时提供已确认的 id。接入不代表全部内容已成为受管 Domain。
+4. 消费命令返回的 config、resources、health 等结果，已返回的检查不重复跑；某项缺失或发现问题时才执行对应检查。
+5. 用户要求标准布局或公开 demo 时按需读取蓝图。新增业务 Domain、模板和文档需要明确组织意图，不自动填充虚构内容。
 
-   它恢复本机注册、索引、Skill、Base 和提示词路标。完成后运行一次 `maintenance check --summary`，再交给后续文档流程。
-4. 路径已存在但没有 Manifest 时，先得到用户对 Workspace id 和接入意图的确认，再运行：
+### 命令示例
 
-   ```bash
-   campfire setup --path <path> --id <workspace-id> --default
-   ```
+以下为互斥入口；将绝对路径和 id 替换成已确认的值：
 
-   `setup` 只创建 Manifest 和本机治理资源，不猜测 Space 或 Domain。已有文档目录需要成为正式内容区时，加载 `campfire-workspace-adoption` 逐个接管；空目录按需要使用 `workspace space/domain create`。
-5. `setup` 返回 Manifest 解析、身份冲突或结构错误时，原样报告错误与文件路径，停止。不得删除、覆盖或直接修改 `.campfire.yaml`；只有未来存在专门的 CLI 修复入口时才使用它。
+```bash
+# 全新目录
+campfire workspace create --id notes --path "/absolute/path/to/new-vault"
+# 已有合法 Manifest 的目录
+campfire setup --path "/absolute/path/to/existing-vault"
+# 已有目录且没有 Manifest
+campfire setup --path "/absolute/path/to/existing-folder" --id notes
+```
 
-## 完成条件
+不要依次执行三条。检查返回的 Workspace id、实际路径、资源与健康结果；需要 demo 时只在 create 追加 `--demo hello-world`。
 
-- `campfire workspace resolve` 能返回目标 Workspace；
-- `workspace config check` 与 `maintenance check --summary` 的结果已报告；
-- 已有未受管内容明确交给 Adoption，而不是假称已完成接管；
-- 报告 Workspace id、根路径、Manifest 状态和下一步。
+## 异常与停止条件
+
+Manifest 解析失败、身份或目录冲突时原样报告，停止；不删除配置或手动改成“合法”。缺专用修复入口时说明能力边界，不能以新建覆盖旧目录。
+
+## 完成条件与回报
+
+注册目标身份和路径符合预期，初始化资源与健康结果已核对。报告仍未受管的目录，不宣称已完成 Adoption；说明是否改变默认 Workspace 以及下一步。
+
+## 按需参考
+
+用户要求标准布局或公开项目演示时，读取[标准 Workspace 蓝图](references/标准工作区结构.md)。

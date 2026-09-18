@@ -45,7 +45,7 @@ campfire maintenance sync --dry-run
 
 不指定 `--path` 运行 `campfire setup` 是降级执行而不是报错：仍会同步全局 Skill 与提示词路标，输出接入引导，并显式列出被跳过的 Manifest 相关步骤。
 
-`setup` 与 `skill sync` 会向 `~/.claude/CLAUDE.md`、`~/.agents/AGENTS.md` 注入幂等的 campfire 路标块（带注释标记、不触碰块外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标），并把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`（`CAMPFIRE_SKILL_TARGETS` 可覆盖）。Agent 冷启动时由此知道本机装有 campfire。
+`setup` 会向 `~/.claude/CLAUDE.md`、`~/.agents/AGENTS.md` 注入幂等的 campfire 路标块，保留标记外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标。`setup` 与 `skill sync` 会把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`，可通过 `CAMPFIRE_SKILL_TARGETS` 覆盖。单独执行 `skill sync` 不更新提示词路标。
 
 ## 核心概念
 
@@ -69,7 +69,7 @@ Workspace ── Space ── Domain 树 ── 文档
 
 ```bash
 campfire tree                                    # 完整命令树
-campfire workspace resolve                       # Agent 冷启动第一步：解析当前 Workspace
+campfire workspace resolve                       # Workspace 不明确时解析
 campfire workspace list / show / export / import # 注册库管理与备份
 campfire workspace project resolve               # 当前目录属于哪个已注册项目
 
@@ -78,7 +78,7 @@ campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 与相关文档页
 
 campfire document inspect / check / format       # 单篇文档查看、校验、格式化
 campfire document list                           # 精确枚举和筛选受管文档
-campfire document apply / move                   # 创建更新、类型转换、跨 Domain 移动
+campfire document apply / move / rename          # 结构写入、跨 Domain 移动、原地改名
 campfire document profile list / show / resolve  # Frontmatter Profile 规则
 campfire document type list                      # 文档类型与前缀
 campfire base list / show / check / sync          # Obsidian Base 治理视图
@@ -130,7 +130,9 @@ campfire workspace restructure verify --batch move-001
 
 ## Agent 协作
 
-全局 Skill（`campfire skill list` 查看托管清单，`campfire skill sync` 手动同步）定义了 Agent 的标准工作流：已给出唯一文件路径的正文读取或小改直接使用文件工具；新建文档、修改 Frontmatter/类型/归属或执行结构治理时才加载 bootstrap，并使用 `document apply/move` 等原子命令。`document apply --path` 创建或唯一更新时可省略 `.md`，创建时也可省略类型前缀。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时只执行一次 `document inspect` 后 apply。批量结构调整用 `workspace restructure`；归档在用户明确同意后通过 `document apply --set document_status=archived` 执行。关键歧义进入 `human-request`，不由 Agent 擅自决定。
+全局 Skill 定义 Agent 的文档工作流：已知路径的人工正文直接 Edit；新建文档先 apply 创建结构，再按返回的 `target` 补正文。只在治理上下文缺失时加载 bootstrap；字段契约未知时，新建查一次目标 Profile，更新查一次 inspect。已明确的信息不重复查询，用户已有授权不重复询问。文档相对路径以 Workspace 根目录为基准，不随 cwd 改变；创建时可省略类型前缀与 `.md`。改标题用 rename，跨 Domain 移动用 move，完成后仅执行实际 follow_up。归档仍需用户对具体文档明确同意，关键歧义不得自行猜测。
+
+仓库 Skill 编写规范见 `src/campfire_cli/resources/skills/SPEC.md`。本地与 CI 共用 `uv run python scripts/quality_check.py`；发布前使用 `--release` 增加构建、wheel 隔离安装与冒烟验证。测试日志包含最慢 10 项耗时。Release 的公共 PyPI 安装验证最多等待 3 分钟、间隔 15 秒重试，不重试上传；安装后版本不符直接失败。
 
 ## 许可
 

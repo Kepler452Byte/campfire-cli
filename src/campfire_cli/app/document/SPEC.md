@@ -68,6 +68,8 @@ Document 写入接口不得要求 Agent 猜测 Frontmatter 输入契约：
 - Document App 解析一次目标 EffectiveProfile，并由 apply 与 move 共用的值解码器转换补丁：enum、string 和 date 保留原始字符串，boolean 只接受明确的 `true` 或 `false`，list 只接受严格 JSON 数组。
 - Profile 与 Rule Service 继续拥有字段类型、合法值和业务校验，不保存命令行字符串。命令帮助负责 Shell 展示方式，并为列表值给出 `--set 'tags=["tag1","tag2"]'` 形式的最小例子。
 - 输入错误统一返回稳定错误码、字段、实际值、期望类型和可直接照抄的参数示例；apply 与 move 不得分别构造两套解码或诊断。
+- apply 在 Profile 已明确时并列收集可确定的禁用字段、缺失字段与类型错误；无效赋值不再重复报同字段缺失。有错误不写入且 follow-up 为空；只有缺失输入时返回 needs-input，含其他问题时返回 blocked 并保留 missing_fields。
+- 文档相对路径始终以 Workspace 根解析，不受 cwd 影响；apply 的 domain-missing 返回实际解析路径和带 Workspace 的领域发现入口，不默认枚举全量候选。
 - 不因输入格式不直观而增加 `--tags`、`--sources` 等字段专用参数，也不把逗号字符串静默猜成列表。
 - 现有文档的有效 Profile 已由 `document inspect` 返回。Skill 只在字段契约未知时安排一次 `inspect → apply`；契约已知的补丁直接 apply，正文小改不进入本接口。
 

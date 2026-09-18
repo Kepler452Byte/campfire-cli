@@ -5,49 +5,45 @@ description: "路由用户在对话中表达的问答、任务、学习和文档
 
 # Campfire 对话路由
 
-让用户直接说出需求，不要求用户先创建文件、选择类型或填写 Frontmatter。只判断当前表达是否需要形成或更新 Vault 文档，然后交给垂直 Skill；不负责 Agent Session 的分派、认领、恢复或通信。
+把用户意图交给唯一匹配的文档流程，不写文档、不执行任务、不负责 Agent Session 调度。用户不需要先理解目录与类型。
 
-## 路由
+## 执行边界
+
+普通问答不自动落库；用户明确要求记录即已有对应写入授权，不重复询问是否记录。创建任务不等于授权实施任务。无法及时确认不自动授权创建 human-request。
+
+## SOP
+
+### 流程总览
 
 ```text
-用户在对话中表达意图
-          │
-          ▼
-是否只需要当前回答？ ──是──> 直接回答，不创建文档
-          │否
-          ▼
-是否要形成或更新文档？ ──是──> campfire-document-capture
-          │                          │
-          │                          ├── 知识文档
-          │                          ├── 项目文档
-          │                          ├── 任务计划文档
-          │                          └── human-request
-          │
-          └── 无法判断 ──> 先问一个关键问题
-                                │
-                          无法及时确认
-                                │
-                                ▼
-                       创建 human-request
+用户意图
+|-- 当前问答 -> 直接回答，不创建文档
+|-- 明确任务查询或维护 -> task-management
+|-- 文档沉淀或更新 -> document-capture
+|-- 已有收件箱材料 -> inbox-triage
+|-- 学习探索 -> 先提供帮助；需要保留成果才进入沉淀
+`-- 关键意图不明 -> 询问
+                     `-- 需要持久待确认且已有授权 -> document-capture
 ```
 
-1. 普通问答直接回答；用户没有要求跨对话保留时，不自动创建文档。
-2. 用户说“沉淀一下”“记到项目里”“整理成文档”或要求创建、更新、总结文档时，加载 `campfire-document-capture`。
-3. 领导交办、个人待办、实施计划或“帮我跟进”需要形成任务计划文档时，读取[任务文档接入](references/task-intake.md)，再加载 `campfire-document-capture`。
-4. “深入理解”“系统学习”“做实验并总结”等表达先读取[学习与知识文档接入](references/learning-intake.md)；只有用户要持续保留成果时才加载 `campfire-document-capture`。
-5. 已有文件位于 `_收件箱/` 时加载 `campfire-inbox-triage`；对话中无法及时解决的关键歧义读取[收件箱衔接规则](references/inbox-handoff.md)，并创建 `human-request`。
+### 执行步骤
 
-本 Skill 到路由完成即结束。授权、资源、源码现状和目标文档由 `campfire-document-capture` 检查；成品内容由知识、项目文档或任务 Skill 负责；格式、链接、MOC 和持续检查由 `campfire-workspace-maintenance` 负责。
+1. 区分当前回答与持久记录，已明确的意图直接路由。
+2. 任务创建、更新和查询直接使用 task-management；实施计划、知识与项目记录使用 document-capture，不先后加载整条 Skill 链。
+3. 原始文件已在收件箱时使用 inbox-triage。需要首次接入 Workspace 时转 onboarding，不让文档流程手写 Manifest。
+4. 信息不足时只问会改变目标、归属或授权的关键问题；学习请求先提供即时价值，不以“先建任务”为前提。
+5. 路由后结束本 Skill，由目标 Skill 处理其门禁与命令；不要为路由本身执行 CLI 探索。
 
-## 交互原则
+## 异常与停止条件
 
-- 用户不需要理解 Campfire 目录、类型和字段；Agent 负责提出结构化草案。
-- 能提供即时价值时先回答，不以“先建任务”为前置条件。
-- 只询问会改变目标、范围、归属、验收或授权的关键问题，并给出推荐选项。
-- 任务计划本身就是一种正式文档；确认创建后由 `campfire-workspace-maintenance` 处理，字段和生命周期读取 Document Profile。
-- 沉淀的授权、资源与事实门禁完全由 `campfire-document-capture` 决定，本 Skill 不复制其规则。
-- 不在本 Skill 中设计或执行 Agent Session 交接；创建任务文档不等于已把任务交给某个 Agent。
+多个意图无法确定优先级时澄清，不同时触发多个写入流程。没有待确认记录授权或用户认可的持续记录约定时，只在对话报告未决项，不落盘。
 
-## 输出
+## 完成条件与回报
 
-对需要持续处理的意图，向用户返回一张简短确认卡：Agent 的理解、建议类型、目标项目或领域、关键问题和下一步。不要只在 Vault 中写文件而不在当前对话告知用户。
+用户意图已交给匹配流程，或明确说明等待哪项信息。不强制确认卡，不把已路由说成已经创建或完成任务。
+
+## 按需参考
+
+- 任务意图尚不完整：读取[任务文档接入](references/task-intake.md)。
+- 学习请求需区分讲解与长期记录：读取[学习与知识文档接入](references/learning-intake.md)。
+- 需异步保留输入或待确认问题：读取[收件箱衔接规则](references/inbox-handoff.md)。

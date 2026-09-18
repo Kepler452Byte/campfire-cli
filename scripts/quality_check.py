@@ -103,7 +103,7 @@ def main() -> None:
     if arguments.artifact_dir is not None and not arguments.release:
         parser.error("--artifact-dir 只能与 --release 一起使用")
     run("uv", "run", "ruff", "check", "src", "tests", "scripts")
-    run("uv", "run", "pytest", "-q")
+    run("uv", "run", "pytest", "-q", "--durations=10")
     if arguments.release:
         version = project_version()
         check_tag(version)

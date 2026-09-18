@@ -3,12 +3,90 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
 from campfire_cli.main import app
 
 runner = CliRunner()
+
+
+def test_apply_reports_independent_errors_without_writing(workspace: Path) -> None:
+    domain = workspace / "mynote" / "Example"
+    domain.mkdir()
+    (domain / "_领域.md").write_text("---\ndomain_id: example\n---\n", encoding="utf-8")
+    arguments = [
+        "--workspace",
+        "test",
+        "document",
+        "apply",
+        "--path",
+        "mynote/Example/任务",
+        "--type",
+        "task",
+        "--set",
+        "title=错误字段",
+        "--set",
+        "tags=not-json",
+        "--confirm",
+    ]
+    result = runner.invoke(app, arguments)
+    payload = json.loads(result.output)
+    assert payload["status"] == "blocked"
+    assert set(payload["missing_fields"]) == {"description", "task_status"}
+    issues = {(item["code"], item.get("field")): item for item in payload["issues"]}
+    unknown = issues[("frontmatter-field-not-allowed", "title")]
+    assert "name" in unknown["allowed"]
+    assert ("frontmatter-list-invalid", "tags") in issues
+    assert ("frontmatter-field-missing", "description") in issues
+    assert ("frontmatter-field-missing", "task_status") in issues
+    assert payload["follow_up"] == []
+    assert payload["write_performed"] is False
+    assert not (workspace / payload["target"]).exists()
+
+
+def test_apply_path_base_and_domain_discovery_are_workspace_scoped(
+    workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    domain = workspace / "mynote" / "Example"
+    domain.mkdir()
+    (domain / "_领域.md").write_text("---\ndomain_id: example\n---\n", encoding="utf-8")
+    arguments = [
+        "--workspace",
+        "test",
+        "document",
+        "apply",
+        "--path",
+        "mynote/Example/note",
+        "--type",
+        "knowledge",
+        "--set",
+        "description=知识",
+    ]
+    at_root = json.loads(runner.invoke(app, arguments).output)
+    monkeypatch.chdir(domain)
+    at_child = json.loads(runner.invoke(app, arguments).output)
+    assert at_root == at_child
+    assert at_child["status"] == "planned"
+    absolute = list(arguments)
+    absolute[5] = str(domain / "note")
+    assert json.loads(runner.invoke(app, absolute).output)["target"] == at_child["target"]
+
+    arguments[5] = "note"
+    rejected = runner.invoke(app, arguments)
+    assert rejected.exit_code != 0
+    error = json.loads(rejected.output)
+    assert error["code"] == "domain-missing"
+    assert error["path_base"] == "workspace"
+    assert Path(error["resolved_path"]) == workspace / "知识-note.md"
+    assert error["next_action"] == {
+        "command": "workspace domain list",
+        "arguments": {"workspace": "test"},
+    }
+    discovery = runner.invoke(app, ["--workspace", "test", "workspace", "domain", "list"])
+    assert discovery.exit_code == 0, discovery.output
 
 
 def test_public_tree_exposes_only_current_document_workflow() -> None:
@@ -167,9 +245,7 @@ def test_first_time_workspace_create_and_existing_directory_setup(tmp_path: Path
     assert project.exit_code == 0, project.output
     assert json.loads(project.output)["document_domain_id"] == "project-hello-world"
 
-    domain_check = runner.invoke(
-        app, ["--workspace", "demo", "workspace", "domain", "check"]
-    )
+    domain_check = runner.invoke(app, ["--workspace", "demo", "workspace", "domain", "check"])
     assert domain_check.exit_code == 0, domain_check.output
     assert json.loads(domain_check.output)["status"] == "ok"
 
@@ -179,9 +255,7 @@ def test_first_time_workspace_create_and_existing_directory_setup(tmp_path: Path
 
     existing = tmp_path / "existing"
     existing.mkdir()
-    setup = runner.invoke(
-        app, ["setup", "--path", str(existing), "--id", "existing", "--default"]
-    )
+    setup = runner.invoke(app, ["setup", "--path", str(existing), "--id", "existing", "--default"])
     assert setup.exit_code == 0, setup.output
     assert json.loads(setup.output)["manifest_operation"] == "created"
 

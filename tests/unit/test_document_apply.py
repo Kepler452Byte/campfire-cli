@@ -59,6 +59,53 @@ def test_apply_uses_base_profile_only(workspace: Path) -> None:
     }
 
 
+def test_apply_invalid_assignment_is_not_reported_as_missing(workspace: Path) -> None:
+    project_domain(workspace)
+    result = AppContainer.build("test").document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/bad",
+            document_type="task",
+            values={"task_status": "unknown", "created": "not-a-date"},
+            confirm=True,
+        )
+    )
+    assert result.status == "blocked"
+    assert result.missing_fields == ["description"]
+    assert {(issue["code"], issue["field"]) for issue in result.issues} == {
+        ("frontmatter-enum-invalid", "task_status"),
+        ("frontmatter-date-invalid", "created"),
+        ("frontmatter-field-missing", "description"),
+    }
+    assert not result.write_performed
+
+
+def test_apply_invalid_update_keeps_original(workspace: Path) -> None:
+    project_domain(workspace)
+    document = AppContainer.build("test").document
+    created = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/task",
+            document_type="task",
+            values={"description": "任务", "task_status": "todo"},
+            confirm=True,
+        )
+    )
+    path = workspace / created.target
+    original = path.read_bytes()
+    result = document.apply(
+        DocumentApplyRequest(
+            path=created.target,
+            values={"description": "", "task_status": "invalid", "title": "wrong"},
+            confirm=True,
+        )
+    )
+    assert result.status == "blocked"
+    assert result.missing_fields == ["description"]
+    assert len(result.issues) == 3
+    assert result.follow_up == []
+    assert path.read_bytes() == original
+
+
 def test_task_dynamic_project_value_is_validated_not_injected(workspace: Path) -> None:
     domain = project_domain(workspace)
     document = AppContainer.build("test").document

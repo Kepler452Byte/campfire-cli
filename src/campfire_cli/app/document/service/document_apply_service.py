@@ -97,9 +97,13 @@ class DocumentApplyService:
             else source
         )
         target_name = target.relative_to(self._settings.vault_root).as_posix()
-        context = None if is_system_scope_path(
-            self._settings.vault_root, target, self._settings.document_types
-        ) else self._domain_context(target)
+        context = (
+            None
+            if is_system_scope_path(
+                self._settings.vault_root, target, self._settings.document_types
+            )
+            else self._domain_context(target)
+        )
         relative_target = target.relative_to(self._settings.vault_root).as_posix()
         if document_type == "human-request" and not relative_target.startswith(
             f"{self._settings.governance['human_request_root']}/"
@@ -131,40 +135,22 @@ class DocumentApplyService:
                 frontmatter.pop(field, None)
         actual_hash = file_sha256(source) if exists else "missing"
         unknown = sorted(set(request.values) - set(profile.allowed))
-        if unknown:
-            return self._result(
-                request,
-                target_name,
-                action,
-                profile.name,
-                actual_hash,
-                "blocked",
-                [
-                    {
-                        "code": "frontmatter-field-not-allowed",
-                        "path": request.path,
-                        "field": key,
-                    }
-                    for key in unknown
-                ],
-            )
-
+        candidates = workspace_candidate_sets(self._settings.vault_root)
         values, input_issues = decode_patch_values(
             profile,
-            request.values,
+            {key: value for key, value in request.values.items() if key in profile.allowed},
             request.path,
-            workspace_candidate_sets(self._settings.vault_root),
+            candidates,
         )
-        if input_issues:
-            return self._result(
-                request,
-                target_name,
-                action,
-                profile.name,
-                actual_hash,
-                "blocked",
-                input_issues,
-            )
+        input_issues[:0] = [
+            {
+                "code": "frontmatter-field-not-allowed",
+                "path": request.path,
+                "field": key,
+                "allowed": list(profile.allowed),
+            }
+            for key in unknown
+        ]
         # Field semantics are fully declared by the selected Profile; no type-specific injection.
         frontmatter.update(values)
         frontmatter["type"] = document_type
@@ -195,12 +181,22 @@ class DocumentApplyService:
         else:
             rendered = render_document(frontmatter, next_body, list(profile.field_order))
         issues = self._rules.check_content(self._settings.vault_root, target, rendered, profile)
+        # Rejected assignments already have a precise diagnostic; their fallback values
+        # must not produce contradictory missing-field or value errors.
+        invalid_fields = {item["field"] for item in input_issues}
+        issues = input_issues + [item for item in issues if item.get("field") not in invalid_fields]
         if target != source and target.exists():
             issues.insert(0, {"code": "target-exists", "path": target_name})
-        enrich_profile_issues(issues, profile, workspace_candidate_sets(self._settings.vault_root))
+        enrich_profile_issues(issues, profile, candidates)
         missing_codes = {"frontmatter-field-missing", "frontmatter-field-empty"}
         missing = [item for item in issues if item["code"] in missing_codes]
-        status = "needs-input" if missing else "blocked" if issues else "planned"
+        status = (
+            "blocked"
+            if any(item["code"] not in missing_codes for item in issues)
+            else "needs-input"
+            if missing
+            else "planned"
+        )
         result = self._result(
             request,
             target_name,
@@ -354,4 +350,17 @@ class DocumentApplyService:
                 self._settings.governance.get("domain_marker", "_领域.md"),
             )
         except DomainContextError as exc:
-            raise exc
+            if exc.code == "domain-missing":
+                exc.details.update(
+                    resolved_path=str(path),
+                    path_base="workspace",
+                    workspace_root=str(self._settings.vault_root),
+                    hint=(
+                        "相对路径以 Workspace 根目录为基准，而不是 cwd；请先选择已声明的 Domain。"
+                    ),
+                    next_action={
+                        "command": "workspace domain list",
+                        "arguments": {"workspace": self._settings.workspace_id},
+                    },
+                )
+            raise

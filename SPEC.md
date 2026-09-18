@@ -31,6 +31,7 @@ SQLite / Filesystem Implementation
 - Frontmatter Profile 只允许一层 `base` 配置继承；Profile Loader 编译完整规则，Validator 与 Formatter 共用同一个 EffectiveProfile。
 - 公共接口不得依赖调用方猜测未声明契约。参数类型与复杂输入格式必须能从当前命令帮助获得；错误必须同时提供稳定机器字段和可操作的修复信息，但不得为此复制 Profile 枚举或新增平行命令。
 - `tree` 只用于未知能力发现，不是 Agent 执行已知文档操作的固定前置步骤；Skill 必须把已知正文编辑、契约已知的 Frontmatter 写入和契约未知的 `inspect → apply` 分流清楚。
+- Skill 的最短路径不得省略写入门禁；门禁表达必要前提，不强制重复查询或审批。编写与验收要求统一维护在 `src/campfire_cli/resources/skills/SPEC.md`，运行步骤放对应 Skill。
 - 命令不得读取“最近一次操作”等隐式 Session 状态推导对象或作用域；跨命令后续动作只使用当前结果显式返回的结构化 `follow_up`。
 - 所有写入默认预检，语义计划默认未审批。
 - 写入用例必须在治理锁内复核生成计划时的内容哈希，发现外部变化时拒绝覆盖。

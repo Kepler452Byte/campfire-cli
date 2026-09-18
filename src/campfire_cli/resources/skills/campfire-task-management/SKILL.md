@@ -1,81 +1,73 @@
 ---
 name: campfire-task-management
-description: "查询、创建、更新和完成 Campfire 任务文档；适用于用户要求查看任务集合，或为某项目或个人维护任务时按结构化字段定位并依 Profile 写入，不负责执行任务、改代码或 Agent Session 调度。"
+description: "查询、创建、更新和完成 Campfire 任务文档；按结构化字段定位项目或个人任务，不负责执行任务、改代码或 Agent Session 调度。"
 ---
 
 # Campfire 任务管理
 
-统一任务文档（`任务-` 前缀）的创建与状态更新。基础 `document_status` 表示文档是否仍有效；task 专属 `task_status` 表示任务进度。`related_project` 是显式关联项目字段：Agent 根据已确认事实填写；不填表示个人或未关联项目。填写时 CLI 只接受 Manifest 中注册的 Project id，不按 Domain 自动写入或覆盖。
+用户明确要求记录任务即为创建授权，不再重复询问是否建文档；创建任务不等于授权实施任务。只查询缺失的上下文：已知 Workspace、目标目录和字段契约时直接写入，不固定加载 bootstrap 或转交 capture、maintenance。
 
-通用写入门禁遵循 `campfire-document-capture`；本 Skill 是任务类型的专项 SOP，不复制通用纪律。只查询任务集合时直接使用 `document list`，不加载完整 Project bootstrap。创建、修改 Frontmatter、文件名或归属时才加载 `campfire-context-bootstrap`。
+## 写入门禁
 
-## 状态机
+创建和更新都须满足：操作在授权范围内、目标唯一、任务内容和状态有依据。缺授权先提议，目标或关键事实不明先澄清；不得把用户计划写成已完成工作。条件已满足直接执行，不重复审批，不为普通待办检查无关代码项目。
+
+## 上下文与契约
+
+- 全部任务使用 `campfire document list --type task`；用户指定项目、领域或状态时增加对应筛选，不隐式排除已完成任务。无需先执行 Maintenance。
+- 用户指定文档时直接使用该路径。项目尚未定位才查询 `workspace project list`；多个候选时询问，不凭相似名称猜测。已知项目但目录未知时使用 `workspace domain list --project <id>`。
+- 个人任务使用当前 Workspace 人工规则约定的任务 Domain；没有约定或目标不唯一时询问，不硬编码个人 Vault 路径，也不为个人任务搜索代码项目。
+- `document_status` 表示文档有效性，`task_status` 表示任务进度。`related_project` 必须显式填写有效 Project id；CLI 不自动注入，未填写表示未关联项目。合法字段和候选以当前 Profile 为准。
+
+## SOP
+
+### 流程总览
 
 ```text
-用户表达任务意图
-        │
-        ▼
-project list 关键词匹配
-        │
-   ┌────┴────┐
-唯一命中   多候选/无候选
-   │           │
-   ▼           ▼
-有项目任务   能澄清则问用户，
-   │         不凭相似度猜测
-   │           │
-   │      用户明确无项目？
-   │        │        │
-   │       是        否（取消或继续澄清）
-   │        │
-   ▼        ▼
-项目文档中心  全局任务领域
-   └────┬────┘
-        ▼
-document apply 取契约并写入 → 只执行返回的 follow_up → 回报路径
+用户任务意图
+├── 只查看 → document list 按明确条件筛选 → 按需读正文
+├── 只补进展正文 → Read → Edit → 核对
+└── 创建任务 / 修改任务字段
+    ├── 目标明确 → 复用目标，不重复查项目或领域
+    └── 目标缺失 → 按需定位；多个候选则询问，暂不写入
+        ↓ 目标与授权明确
+    契约已知则跳过查询；未知才查 Profile / inspect
+        ↓
+    apply 预览 → 无问题则以返回哈希确认 → 新建时补正文
+        ↓
+    仅执行实际 follow_up → 回报路径和结果
 ```
 
-## 工作流
+预览缺字段时补充已知信息，缺业务事实时询问；出现阻塞或并发冲突时停止写入，不沿图继续确认。
 
-### 0. 任务发现
 
-- 查看当前 Workspace 全部任务时运行 `campfire document list --type task`，不隐式排除 completed、blocked 或其他 `task_status`。
-- 用户明确了 Project、Domain 或 `task_status` 时追加对应筛选；多个筛选条件是 AND 关系。用户语义不明确时先澄清，不把 mtime、文件名或正文措辞解释成业务状态。
-- CLI 会在查询前自动 reconcile 本地索引，不先跑 `maintenance check/sync`。需要阅读详情时只读取返回路径对应的正文；需要判断单篇任务的上下游时使用 `document inspect --path <path>`。
-- `document list` 不做正文关键词或模糊检索。无法用结构化字段表达的内容检索暂时使用 Agent 自带文件搜索，并以 Markdown 正文为准。
+### 执行步骤
 
-### 1. 归属定位
+1. 目标和授权明确后，优先使用最近 Domain 的任务模板；没有模板时正文只写任务目标、已知约束和完成条件，不补造事实。
+2. task 契约未知时运行 `campfire --workspace <id> document profile show task`；已知时跳过。`--path` 必填，接受 Workspace 根相对路径或内部绝对路径，不相对于 cwd。创建可省略类型前缀与 `.md`；标题由路径推导，不传 `title` 字段。
+3. apply 默认预览。确认计划与授权一致且没有 issues 后，保持原输入并追加返回的 `expected_hash` 与 `--confirm`。失败时按全部 issues / missing_fields 一次修正；缺业务事实才问用户，不猜枚举。
+4. 成功后按 `target` 找到文件，用 Edit 补正文，保留 CLI 生成的 Frontmatter 和自动生成区。没有 `--body` 参数。完成正文后执行结果实际返回的 follow_up，不固定追加 check 或全库扫描。
 
-1. 从用户表述提取项目关键词（项目名、简称、仓库名、路径片段）。
-2. 运行 `campfire workspace project list`，在 id、name、git_remote_url、local_path、document_domain_id 中做子串匹配。
-3. 唯一命中即定位该项目及其 `document_domain_id`；多候选或无候选时向用户列出候选并询问，不凭名称相似度猜测。
-4. 用户明确表示任务不关联项目（个人待办、跨项目事务）时归入无项目任务。
+### 命令示例
 
-### 2. 无项目任务归属
+以下示例假设 Workspace `demo` 中已存在 Hello World 项目目录，用户要求创建“验证安装”任务。示例值不是字段规则的副本；有效 Profile 不同时按当前契约调整。
 
-- 无项目任务统一落已声明的个人任务 Domain：`mylog/个人任务/`（`log-personal-tasks`）。不在该目录下再创建 `任务/` 子目录。
-- 不虚构项目归属；任务确有明确关联但不属于项目任务时可填写 `related_project`，否则保持为空。
+```bash
+campfire --workspace demo document apply --path "mywork/【Hello World】文档中心/验证安装" --type task --set 'description=验证安装后可以运行版本命令' --set 'task_status=todo' --set 'related_project=hello-world'
+campfire --workspace demo document apply --path "mywork/【Hello World】文档中心/验证安装" --type task --set 'description=验证安装后可以运行版本命令' --set 'task_status=todo' --set 'related_project=hello-world' --expected-hash missing --confirm
+```
 
-### 3. 契约获取与写入
+新建预览应返回 `status: planned`、`expected_hash: missing` 和规范化 `target`；确认应返回 `status: applied`、`write_performed: true`。`missing` 仅用于该新建预览，不用于已有文档。以上目录必须以当前 Workspace 实际目录为准。
 
-1. 只提交任务标题和 `--type task`；CLI 从 type 推导最终文件名，Agent 不手写前缀映射。
-2. 有项目任务落各自文档中心的任务子目录；已有 `任务/` 惯例的项目沿用，无先例时在文档中心根下创建并沿用同规则。
-3. 准备任务正文骨架和可验证的业务字段，调用 `campfire document apply --type task`。CLI 根据有效 Profile 确定字段类型、枚举和顺序；项目关联明确时显式填写 `related_project`。列表使用严格 JSON 数组。Skill 不硬编码这些可演进契约。
-4. CLI 返回 `needs-input` 时，根据其一次性列出的必填字段与允许值补齐事实，不猜测。
+### 更新已有任务
 
-### 4. 状态流转
+- 只修改进展正文：读取目标段落，最小 Edit，再核对修改区域，不调用 apply。
+- 修改任务状态：契约已知时直接 `document apply --path <path> --set 'task_status=<值>'`；未知时先 `document inspect --path <path>`。预览后按原输入加返回哈希与 `--confirm`。
+- 完成任务只更新 `task_status`，结果和阻塞原因写正文；不把完成任务等同于归档。设置 `document_status=archived` 必须先取得用户对该文档的明确同意。
+- 只改标题用 `document rename`，跨 Domain 移动用 `document move`。不手改文件名与受管字段，遇到并发冲突先重新读取。
+## 异常与停止条件
 
-- 更新任务：Frontmatter 契约已知时直接使用 `document apply --set`；字段类型或合法值未知时先对该文档执行一次 `document inspect`，再 apply，不从 `tree` 或逐层 help 开始。进展记录和所有正文改动直接使用 edit；只有 Frontmatter 变化才调用 CLI。
-- 完成或取消任务时，只更新 `task_status`；结果、阻塞说明和进展记录写入正文，不固化为任务字段。字段类型或合法值以 CLI 当前 Profile 为准。
-- 用户口头报进度时主动提议同步对应任务文档；一次汇报合并提议，不逐条打断。
+预览有字段错误时按实际契约修正，缺业务事实或归属不明确时询问；并发冲突先重新读取，不无条件重试。无法确认完成事实时不标记完成。
 
-### 5. 验证闭环
+## 完成条件与回报
 
-`document apply` 成功即表示目标文档已通过当前 Task Profile。写入后只执行结果实际返回的 follow-up，不固定追加 `document check` 或全 Workspace 扫描。向用户回报最终写入路径、动作、验证结果与未决字段。
-
-## 边界
-
-- 不负责执行任务本身、不修改代码、不分派或恢复 Agent Session。
-- 任务的讨论与方案沉淀遵循 `campfire-document-capture`，结构治理遵循 `campfire-workspace-maintenance`。
-- 看板类任务清单（`看板-` 前缀）的改造遵循 `campfire-kanban-board`，本 Skill 只处理单篇任务文档。
-- 不确定归属、字段枚举与 Profile 冲突时询问用户或创建 `human-request`，不静默落盘。
+新建任务有可理解的正文，字段更新符合当前 Profile，必要 follow_up 已执行。回报最终路径、实际动作和未解决事项；不宣称尚未执行的任务已经完成。

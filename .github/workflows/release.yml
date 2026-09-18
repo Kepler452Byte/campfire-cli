@@ -55,12 +55,9 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v10.1.0
       - name: Install published package from PyPI
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          verify_dir="$RUNNER_TEMP/campfire-pypi-verify"
-          uv venv "$verify_dir"
-          uv pip install --python "$verify_dir/bin/python" --index-url https://pypi.org/simple "campfire-cli==$version"
-          test "$("$verify_dir/bin/campfire" version)" = "$version"
+          python scripts/pypi_verify.py "${GITHUB_REF_NAME#v}"

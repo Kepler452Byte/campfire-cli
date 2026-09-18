@@ -20,15 +20,18 @@ HINT_BODY = """## Campfire 文档治理
    先读取文档开头和最近 `_领域.md` 的人工规则，再直接使用文件工具；
    不加载 bootstrap，不调用 Campfire CLI。
 3. 新建、Frontmatter、文件名、归属、移动、归档、派生维护或结构治理
-   需要 Workspace、Project、Domain 或 Profile 上下文；当前 Session
-   首次进入这类治理流程时加载 `campfire-context-bootstrap`。
+   仅在所需 Workspace、Project、Domain 或 Profile 上下文缺失时加载
+   `campfire-context-bootstrap`；上下文已明确则直接进入目标操作。
 4. 发现文档集合使用 `campfire document list`，理解单篇文档的确定关系使用
    `campfire document inspect`；两者不要求预先运行 Maintenance。
 5. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
 6. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
    契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
    `document inspect` 后 apply，不从 `tree` 开始逐层探索。创建或唯一更新时
-   `--path` 可省略 `.md` 和类型前缀，由 CLI 返回最终 target。
+   `--path` 可省略 `.md`，创建时可省略类型前缀，由 CLI 返回最终 target。
+   相对路径以 Workspace 根为基准，不是 cwd；创建成功后按 target 用 Edit
+   补正文，不传 title 或不存在的 --body 参数。新建契约未知时只查询目标
+   `document profile show <type>`，用户已明确授权就不重复询问是否创建。
 7. 只改一篇文档标题时使用 `campfire document rename --path <source> --name <标题>`；
    它保留原目录并同步标题、规范文件名和受管引用。跨 Domain 移动才使用
    `campfire document move`。

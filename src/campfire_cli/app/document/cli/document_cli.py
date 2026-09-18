@@ -21,6 +21,7 @@ SET_OPTION_HELP = (
     "值类型由有效 Profile 决定；列表使用严格 JSON，例如 "
     '--set \'tags=["tag1","tag2"]\'。'
 )
+PATH_OPTION_HELP = "Workspace 根目录相对路径（不是 cwd 相对路径），或 Workspace 内绝对路径"
 
 
 def service(ctx: typer.Context) -> DocumentService:
@@ -31,19 +32,25 @@ def service(ctx: typer.Context) -> DocumentService:
 
 
 @document_cli.command("check")
-def check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
+def check(
+    ctx: typer.Context, path: str = typer.Option(..., "--path", help=PATH_OPTION_HELP)
+) -> None:
     """检查一篇 Markdown 文档是否符合当前类型与 Profile 契约。"""
     emit(invoke(lambda: service(ctx).check(path)))
 
 
 @document_cli.command("kanban-check")
-def kanban_check(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
+def kanban_check(
+    ctx: typer.Context, path: str = typer.Option(..., "--path", help=PATH_OPTION_HELP)
+) -> None:
     """检查文档是否满足 Obsidian Kanban 插件的渲染契约。"""
     emit(invoke(lambda: service(ctx).kanban_check(path)))
 
 
 @document_cli.command("inspect")
-def inspect(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
+def inspect(
+    ctx: typer.Context, path: str = typer.Option(..., "--path", help=PATH_OPTION_HELP)
+) -> None:
     """返回单篇文档的 Profile、领域、确定关系和问题上下文。
 
     示例：campfire document inspect --path "mywork/项目/记录-进展.md"
@@ -62,22 +69,24 @@ def list_documents(
     limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
     """按 Project、Domain、类型与状态列出受管内容文档。"""
-    emit(invoke(
-        lambda: service(ctx).list(
-            project=project,
-            domain=domain,
-            document_type=document_type,
-            document_status=document_status,
-            task_status=task_status,
-            limit=limit,
+    emit(
+        invoke(
+            lambda: service(ctx).list(
+                project=project,
+                domain=domain,
+                document_type=document_type,
+                document_status=document_status,
+                task_status=task_status,
+                limit=limit,
+            )
         )
-    ))
+    )
 
 
 @document_cli.command("format")
 def format_document(
     ctx: typer.Context,
-    path: str = typer.Option(..., "--path", help="现有 Markdown 文档路径"),
+    path: str = typer.Option(..., "--path", help=PATH_OPTION_HELP),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或执行一篇文档的 Frontmatter 字段排序。"""
@@ -112,7 +121,7 @@ def apply_document(
     path: str = typer.Option(
         ...,
         "--path",
-        help="目标 Markdown 路径；创建或唯一更新时可省略 .md，类型前缀可省略",
+        help=PATH_OPTION_HELP + "；创建或唯一更新时可省略 .md，创建时可省略类型前缀",
     ),
     document_type: str | None = typer.Option(None, "--type"),
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
@@ -128,23 +137,25 @@ def apply_document(
     已有文档的 --type 发生变化时，同一原子操作同步文件名和引用。
     """
     values = invoke(lambda: parse_values(set_values or []))
-    emit(invoke(
-        lambda: service(ctx).apply(
-            DocumentApplyRequest(
-                path=path,
-                document_type=document_type,
-                values=values,
-                expected_hash=expected_hash,
-                confirm=confirm,
+    emit(
+        invoke(
+            lambda: service(ctx).apply(
+                DocumentApplyRequest(
+                    path=path,
+                    document_type=document_type,
+                    values=values,
+                    expected_hash=expected_hash,
+                    confirm=confirm,
+                )
             )
         )
-    ))
+    )
 
 
 @document_cli.command("move")
 def move_document(
     ctx: typer.Context,
-    source: str = typer.Option(..., "--path", help="源文档的 Workspace 相对路径"),
+    source: str = typer.Option(..., "--path", help=PATH_OPTION_HELP),
     target_domain: str = typer.Option(..., "--domain", help="目标 Domain 的稳定 id"),
     name: str | None = typer.Option(None, "--name", help="可选的新文件名；省略时保持原文件名"),
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
@@ -154,33 +165,37 @@ def move_document(
 ) -> None:
     """预览或移动一篇文档，并按目标 Domain 契约更新归属与引用。"""
     values = invoke(lambda: parse_values(set_values or []))
-    emit(invoke(
-        lambda: service(ctx).move(
-            source,
-            target_domain,
-            name=name,
-            values=values,
-            unset_fields=tuple(unset_fields or []),
-            expected_hash=expected_hash,
-            confirm=confirm,
+    emit(
+        invoke(
+            lambda: service(ctx).move(
+                source,
+                target_domain,
+                name=name,
+                values=values,
+                unset_fields=tuple(unset_fields or []),
+                expected_hash=expected_hash,
+                confirm=confirm,
+            )
         )
-    ))
+    )
 
 
 @document_cli.command("rename")
 def rename_document(
     ctx: typer.Context,
-    source: str = typer.Option(..., "--path", help="源文档的 Workspace 相对路径"),
+    source: str = typer.Option(..., "--path", help=PATH_OPTION_HELP),
     name: str = typer.Option(..., "--name", help="新标题；不含类型前缀和 .md 后缀"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或原地改名一篇文档，并同步标题、文件名与受管引用。"""
-    emit(invoke(
-        lambda: service(ctx).rename(
-            source,
-            name,
-            expected_hash=expected_hash,
-            confirm=confirm,
+    emit(
+        invoke(
+            lambda: service(ctx).rename(
+                source,
+                name,
+                expected_hash=expected_hash,
+                confirm=confirm,
+            )
         )
-    ))
+    )
