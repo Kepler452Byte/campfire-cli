@@ -4,7 +4,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from campfire_cli.app.document.service.profile_registry import EffectiveProfile, ProfileRegistry
+from campfire_cli.app.document.service.rules.profile_registry import (
+    EffectiveProfile,
+    ProfileRegistry,
+)
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.frontmatter_format import ordered_keys
 from campfire_cli.common.documents.markdown import parse_document

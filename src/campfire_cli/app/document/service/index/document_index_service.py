@@ -14,12 +14,12 @@ from campfire_cli.app.document.schema import (
     DocumentListItem,
     DocumentListResult,
 )
-from campfire_cli.app.document.service.document_index_builder import DocumentIndexBuilder
-from campfire_cli.app.document.service.document_index_protocol import (
+from campfire_cli.app.document.service.document_scanner import iter_documents
+from campfire_cli.app.document.service.index.document_index_builder import DocumentIndexBuilder
+from campfire_cli.app.document.service.index.document_index_protocol import (
     DocumentIndexRepositoryProtocol,
 )
-from campfire_cli.app.document.service.document_scanner import iter_documents
-from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.app.document.service.rules.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import MarkdownDocument, parse_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.config.settings import WorkspaceSettings

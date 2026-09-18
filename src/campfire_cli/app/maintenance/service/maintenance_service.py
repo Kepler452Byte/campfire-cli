@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import iter_documents
-from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
+from campfire_cli.app.document.service.rules.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.rules.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
     DocumentState,
     DomainState,

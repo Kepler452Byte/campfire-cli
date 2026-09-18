@@ -9,8 +9,8 @@ from campfire_cli.app.base.service.base_service import BaseService
 from campfire_cli.app.document.repository.document_index_repository import (
     SqliteDocumentIndexRepository,
 )
-from campfire_cli.app.document.service.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.document_service import DocumentService
+from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )

@@ -7,7 +7,7 @@ import typer
 from campfire_cli.app.document.repository.document_type_repository import (
     DocumentTypeRepository,
 )
-from campfire_cli.app.document.service.document_type_service import DocumentTypeService
+from campfire_cli.app.document.service.rules.document_type_service import DocumentTypeService
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.cli_output import emit, invoke

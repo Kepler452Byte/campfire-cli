@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from campfire_cli.app.document.service.document_scanner import iter_documents
-from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.app.document.service.rules.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.frontmatter_format import format_text
 from campfire_cli.common.documents.frontmatter_schema import parse_shape
 

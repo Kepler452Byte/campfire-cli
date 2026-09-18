@@ -10,17 +10,17 @@ from campfire_cli.app.document.schema import (
     DocumentListResult,
     DocumentMoveResult,
 )
-from campfire_cli.app.document.service.document_apply_service import DocumentApplyService
-from campfire_cli.app.document.service.document_index_service import DocumentIndexService
-from campfire_cli.app.document.service.document_move_service import DocumentMoveService
-from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.document_scanner import exempt_document, is_system_scope_path
-from campfire_cli.app.document.service.kanban_service import (
+from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
+from campfire_cli.app.document.service.mutation.document_apply_service import DocumentApplyService
+from campfire_cli.app.document.service.mutation.document_move_service import DocumentMoveService
+from campfire_cli.app.document.service.rules.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.rules.kanban_service import (
     check_kanban_renderability,
     renderability_result,
 )
-from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
-from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.app.document.service.rules.profile_candidates import workspace_candidate_sets
+from campfire_cli.app.document.service.rules.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.domain_context import (
     DomainContextError,
     resolve_domain_by_id,

@@ -6,7 +6,7 @@ from campfire_cli.app.document.repository.document_profile_repository import (
     DocumentProfileRepository,
 )
 from campfire_cli.app.document.schema import DocumentApplyRequest
-from campfire_cli.app.document.service.document_profile_service import DocumentProfileService
+from campfire_cli.app.document.service.rules.document_profile_service import DocumentProfileService
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.documents.markdown import parse_document

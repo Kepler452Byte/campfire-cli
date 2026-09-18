@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from campfire_cli.app.document.service.kanban_service import check_kanban_renderability
+from campfire_cli.app.document.service.rules.kanban_service import check_kanban_renderability
 
 
 def board(plugin: str = "basic", body: str = "## 未排期\n\n- [ ] 卡片\n") -> str:

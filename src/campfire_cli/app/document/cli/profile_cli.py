@@ -7,7 +7,7 @@ import typer
 from campfire_cli.app.document.repository.document_profile_repository import (
     DocumentProfileRepository,
 )
-from campfire_cli.app.document.service.document_profile_service import (
+from campfire_cli.app.document.service.rules.document_profile_service import (
     DocumentProfileService,
 )
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository

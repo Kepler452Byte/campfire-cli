@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import quote
 
-from campfire_cli.app.document.service.type_apply import (
+from campfire_cli.app.document.service.mutation.type_apply import (
     rebase_markdown_links,
     rewrite_markdown_links,
     rewrite_wikilinks,

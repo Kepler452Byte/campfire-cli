@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from campfire_cli.app.document.service.profile_registry import EffectiveProfile
+from campfire_cli.app.document.service.rules.profile_registry import EffectiveProfile
 
 
 def decode_patch_values(

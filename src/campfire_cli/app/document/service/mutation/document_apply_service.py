@@ -12,15 +12,17 @@ from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
 )
-from campfire_cli.app.document.service.document_patch_values import (
+from campfire_cli.app.document.service.document_scanner import is_system_scope_path
+from campfire_cli.app.document.service.mutation.document_relocation import (
+    prepare_document_relocation,
+)
+from campfire_cli.app.document.service.rules.document_patch_values import (
     decode_patch_values,
     enrich_profile_issues,
 )
-from campfire_cli.app.document.service.document_relocation import prepare_document_relocation
-from campfire_cli.app.document.service.document_rule_service import DocumentRuleService
-from campfire_cli.app.document.service.document_scanner import is_system_scope_path
-from campfire_cli.app.document.service.profile_candidates import workspace_candidate_sets
-from campfire_cli.app.document.service.profile_registry import ProfileRegistry
+from campfire_cli.app.document.service.rules.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.rules.profile_candidates import workspace_candidate_sets
+from campfire_cli.app.document.service.rules.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.domain_context import (
     DomainContext,
