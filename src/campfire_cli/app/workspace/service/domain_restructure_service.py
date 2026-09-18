@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from urllib.parse import quote
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.workspace.repository.manifest_repository import (
@@ -26,8 +25,10 @@ from campfire_cli.app.workspace.service.structure_service import (
     reserved_directories,
 )
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
+from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document, render_document
-from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.common.documents.related_docs import rewrite_related_docs
+from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import (
     FileChangeExecutor,
     FileChangeSet,
@@ -511,6 +512,21 @@ class DomainRestructureService:
         )
         return issues
 
+    @staticmethod
+    def _rewrite_domain_id(text: str, old: str, new: str) -> str:
+        parsed = parse_document(text)
+        patch = {
+            key: new
+            for key in ("domain", "domain_id", "parent_domain")
+            if parsed.frontmatter.get(key) == old
+        }
+        if not patch:
+            return text
+        rendered, issues = render_patch(text, patch, parsed.body, list(parsed.frontmatter))
+        if issues:
+            raise GovernanceBlockedError("领域属性无法安全修改：" + ", ".join(issues))
+        return rendered
+
     def _merge_change_set(
         self,
         source: Domain,
@@ -524,12 +540,6 @@ class DomainRestructureService:
         reference_files = self._reference_files()
         originals = {path: path.read_text(encoding="utf-8") for path in reference_files}
         writes: list[FileWrite] = []
-        old_relative = source.path.relative_to(self._settings.vault_root).as_posix()
-        new_relative = target.path.relative_to(self._settings.vault_root).as_posix()
-        domain_pattern = re.compile(
-            rf"(?m)^(\s*(?:domain|domain_id|parent_domain):\s*)(['\"]?)"
-            rf"{re.escape(source.id)}\2\s*$"
-        )
         direct_children = {
             item.path / DOMAIN_MARKER
             for item in self._domains.discover()[0]
@@ -547,10 +557,17 @@ class DomainRestructureService:
         for path, original in originals.items():
             if path in {marker, moc}:
                 continue
-            content = original.replace(old_relative, new_relative).replace(
-                quote(old_relative), quote(new_relative)
-            )
-            content = domain_pattern.sub(rf"\g<1>\g<2>{target.id}\g<2>", content)
+            mapping = {
+                p.relative_to(self._settings.vault_root).as_posix(): targets.get(
+                    p, target.path / p.relative_to(source.path)
+                )
+                .relative_to(self._settings.vault_root)
+                .as_posix()
+                for p in reference_files
+                if source.path in p.parents
+            }
+            content = rewrite_related_docs(original, mapping)
+            content = self._rewrite_domain_id(content, source.id, target.id)
             if path in direct_children:
                 parsed = parse_document(content)
                 frontmatter = dict(parsed.frontmatter)
@@ -674,21 +691,23 @@ class DomainRestructureService:
                 contents[child] = render_document(
                     child_frontmatter, child_parsed.body, list(child_frontmatter)
                 )
-            pattern = re.compile(
-                rf"(?m)^(\s*(?:domain|domain_id|parent_domain):\s*)(['\"]?)"
-                rf"{re.escape(domain.id)}\2\s*$"
-            )
             for path, content in contents.items():
-                if path.suffix.lower() == ".md":
-                    contents[path] = pattern.sub(rf"\g<1>\g<2>{new_id}\g<2>", content)
+                contents[path] = self._rewrite_domain_id(content, domain.id, new_id)
 
         old_relative = domain.path.relative_to(self._settings.vault_root).as_posix()
         new_relative = target.relative_to(self._settings.vault_root).as_posix()
         if old_relative != new_relative:
             for path, content in contents.items():
-                contents[path] = content.replace(old_relative, new_relative).replace(
-                    quote(old_relative), quote(new_relative)
-                )
+                mapping = {
+                    p.relative_to(self._settings.vault_root).as_posix(): (
+                        target / p.relative_to(domain.path)
+                    )
+                    .relative_to(self._settings.vault_root)
+                    .as_posix()
+                    for p in references
+                    if domain.path in p.parents
+                }
+                contents[path] = rewrite_related_docs(content, mapping)
 
         def final_path(path: Path) -> Path:
             if path == domain.path or domain.path in path.parents:
@@ -735,7 +754,7 @@ class DomainRestructureService:
             path
             for path in self._settings.vault_root.rglob("*")
             if path.is_file()
-            and path.suffix.lower() in {".md", ".canvas", ".base"}
+            and path.suffix.lower() == ".md"
             and not any(
                 part in ignored for part in path.relative_to(self._settings.vault_root).parts
             )

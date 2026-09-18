@@ -114,12 +114,15 @@ Campfire 使用语义化版本：
 
 ## Workspace 索引
 
+- Markdown Frontmatter 的 `related_docs` 是文档关系唯一 SSOT，采用 `[[Workspace相对路径.md]]`。不解析、索引或自动改写正文链接；历史正文保留，SQLite 和可见关系页均可从该字段重建。
+- 改名、移动与类型联动改名只定向更新 `related_docs` 引用方；预览输出 `expected_plan`，确认复核整个变更集摘要和文件哈希。文件提交后的索引失败必须报告已写入事实，并使索引可在下次查询恢复。
+
 - SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
 - Document App 拥有文档记录、确定关系、集合查询和单篇关系查询；Repository 只持久化投影，不解释 Profile、Domain 或链接语义。
 - 文档索引保存 schema version、parser version、有效配置 hash、拓扑 hash 和 generation；Domain 声明、Project 文档根映射等任一解释输入变化都必须自动完整重建。
 - `document list` 与 `document inspect` 查询前必须轻量 reconcile。文件 stat 只筛选变化候选，content hash 表示内容版本；调用方不需要先运行 Maintenance。
 - 候选文档与关系快照必须在一个 SQLite 事务中切换，失败继续保留上一完整 generation。
-- `document list` 只做结构化精确筛选；`document inspect` 只返回显式关联和链接形成的确定关系。全文检索、模糊匹配、相关性排序和相似建议不得混入这两个契约。
+- `document list` 只做结构化精确筛选；`document inspect` 只返回 `related_docs` 形成的确定关系。全文检索、模糊匹配、相关性排序和相似建议不得混入这两个契约。
 - `setup` 与 `maintenance check` 必须自动刷新完整拓扑和文档索引。
 - 索引 reconcile 是读取命令内部保障，不得作为 follow-up 暴露给 Agent。写命令只在实际写入成功且可见派生状态可能变化时返回零或一个可直接执行的 scoped `maintenance sync` follow-up；Domain 内部路径必须归一化为对应 Domain，预览和阻塞结果必须返回空列表；
   调用方只执行实际返回的 follow-up，不固定追加 check 或全量扫描。

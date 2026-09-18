@@ -126,6 +126,9 @@ def apply_document(
     document_type: str | None = typer.Option(None, "--type"),
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
+    expected_plan: str | None = typer.Option(
+        None, "--expected-plan", help="改名或移动时传入预览返回的计划摘要"
+    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或应用一篇 Profile 合法文档的创建、补丁与显式类型变更。
@@ -145,6 +148,7 @@ def apply_document(
                     document_type=document_type,
                     values=values,
                     expected_hash=expected_hash,
+                    expected_plan=expected_plan,
                     confirm=confirm,
                 )
             )
@@ -161,6 +165,9 @@ def move_document(
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
     unset_fields: list[str] | None = typer.Option(None, "--unset"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
+    expected_plan: str | None = typer.Option(
+        None, "--expected-plan", help="改名或移动时传入预览返回的计划摘要"
+    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或移动一篇文档，并按目标 Domain 契约更新归属与引用。"""
@@ -174,6 +181,7 @@ def move_document(
                 values=values,
                 unset_fields=tuple(unset_fields or []),
                 expected_hash=expected_hash,
+                expected_plan=expected_plan,
                 confirm=confirm,
             )
         )
@@ -186,6 +194,9 @@ def rename_document(
     source: str = typer.Option(..., "--path", help=PATH_OPTION_HELP),
     name: str = typer.Option(..., "--name", help="新标题；不含类型前缀和 .md 后缀"),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
+    expected_plan: str | None = typer.Option(
+        None, "--expected-plan", help="改名或移动时传入预览返回的计划摘要"
+    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     """预览或原地改名一篇文档，并同步标题、文件名与受管引用。"""
@@ -195,6 +206,7 @@ def rename_document(
                 source,
                 name,
                 expected_hash=expected_hash,
+                expected_plan=expected_plan,
                 confirm=confirm,
             )
         )

@@ -128,6 +128,7 @@ def setup(
     make_default: bool = typer.Option(False, "--default", help="设为默认 Workspace"),
 ) -> None:
     """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
+
     def operation() -> dict[str, object]:
         if path is None and workspace_id is not None:
             raise ConfigurationError("--id 只能与 --path 一起使用", code="invalid-option")

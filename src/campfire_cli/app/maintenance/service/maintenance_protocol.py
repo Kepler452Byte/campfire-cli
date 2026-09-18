@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol
+from pathlib import Path
+from typing import Any, Protocol
 
 from campfire_cli.app.document.schema import DocumentIndexResult
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
@@ -13,6 +14,8 @@ from campfire_cli.app.maintenance.schema.maintenance_schema import (
 
 class DocumentIndexMaintainerProtocol(Protocol):
     """Expose only the index maintenance operations needed by Maintenance."""
+
+    def relation_views(self, sources: list[Path]) -> dict[Path, list[dict[str, Any]]]: ...
 
     def rebuild(self) -> DocumentIndexResult: ...
 

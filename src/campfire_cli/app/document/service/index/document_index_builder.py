@@ -10,20 +10,9 @@ from typing import Any
 
 from campfire_cli.app.document.schema import DocumentEdgeRecord, DocumentIndexRecord
 from campfire_cli.common.documents.domain_context import DomainContextError, resolve_domain_context
-from campfire_cli.common.documents.links import (
-    LinkReference,
-    extract_link_references,
-    resolve_declared_reference,
-    resolve_link_reference,
-    stem_index,
-)
 from campfire_cli.common.documents.markdown import MarkdownDocument, parse_document
+from campfire_cli.common.documents.related_docs import RELATED_DOCS, related_documents
 from campfire_cli.config.settings import WorkspaceSettings
-
-DECLARED_FIELDS = {
-    "related": "declared-related",
-    "superseded_by": "declared-superseded-by",
-}
 
 
 class DocumentIndexBuilder:
@@ -69,36 +58,25 @@ class DocumentIndexBuilder:
         sources: set[str],
         parsed_by_path: dict[str, tuple[str, MarkdownDocument]],
     ) -> list[DocumentEdgeRecord]:
-        queryable_paths = {
-            paths[relative].resolve()
-            for relative, record in records.items()
-            if record.queryable and relative in paths
-        }
-        by_stem = stem_index(queryable_paths)
+        candidates = {name for name, record in records.items() if record.queryable}
         edges: list[DocumentEdgeRecord] = []
         for relative in sorted(sources):
-            path = paths[relative]
-            _text, parsed = parsed_by_path.get(relative) or self._read_document(path)
-            edges.extend(self._declared_edges(relative, path, parsed, queryable_paths, by_stem))
-            for reference in extract_link_references(parsed.body):
-                if self._is_non_document_reference(reference):
-                    continue
-                resolution = resolve_link_reference(
-                    self._settings.vault_root, path, reference, queryable_paths, by_stem
-                )
-                if resolution.external:
+            _text, parsed = parsed_by_path.get(relative) or self._read_document(paths[relative])
+            for item in related_documents(
+                parsed.frontmatter.get(RELATED_DOCS), relative, candidates
+            ):
+                if item.resolution == "duplicate":
                     continue
                 edges.append(
-                    self._edge(
-                        relative,
-                        reference.raw_target,
-                        reference.relation_type,
-                        resolution.status,
-                        resolution.matches,
-                        reference.line + parsed.body_start_line - 1,
+                    DocumentEdgeRecord(
+                        source_path=relative,
+                        target_path=item.target,
+                        raw_target=item.raw,
+                        relation_type="related_docs",
+                        resolution=item.resolution,
                     )
                 )
-        return self._deduplicate_edges(edges)
+        return edges
 
     def topology_hash(self) -> str:
         marker_names = {
@@ -140,54 +118,6 @@ class DocumentIndexBuilder:
             if domain:
                 domains.add(domain)
         return domains, set(self._project_roots.values())
-
-    def _declared_edges(
-        self,
-        relative: str,
-        path: Path,
-        parsed: MarkdownDocument,
-        candidates: set[Path],
-        by_stem: dict[str, tuple[Path, ...]],
-    ) -> list[DocumentEdgeRecord]:
-        edges: list[DocumentEdgeRecord] = []
-        for field, relation_type in DECLARED_FIELDS.items():
-            for raw_target in self._strings(parsed.frontmatter.get(field)):
-                resolution = resolve_declared_reference(
-                    self._settings.vault_root, path, raw_target, candidates, by_stem
-                )
-                edges.append(
-                    self._edge(
-                        relative,
-                        raw_target,
-                        relation_type,
-                        resolution.status,
-                        resolution.matches,
-                        None,
-                    )
-                )
-        return edges
-
-    def _edge(
-        self,
-        source: str,
-        raw_target: str,
-        relation_type: str,
-        resolution: str,
-        matches: tuple[Path, ...],
-        line: int | None,
-    ) -> DocumentEdgeRecord:
-        relative_matches = [
-            item.relative_to(self._settings.vault_root).as_posix() for item in matches
-        ]
-        return DocumentEdgeRecord(
-            source_path=source,
-            target_path=relative_matches[0] if len(relative_matches) == 1 else None,
-            raw_target=raw_target,
-            relation_type=relation_type,
-            resolution=resolution,
-            candidates=relative_matches,
-            line=line,
-        )
 
     def _domain_context(self, path: Path) -> tuple[str | None, str | None]:
         try:
@@ -233,25 +163,3 @@ class DocumentIndexBuilder:
         if isinstance(value, list):
             return [item for item in value if isinstance(item, str) and item]
         return []
-
-    @staticmethod
-    def _is_non_document_reference(reference: LinkReference) -> bool:
-        target = reference.raw_target.strip().strip("<>").split("#", 1)[0]
-        suffix = Path(target).suffix.lower()
-        return bool(suffix and suffix != ".md")
-
-    @staticmethod
-    def _deduplicate_edges(edges: list[DocumentEdgeRecord]) -> list[DocumentEdgeRecord]:
-        unique: dict[tuple[Any, ...], DocumentEdgeRecord] = {}
-        for edge in edges:
-            key = (
-                edge.source_path,
-                edge.target_path,
-                edge.raw_target,
-                edge.relation_type,
-                edge.resolution,
-                tuple(edge.candidates),
-                edge.line,
-            )
-            unique.setdefault(key, edge)
-        return list(unique.values())

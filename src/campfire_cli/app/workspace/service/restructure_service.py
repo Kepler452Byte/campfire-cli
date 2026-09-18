@@ -3,16 +3,11 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path, PurePosixPath
-from urllib.parse import quote
 from uuid import uuid4
 
 import yaml
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
-from campfire_cli.app.document.service.mutation.type_apply import (
-    rewrite_markdown_links,
-    rewrite_wikilinks,
-)
 from campfire_cli.app.document.service.rules.document_rule_service import DocumentRuleService
 from campfire_cli.app.document.service.rules.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.workspace.schema.restructure_schema import (
@@ -24,6 +19,7 @@ from campfire_cli.app.workspace.schema.restructure_schema import (
 )
 from campfire_cli.app.workspace.service.restructure_protocol import RestructureRepositoryProtocol
 from campfire_cli.common.documents.markdown import parse_document, render_document
+from campfire_cli.common.documents.related_docs import rewrite_related_docs
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
 from campfire_cli.common.hashing import file_sha256, text_sha256
@@ -376,11 +372,6 @@ class RestructureService:
         references = self._reference_files()
         original_contents = {path: path.read_text(encoding="utf-8") for path in references}
         contents = dict(original_contents)
-        stem_counts: dict[str, int] = {}
-        for path in references:
-            if path.suffix.lower() == ".md":
-                stem_counts[path.stem] = stem_counts.get(path.stem, 0) + 1
-
         for item in items:
             source = safe_path(self._settings.vault_root, item.source)
             target = safe_path(self._settings.vault_root, item.target)
@@ -398,22 +389,8 @@ class RestructureService:
                 )
             contents[target] = updated
 
-            old_path = Path(item.source)
-            new_path = Path(item.target)
-            for reference, text in list(contents.items()):
-                rewritten = text.replace(item.source, item.target).replace(
-                    quote(item.source), quote(item.target)
-                )
-                if stem_counts.get(source.stem) == 1 and old_path.stem != new_path.stem:
-                    rewritten = rewrite_wikilinks(rewritten, old_path.stem, new_path.stem)
-                if reference.suffix.lower() == ".md":
-                    rewritten = rewrite_markdown_links(
-                        rewritten,
-                        reference,
-                        self._settings.vault_root / old_path,
-                        self._settings.vault_root / new_path,
-                    )
-                contents[reference] = rewritten
+        mapping = {item.source: item.target for item in items if item.source != item.target}
+        contents = {path: rewrite_related_docs(text, mapping) for path, text in contents.items()}
 
         sources = {safe_path(self._settings.vault_root, item.source) for item in items}
         writes = tuple(

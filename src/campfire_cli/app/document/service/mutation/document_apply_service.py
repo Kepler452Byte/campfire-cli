@@ -13,8 +13,12 @@ from campfire_cli.app.document.schema import (
     DocumentApplyResult,
 )
 from campfire_cli.app.document.service.document_scanner import is_system_scope_path
+from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.mutation.document_relocation import (
+    plan_digest,
     prepare_document_relocation,
+    refresh_after_write,
+    relationship_follow_up,
 )
 from campfire_cli.app.document.service.rules.document_patch_values import (
     decode_patch_values,
@@ -33,7 +37,7 @@ from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
-from campfire_cli.common.hashing import file_sha256
+from campfire_cli.common.hashing import text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -45,11 +49,13 @@ class DocumentApplyService:
         settings: WorkspaceSettings,
         rules: DocumentRuleService,
         profiles: ProfileRegistry,
+        index: DocumentIndexService,
         project_roots: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._rules = rules
         self._profiles = profiles
+        self._index = index
         self._project_roots = project_roots or {}
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
@@ -73,7 +79,7 @@ class DocumentApplyService:
                 hint="请删除其他扩展名；无扩展名时 CLI 会自动补充 .md",
             )
         exists = source.is_file()
-        original = source.read_text(encoding="utf-8") if exists else ""
+        original = source.read_bytes().decode("utf-8") if exists else ""
         parsed = parse_document(original)
 
         current_type = parsed.frontmatter.get("type")
@@ -135,7 +141,7 @@ class DocumentApplyService:
             )
             for field in removed_fields:
                 frontmatter.pop(field, None)
-        actual_hash = file_sha256(source) if exists else "missing"
+        actual_hash = text_sha256(original) if exists else "missing"
         unknown = sorted(set(request.values) - set(profile.allowed))
         candidates = workspace_candidate_sets(self._settings.vault_root)
         values, input_issues = decode_patch_values(
@@ -209,7 +215,7 @@ class DocumentApplyService:
             issues,
             [str(item.get("field") or item.get("detail")) for item in missing],
         )
-        if issues or not request.confirm:
+        if issues:
             return result
         if request.expected_hash is not None and request.expected_hash != actual_hash:
             return result.model_copy(
@@ -219,10 +225,11 @@ class DocumentApplyService:
                 }
             )
 
+        self._index.reconcile()
         updated_references: list[str] = []
         if exists and target != source:
             writes, updated_references, expected = prepare_document_relocation(
-                self._settings.vault_root, source, target, rendered
+                self._settings.vault_root, source, target, rendered, self._index
             )
             expected[source] = actual_hash
             expected[target] = None
@@ -238,13 +245,55 @@ class DocumentApplyService:
                 label="document apply",
                 expected={target: None if not exists else actual_hash},
             )
-        self._executor.execute(change_set)
+        generation = self._index.generation()
+        digest = plan_digest(self._settings.vault_root, change_set)
+        result = result.model_copy(
+            update={"expected_plan": digest, "updated_references": updated_references}
+        )
+        if not request.confirm:
+            return result
+        if exists and target != source and request.expected_plan != digest:
+            return result.model_copy(
+                update={
+                    "status": "blocked",
+                    "issues": [
+                        {
+                            "code": "document-plan-changed"
+                            if request.expected_plan
+                            else "document-plan-required",
+                            "hint": "重新预览并传入返回的 --expected-plan。",
+                        }
+                    ],
+                }
+            )
+        self._executor.execute(
+            change_set, before_write=lambda: self._index.prepare_write(generation)
+        )
+        index_issues = refresh_after_write(
+            self._index,
+            {
+                source.relative_to(self._settings.vault_root).as_posix(),
+                target_name,
+                *updated_references,
+            },
+        )
         return result.model_copy(
             update={
                 "status": "applied",
                 "write_performed": True,
+                "issues": index_issues,
                 "updated_references": updated_references,
-                "follow_up": self._follow_up(
+                "follow_up": relationship_follow_up(
+                    self._settings,
+                    {
+                        source.relative_to(self._settings.vault_root).as_posix(),
+                        target_name,
+                        *updated_references,
+                    },
+                    [original, rendered],
+                )
+                if updated_references or "related_docs" in request.values
+                else self._follow_up(
                     request,
                     exists,
                     parsed.has_frontmatter,

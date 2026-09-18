@@ -50,9 +50,11 @@ class DocumentService:
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
         self._project_roots = project_roots
         self._application = DocumentApplyService(
-            settings, self._rules, self._profiles, project_roots
+            settings, self._rules, self._profiles, index, project_roots
         )
-        self._movement = DocumentMoveService(settings, self._rules, self._profiles, project_roots)
+        self._movement = DocumentMoveService(
+            settings, self._rules, self._profiles, index, project_roots
+        )
 
     def check(self, relative_path: str) -> dict[str, Any]:
         path = self._document_path(relative_path)
@@ -100,15 +102,6 @@ class DocumentService:
             context = None
         issues = self._rules.check_document(self._settings.vault_root, path)
         generation, relations = self._index.relations(normalized)
-        issues.extend(
-            {
-                "code": f"document-reference-{item['resolution']}",
-                "path": normalized,
-                "detail": item["raw_target"],
-                "actual": item["candidates"],
-            }
-            for item in relations["unresolved"]
-        )
         return {
             "status": "ok" if not issues else "needs-review",
             "workspace_id": self._settings.workspace_id,
@@ -200,6 +193,7 @@ class DocumentService:
         values: dict[str, str] | None = None,
         unset_fields: tuple[str, ...] = (),
         expected_hash: str | None = None,
+        expected_plan: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
         source_path = safe_path(self._settings.vault_root, source)
@@ -219,6 +213,7 @@ class DocumentService:
             values=values or {},
             unset_fields=unset_fields,
             expected_hash=expected_hash,
+            expected_plan=expected_plan,
             confirm=confirm,
         )
 
@@ -228,12 +223,14 @@ class DocumentService:
         name: str,
         *,
         expected_hash: str | None = None,
+        expected_plan: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
         return self._movement.rename(
             source,
             name,
             expected_hash=expected_hash,
+            expected_plan=expected_plan,
             confirm=confirm,
         )
 

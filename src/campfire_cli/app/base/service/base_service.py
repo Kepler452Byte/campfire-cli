@@ -18,7 +18,7 @@ class BaseService:
     _FIELD_REFERENCE = re.compile(
         r"(?<![.\w])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*(?:==|!=|\.isEmpty\(|\.contains\()"
     )
-    _ENUM_COMPARISON = re.compile(r'''\b([A-Za-z_]\w*)\s*(?:==|!=)\s*["']([^"']+)["']''')
+    _ENUM_COMPARISON = re.compile(r"""\b([A-Za-z_]\w*)\s*(?:==|!=)\s*["']([^"']+)["']""")
 
     def __init__(self, settings: WorkspaceSettings, repository: BaseRepository) -> None:
         self._settings = settings

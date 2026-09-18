@@ -53,5 +53,9 @@ def iter_documents(
             relative = path.relative_to(root)
             if exempt_document(path, config) or any(part in ignored for part in relative.parts):
                 continue
-            documents.add(path.resolve())
+            if not path.is_file() or any(
+                part.is_symlink() for part in (path, *path.parents) if part != root
+            ):
+                continue
+            documents.add(path)
     return sorted(documents, key=lambda path: str(path.relative_to(root)).casefold())

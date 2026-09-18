@@ -4,10 +4,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
-from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
 from campfire_cli.app.document.schema import DocumentMoveResult
+from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.mutation.document_relocation import (
+    plan_digest,
     prepare_document_relocation,
+    refresh_after_write,
+    relationship_follow_up,
 )
 from campfire_cli.app.document.service.rules.document_patch_values import (
     decode_patch_values,
@@ -26,7 +29,7 @@ from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
-from campfire_cli.common.hashing import file_sha256
+from campfire_cli.common.hashing import text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
 STRUCTURAL_FIELDS = {"updated"}
@@ -40,11 +43,13 @@ class DocumentMoveService:
         settings: WorkspaceSettings,
         rules: DocumentRuleService,
         profiles: ProfileRegistry,
+        index: DocumentIndexService,
         project_roots: dict[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._rules = rules
         self._profiles = profiles
+        self._index = index
         self._project_roots = project_roots or {}
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
@@ -56,6 +61,7 @@ class DocumentMoveService:
         values: dict[str, str],
         unset_fields: tuple[str, ...],
         expected_hash: str | None = None,
+        expected_plan: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
         return self._relocate(
@@ -64,6 +70,7 @@ class DocumentMoveService:
             values=values,
             unset_fields=unset_fields,
             expected_hash=expected_hash,
+            expected_plan=expected_plan,
             confirm=confirm,
             operation="move",
         )
@@ -74,6 +81,7 @@ class DocumentMoveService:
         name: str,
         *,
         expected_hash: str | None = None,
+        expected_plan: str | None = None,
         confirm: bool = False,
     ) -> DocumentMoveResult:
         """Rename one document in place from a logical title."""
@@ -83,7 +91,7 @@ class DocumentMoveService:
         source = safe_path(self._settings.vault_root, source_name)
         if not source.is_file() or source.suffix.lower() != ".md":
             raise ConfigurationError(f"Markdown 文档不存在：{source_name}")
-        document_type = parse_document(source.read_text(encoding="utf-8")).frontmatter.get("type")
+        document_type = parse_document(source.read_bytes().decode("utf-8")).frontmatter.get("type")
         target_name = f"{title}.md"
         normalized_title = title
         if (
@@ -100,6 +108,7 @@ class DocumentMoveService:
             values={"name": normalized_title},
             unset_fields=(),
             expected_hash=expected_hash,
+            expected_plan=expected_plan,
             confirm=confirm,
             operation="rename",
         )
@@ -112,6 +121,7 @@ class DocumentMoveService:
         values: dict[str, str],
         unset_fields: tuple[str, ...],
         expected_hash: str | None,
+        expected_plan: str | None,
         confirm: bool,
         operation: Literal["move", "rename"],
     ) -> DocumentMoveResult:
@@ -124,8 +134,8 @@ class DocumentMoveService:
         if source.suffix.lower() != ".md" or target.suffix.lower() != ".md":
             raise ConfigurationError("document move 只支持 Markdown 文档")
 
-        actual_hash = file_sha256(source)
-        original = source.read_text(encoding="utf-8")
+        original = source.read_bytes().decode("utf-8")
+        actual_hash = text_sha256(original)
         parsed = parse_document(original)
         source_domain, source_domain_issue = self._domain_context(source)
         target_domain, target_domain_issue = self._domain_context(target)
@@ -258,14 +268,6 @@ class DocumentMoveService:
                     frontmatter_changes[field] = after
 
         status = "needs-input" if missing_fields else "blocked" if issues else "ready"
-        follow_up = maintenance_sync_follow_up(
-            self._settings.workspace_id,
-            (
-                context.root.relative_to(self._settings.vault_root).as_posix()
-                for context in (source_domain, target_domain)
-                if context is not None
-            ),
-        )
         result = DocumentMoveResult(
             status=status,
             workspace_id=self._settings.workspace_id,
@@ -279,12 +281,13 @@ class DocumentMoveService:
             issues=issues,
             missing_fields=missing_fields,
         )
-        if issues or not confirm:
+        if issues:
             return result
 
         if source == target and rendered == original:
             return result.model_copy(update={"status": "up-to-date"})
 
+        self._index.reconcile()
         if source == target:
             writes = [FileWrite(source, rendered)]
             updated_references: list[str] = []
@@ -292,23 +295,55 @@ class DocumentMoveService:
             deletes: tuple[Path, ...] = ()
         else:
             writes, updated_references, expected = prepare_document_relocation(
-                self._settings.vault_root, source, target, rendered
+                self._settings.vault_root, source, target, rendered, self._index
             )
             expected[source] = actual_hash
             expected[target] = None
             deletes = (source,)
-        self._executor.execute(
-            FileChangeSet(
-                writes=tuple(writes),
-                deletes=deletes,
-                label=f"document {operation}",
-                expected=expected,
+        changes = FileChangeSet(
+            writes=tuple(writes),
+            deletes=deletes,
+            label=f"document {operation}",
+            expected=expected,
+        )
+        generation = self._index.generation()
+        digest = plan_digest(self._settings.vault_root, changes)
+        result = result.model_copy(
+            update={"expected_plan": digest, "updated_references": updated_references}
+        )
+        if not confirm:
+            return result
+        if expected_plan != digest:
+            return result.model_copy(
+                update={
+                    "status": "blocked",
+                    "issues": [
+                        {
+                            "code": "document-plan-changed"
+                            if expected_plan
+                            else "document-plan-required",
+                            "hint": "重新预览，并传入返回的 --expected-plan 和 --expected-hash。",
+                        }
+                    ],
+                }
             )
+        self._executor.execute(changes, before_write=lambda: self._index.prepare_write(generation))
+        index_issues = refresh_after_write(
+            self._index,
+            {
+                source_name,
+                target_name,
+                *updated_references,
+            },
+        )
+        follow_up = relationship_follow_up(
+            self._settings, {source_name, target_name, *updated_references}, [original, rendered]
         )
         return result.model_copy(
             update={
                 "status": "renamed" if operation == "rename" else "moved",
                 "write_performed": True,
+                "issues": index_issues,
                 "updated_references": updated_references,
                 "follow_up": follow_up,
             }

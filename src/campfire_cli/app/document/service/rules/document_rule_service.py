@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.app.document.service.rules.profile_registry import (
     EffectiveProfile,
     ProfileRegistry,
@@ -11,6 +12,7 @@ from campfire_cli.app.document.service.rules.profile_registry import (
 from campfire_cli.common.documents.document_types import prefixed_name
 from campfire_cli.common.documents.frontmatter_format import ordered_keys
 from campfire_cli.common.documents.markdown import parse_document
+from campfire_cli.common.documents.related_docs import related_documents, relation_issues
 
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -202,6 +204,7 @@ class DocumentRuleService:
                         "allowed": [expected],
                     }
                 )
+        issues.extend(self._relations(root, path, frontmatter, rules))
         issues.extend(self._state_invariants(relative, path, document_type, frontmatter))
         return issues
 
@@ -343,7 +346,37 @@ class DocumentRuleService:
                         "allowed": [expected],
                     }
                 )
+        issues.extend(self._relations(root, path, patch, rules))
         return issues
+
+    def _relations(self, root: Path, path: Path, values: dict, rules: dict) -> list[dict]:
+        fields = [
+            key
+            for key, kind in rules.get("list_items", {}).items()
+            if kind == "document-link" and values.get(key)
+        ]
+        if not fields:
+            return []
+        candidates = {
+            p.relative_to(root).as_posix() for p in iter_documents(root, self._type_config)
+        }
+        targets = {
+            item.target
+            for key in fields
+            for item in related_documents(values[key], path.relative_to(root).as_posix())
+            if item.target in candidates
+        }
+        for target in targets:
+            if (
+                parse_document((root / target).read_text(encoding="utf-8")).frontmatter.get("type")
+                == "moc"
+            ):
+                candidates.discard(target)
+        return [
+            issue
+            for key in fields
+            for issue in relation_issues(values[key], path.relative_to(root).as_posix(), candidates)
+        ]
 
     @staticmethod
     def _matches_value_type(value: Any, expected: str) -> bool:

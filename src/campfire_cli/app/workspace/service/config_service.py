@@ -27,10 +27,6 @@ class WorkspaceConfigService:
             "human_request_root",
             "space_marker",
             "domain_marker",
-            "related_limit",
-            "related_min_score",
-            "cross_domain_related_limit",
-            "cross_domain_min_score",
         ):
             if not self.settings.governance.get(field):
                 self._issue(issues, "governance", field, "required-value-missing")

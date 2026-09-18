@@ -105,6 +105,9 @@ class EffectiveProfile:
             },
             "value_types": dict(self.value_types),
             "lists": list(self.lists),
+            "list_items": {
+                field.name: field.items for field in self.fields if field.kind == "list"
+            },
             "dates": list(self.dates),
             "conditional_required": list(self.conditional_required),
             "unknown_fields": self.unknown_fields,

@@ -223,15 +223,7 @@ class MaintenanceService:
             domain_by_note,
             key=lambda path: str(path.relative_to(self._settings.vault_root)).casefold(),
         )
-        all_relations = governance_sync.generate_relations(
-            all_notes,
-            domain_by_note,
-            self._settings.vault_root,
-            int(self._settings.governance["related_limit"]),
-            float(self._settings.governance["related_min_score"]),
-            int(self._settings.governance["cross_domain_related_limit"]),
-            float(self._settings.governance["cross_domain_min_score"]),
-        )
+        all_relations = self._document_index.relation_views(all_notes)
         for domain in sorted(domains, key=lambda item: item.id):
             notes = notes_by_domain[domain.id]
             note_count += len(notes)

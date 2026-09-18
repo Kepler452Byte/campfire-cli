@@ -10,6 +10,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import (
     SqliteWorkspaceRepository,
 )
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
+from campfire_cli.common.documents.markdown import render_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.config.settings import campfire_home
 from campfire_cli.container import AppContainer
@@ -114,71 +115,6 @@ def test_system_scope_is_indexed_without_a_domain(workspace: Path) -> None:
     assert inspected["status"] == "ok"
 
 
-def test_inspect_returns_declared_outgoing_incoming_and_unresolved(workspace: Path) -> None:
-    domain = write_project_domain(workspace)
-    source = domain / "计划-Source.md"
-    target = domain / "记录-Target.md"
-    incoming = domain / "记录-Incoming.md"
-    source.write_text(
-        "---\nname: Source\ndescription: Source\ntype: plan\nproject: example\n"
-        "domain: project-example\ndocument_status: current\nlifecycle: proposed\n"
-        "related: [记录-Target]\ncreated: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
-        "---\n# Source\nSee [[记录-Target]] and [[Missing]].\n",
-        encoding="utf-8",
-    )
-    target.write_text(
-        "---\nname: Target\ndescription: Target\ntype: record\nproject: example\n"
-        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
-        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
-        "---\n# Target\n",
-        encoding="utf-8",
-    )
-    incoming.write_text(
-        "---\nname: Incoming\ndescription: Incoming\ntype: record\nproject: example\n"
-        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
-        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
-        "---\n# Incoming\nSee [[计划-Source]].\n",
-        encoding="utf-8",
-    )
-    document = AppContainer.build("test").document
-
-    result = document.inspect("mywork/Project/计划-Source.md")
-
-    assert result["status"] == "needs-review"
-    assert [item["name"] for item in result["relations"]["declared"]] == ["Target"]
-    assert [item["name"] for item in result["relations"]["outgoing"]] == ["Target"]
-    assert [item["name"] for item in result["relations"]["incoming"]] == ["Incoming"]
-    assert result["relations"]["unresolved"][0]["raw_target"] == "Missing"
-    assert any(item["code"] == "document-reference-missing" for item in result["issues"])
-
-
-def test_reconcile_removes_deleted_documents_and_edges(workspace: Path) -> None:
-    domain = write_project_domain(workspace)
-    source = domain / "记录-Source.md"
-    target = domain / "记录-Target.md"
-    for path, name, body in (
-        (source, "Source", "See [[记录-Target]].\n"),
-        (target, "Target", ""),
-    ):
-        path.write_text(
-            "---\n"
-            f"name: {name}\ndescription: {name}\ntype: record\nproject: example\n"
-            "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
-            "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
-            "---\n"
-            f"# {name}\n{body}",
-            encoding="utf-8",
-        )
-    document = AppContainer.build("test").document
-    assert document.inspect("mywork/Project/记录-Source.md")["relations"]["outgoing"]
-
-    target.unlink()
-    result = document.inspect("mywork/Project/记录-Source.md")
-
-    assert result["relations"]["outgoing"] == []
-    assert result["relations"]["unresolved"][0]["raw_target"] == "记录-Target"
-
-
 def test_reconcile_rebuilds_when_domain_context_changes(workspace: Path) -> None:
     domain = write_project_domain(workspace)
     task = domain / "任务-Todo.md"
@@ -200,36 +136,6 @@ def test_reconcile_rebuilds_when_domain_context_changes(workspace: Path) -> None
     assert updated.index_generation > initial.index_generation
 
 
-def test_reconcile_removes_edges_when_target_becomes_non_queryable(workspace: Path) -> None:
-    domain = write_project_domain(workspace)
-    source = domain / "记录-Source.md"
-    target = domain / "记录-Target.md"
-    source.write_text(
-        "---\nname: Source\ndescription: Source\ntype: record\nproject: example\n"
-        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
-        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
-        "---\n# Source\nSee [[记录-Target]].\n",
-        encoding="utf-8",
-    )
-    target.write_text(
-        "---\nname: Target\ndescription: Target\ntype: record\nproject: example\n"
-        "domain: project-example\ndocument_status: current\nlifecycle: maintained\n"
-        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Target\n",
-        encoding="utf-8",
-    )
-    document = AppContainer.build("test").document
-    assert document.inspect("mywork/Project/记录-Source.md")["relations"]["outgoing"]
-
-    target.write_text(
-        target.read_text(encoding="utf-8").replace("type: record", "type: moc"),
-        encoding="utf-8",
-    )
-    result = document.inspect("mywork/Project/记录-Source.md")
-
-    assert result["relations"]["outgoing"] == []
-    assert result["relations"]["unresolved"][0]["raw_target"] == "记录-Target"
-
-
 def test_list_rejects_unknown_structured_filters(workspace: Path) -> None:
     write_project_domain(workspace)
     document = AppContainer.build("test").document
@@ -238,48 +144,6 @@ def test_list_rejects_unknown_structured_filters(workspace: Path) -> None:
         document.list(project="missing")
     with pytest.raises(ConfigurationError, match="未知 Domain"):
         document.list(domain="missing")
-
-
-def test_index_excludes_moc_and_reports_ambiguous_links(workspace: Path) -> None:
-    first = write_project_domain(workspace)
-    second = workspace / "mynote/Knowledge"
-    second.mkdir()
-    (second / "_领域.md").write_text(
-        "---\nname: Knowledge\ndomain_id: knowledge\ndomain_type: knowledge-domain\n"
-        "governance: knowledge-docs\nmoc: MOC-Knowledge\nstatus: active\n---\n",
-        encoding="utf-8",
-    )
-    (second / "MOC-Knowledge.md").write_text(
-        "---\nname: Knowledge\ndescription: Index\ntype: moc\ndocument_status: current\n"
-        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Knowledge\n",
-        encoding="utf-8",
-    )
-    for directory in (first, second):
-        target = directory / "记录-Shared.md"
-        target.write_text(
-            "---\nname: Shared\ndescription: Shared\ntype: record\ndocument_status: current\n"
-            "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n---\n# Shared\n",
-            encoding="utf-8",
-        )
-    source = first / "记录-Source.md"
-    source.write_text(
-        "---\nname: Source\ndescription: Source\ntype: record\ndocument_status: current\n"
-        "created: 2026-09-15\nupdated: 2026-09-15\ntags: []\n"
-        "---\n# Source\nSee [[记录-Shared]].\n",
-        encoding="utf-8",
-    )
-    document = AppContainer.build("test").document
-
-    listed = document.list()
-    inspected = document.inspect("mywork/Project/记录-Source.md")
-
-    assert all(item.type != "moc" for item in listed.items)
-    unresolved = inspected["relations"]["unresolved"][0]
-    assert unresolved["resolution"] == "ambiguous"
-    assert unresolved["candidates"] == [
-        "mynote/Knowledge/记录-Shared.md",
-        "mywork/Project/记录-Shared.md",
-    ]
 
 
 def test_failed_snapshot_replace_keeps_previous_generation(workspace: Path) -> None:
@@ -340,3 +204,136 @@ def test_project_registry_root_supplies_legacy_domain_context(workspace: Path) -
 
     assert result.count == 1
     assert result.items[0].project == "legacy"
+
+
+def write_record(path: Path, root: Path, links: list[str] | None = None, body: str = "") -> None:
+    path.write_text(
+        render_document(
+            {
+                "name": path.stem.removeprefix("记录-"),
+                "description": "关系测试",
+                "type": "record",
+                "document_status": "current",
+                "created": "2026-09-18",
+                "updated": "2026-09-18",
+                "tags": [],
+                **({"related_docs": links} if links is not None else {}),
+            },
+            body,
+            [
+                "name",
+                "description",
+                "type",
+                "document_status",
+                "created",
+                "updated",
+                "tags",
+                "related_docs",
+            ],
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_only_related_docs_produces_edges_and_missing_is_reported(workspace: Path) -> None:
+    domain = write_project_domain(workspace)
+    source, target, incoming = [
+        domain / f"记录-{name}.md" for name in ("Source", "Target", "Incoming")
+    ]
+    write_record(target, workspace)
+    write_record(
+        source,
+        workspace,
+        ["[[mywork/Project/记录-Target.md]]", "[[mywork/Project/记录-Missing.md]]"],
+        "\n正文 [[记录-Incoming]] [链接](记录-Incoming.md) ![[图片.png]]\n",
+    )
+    write_record(incoming, workspace, ["[[mywork/Project/记录-Source.md]]"])
+    document = AppContainer.build("test").document
+    result = document.inspect("mywork/Project/记录-Source.md")
+    assert result["relations"]["out_degree"] == 1
+    assert result["relations"]["in_degree"] == 1
+    assert [i["name"] for i in result["relations"]["outgoing"]] == ["Target"]
+    assert [i["name"] for i in result["relations"]["incoming"]] == ["Incoming"]
+    assert result["relations"]["unresolved"][0]["resolution"] == "missing"
+    assert any(i["code"] == "related-docs-missing" for i in result["issues"])
+    write_record(source, workspace, [], "[[记录-Target]]\n")
+    assert document.inspect("mywork/Project/记录-Target.md")["relations"]["incoming"] == []
+
+
+def test_deleted_target_keeps_missing_edge_and_restores_without_source_parse(
+    workspace: Path, monkeypatch
+) -> None:
+    domain = write_project_domain(workspace)
+    source, target = domain / "记录-Source.md", domain / "记录-Target.md"
+    write_record(target, workspace)
+    write_record(source, workspace, ["[[mywork/Project/记录-Target.md]]"])
+    document = AppContainer.build("test").document
+    index = document._index
+    index.reconcile()
+    original = source.read_bytes()
+    target.unlink()
+    index.reconcile()
+    edge = index._repository.load_edges(source="mywork/Project/记录-Source.md")[0]
+    assert edge.resolution == "missing"
+    assert edge.target_path == "mywork/Project/记录-Target.md"
+    parsed_sources = []
+    record = index._builder.record
+
+    def track(path, *args):
+        parsed_sources.append(path)
+        return record(path, *args)
+
+    monkeypatch.setattr(index._builder, "record", track)
+    write_record(target, workspace)
+    index.reconcile()
+    assert parsed_sources == [target]
+    assert (
+        index._repository.load_edges(source="mywork/Project/记录-Source.md")[0].resolution
+        == "resolved"
+    )
+    assert source.read_bytes() == original
+    source.unlink()
+    index.reconcile()
+    assert index._repository.load_edges() == []
+
+
+def test_exact_paths_disambiguate_and_non_queryable_target_is_missing(workspace: Path) -> None:
+    domain = write_project_domain(workspace)
+    other = domain / "sub"
+    other.mkdir()
+    for directory in (domain, other):
+        write_record(directory / "记录-Shared.md", workspace)
+    source = domain / "记录-Source.md"
+    write_record(source, workspace, ["[[mywork/Project/sub/记录-Shared.md]]"])
+    document = AppContainer.build("test").document
+    result = document.inspect("mywork/Project/记录-Source.md")
+    assert result["relations"]["outgoing"][0]["target"] == "mywork/Project/sub/记录-Shared.md"
+    target = other / "记录-Shared.md"
+    target.write_text(target.read_text().replace("type: record", "type: moc"), encoding="utf-8")
+    assert document.inspect("mywork/Project/记录-Source.md")["relations"]["unresolved"]
+    assert all(i.type != "moc" for i in document.list().items)
+
+
+def test_delta_matches_full_rebuild_and_metadata_only_changes_preserve_fields(
+    workspace: Path, monkeypatch
+) -> None:
+    import os
+
+    domain = write_project_domain(workspace)
+    source, target = domain / "记录-Source.md", domain / "记录-Target.md"
+    write_record(target, workspace)
+    write_record(source, workspace, ["[[mywork/Project/记录-Target.md]]"])
+    index = AppContainer.build("test").document._index
+    index.reconcile()
+    stat = source.stat()
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    changed = index.reconcile()
+    assert not changed.full_rebuild
+    assert index._repository.load_documents({"mywork/Project/记录-Source.md"})[0].name == "Source"
+    write_record(source, workspace, [])
+    index.reconcile()
+    before = index._repository.load_edges()
+    docs = [(i.path, i.name, i.content_hash) for i in index._repository.load_documents()]
+    index.rebuild()
+    assert before == index._repository.load_edges()
+    assert docs == [(i.path, i.name, i.content_hash) for i in index._repository.load_documents()]

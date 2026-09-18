@@ -13,6 +13,7 @@ class DocumentApplyRequest(BaseModel):
     document_type: str | None = None
     values: dict[str, str] = Field(default_factory=dict)
     expected_hash: str | None = None
+    expected_plan: str | None = None
     confirm: bool = False
 
 
@@ -26,6 +27,7 @@ class DocumentApplyResult(BaseModel):
     normalization: list[dict[str, Any]] = Field(default_factory=list)
     profile: str
     expected_hash: str
+    expected_plan: str | None = None
     write_performed: bool = False
     updated_references: list[str] = Field(default_factory=list)
     issues: list[dict[str, Any]] = Field(default_factory=list)
@@ -42,6 +44,7 @@ class DocumentMoveResult(BaseModel):
     source_domain: str | None = None
     target_domain: str | None = None
     profile: str | None = None
+    expected_plan: str | None = None
     write_performed: bool = False
     updated_references: list[str] = Field(default_factory=list)
     frontmatter_changes: dict[str, Any] = Field(default_factory=dict)
@@ -74,14 +77,8 @@ class DocumentEdgeRecord(BaseModel):
     source_path: str
     target_path: str | None = None
     raw_target: str
-    relation_type: Literal[
-        "declared-related",
-        "declared-superseded-by",
-        "wikilink",
-        "markdown-link",
-        "embed",
-    ]
-    resolution: Literal["resolved", "missing", "ambiguous"]
+    relation_type: Literal["related_docs"] = "related_docs"
+    resolution: Literal["resolved", "missing", "invalid", "self"]
     candidates: list[str] = Field(default_factory=list)
     line: int | None = None
 

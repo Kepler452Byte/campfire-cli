@@ -38,7 +38,7 @@ apply 的 `--path` 必填，支持 Workspace 根相对路径或 Workspace 内绝
 
 CLI 预览结果
 ├── 有问题 → 修正可确定输入；关键事实缺失则询问，暂不写入
-└── 无问题且已授权 → 原输入 + 返回哈希 + confirm
+└── 无问题且已授权 → 原输入 + 返回哈希（改路径时另带计划摘要）+ confirm
     ├── 写入失败 → 报告问题，停止后续操作
     └── 写入成功 → 新建时按 target 补正文 → 执行实际 follow_up → 回报
 ```
@@ -59,6 +59,18 @@ campfire --workspace demo document apply --path "mynote/开发实践/安装验�
 ```
 
 新建预览返回 `status: planned`、`expected_hash: missing`、`target`；确认返回 `status: applied`、`write_performed: true`。已有文档使用实际返回哈希，不套用 `missing`。创建后必须补正文，保留 Frontmatter；没有 `--body` 参数。仅结构创建成功不等于文档内容已经完成。
+
+文档关系唯一事实源是 Frontmatter 的 `related_docs`。Agent 只通过 apply 修改它，例如 `--set 'related_docs=["[[mywork/项目/技术-登录.md]]"]'`；路径必须是 Workspace 根相对路径，保留 `.md`，不加别名或锚点。正文链接只是正文，不解析、不维护，也不为了关系同步改正文。反向关系由索引计算，不在目标文档重复填写。
+
+rename、move 或 apply 导致已有文件路径变化时，先预览完整影响范围，再用同一输入加返回的 `--expected-hash <hash> --expected-plan <digest> --confirm`。计划变化就重新预览，不绕过保护。
+
+### 创建与更新文档关联
+
+- **创建**：有依据且目标已存在时，在创建的 apply 中一并填写 `related_docs`；没有明确关联就省略，不要求先搜索整个 Workspace。
+- **更新**：不涉及关系时不传该字段；要添加或解除关系，先读取来源文档的原列表，保留无关项并去重，再提交完整列表。`--set related_docs=...` 是整体替换，不是追加；只有明确清空全部出向关系时才传空数组。
+- **任务产出**：为一个明确任务创建需求、技术方案或问题记录时，先创建文档，再在授权范围内把返回的 `target` 加入任务的列表；不同时给新文档补一条对称关系。若本次意图是从记录等文档关联任务，则直接在该来源文档填写任务路径，不强制改变方向。
+- **查看与解除**：需要关系上下文时用 inspect 同时查看 outgoing、incoming、unresolved。反向关联由索引计算；解除入向关联要修改对应来源文档，不能修改索引或目标文档的列表来代替。
+- **失败与边界**：关联目标尚未创建时先完成目标创建；目标不明不猜测。新文档成功但任务关联失败时报告两步的实际结果，只修复失败步骤。纯正文更新不维护关系，也不自动改变关联文档的状态。
 
 ## 异常与停止条件
 
@@ -89,7 +101,7 @@ Project 的物理归属由 CLI 解析，不表示自动写入任务的 `related_
 
 ## 完成条件与回报
 
-实际写入后，仅执行结果给出的 scoped follow_up，不固定转交 Maintenance Skill，不重复 check 或全库扫描。纯正文编辑改变显式关系且需刷新派生视图时，才执行一次对应 Domain 的 maintenance sync。
+实际写入后，仅执行结果给出的 scoped follow_up，不固定转交 Maintenance Skill，不重复 check 或全库扫描。纯正文编辑不改变受管关系，不需要为正文链接执行 sync。若返回文件已写入但索引刷新失败，修复索引问题后重新查询，不重复执行写入。
 
 关键歧义优先在当前对话询问；已有待确认记录授权或用户认可的持续记录约定时，才按当前 `governance.human_request_root` 和 human-request Profile 创建待确认文档。仅配置目录不等于授权，无法立即询问也不自动取得写入权限。待确认文档只记录已知事实与问题，不写成正式结论；用户回答后更新正式文档，归档仍需明确同意。
 

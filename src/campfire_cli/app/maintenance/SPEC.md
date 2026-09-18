@@ -18,3 +18,4 @@ maintenance/
 ```
 
 归档仅是 Document Profile 中的 `document_status` 值，通过 `document apply` 修改；Maintenance 不提供归档命令。
+关系页只消费 Document Index 的 `related_docs` 正向和反向投影；不另行解析正文链接、不计算标签或文本相似度。正文不再作为关系 SSOT，旧正文不自动迁移。

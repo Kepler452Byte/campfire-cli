@@ -50,6 +50,8 @@ campfire workspace domain rekey --domain <id> --new-id <id>
 
 先运行不带 `--confirm` 的同一命令审查计划；用户已授权且没有 issues 时原样追加 `--confirm`。预览或阻塞结果的 `follow_up` 必须为空；只在确认命令实际写入成功后执行其返回的一个后续。`rename` 只修改领域显示名称，不隐式修改目录或 Project；`move` 只接收目标 Space/Domain 的稳定 ID，由 CLI 推导路径与父子关系。`merge` 一次完成内容迁移、直接子领域改挂和源领域移除；`delete` 只接受没有内容、附件、子领域、Project 绑定或人工声明正文的逻辑空领域。普通操作保持 `domain_id`；只有用户明确要求改变稳定身份时使用 `rekey`。
 
+单篇 document rename / move 的确认需要预览返回的 `--expected-hash` 和 `--expected-plan`，摘要变化时重新预览；此参数不适用于上面的领域命令。
+
 以下仅用于需要持久批次的重构；原子命令已经覆盖的操作不进入此链路。
 
 ```text
@@ -70,11 +72,11 @@ inventory → plan
 
 ## 异常与停止条件
 
-- 纯移动必须保持文档内容不变；只有 Spec 明确提供 Frontmatter Patch 时才改写内容。
+- 纯移动保持正文不变，`related_docs` 中受影响的路径由 CLI 同步；其他字段只有 Spec 明确提供 Frontmatter Patch 时才改写。
 - `restructure verify` 只验证 source/target 迁移事实；文档 Profile 与 Formatter 合规交给 Maintenance。
 - 不用 Restructure 处理普通增量维护，也不绕过批次计划直接移动受管文档。
 - 写入返回 `concurrent-change`、`source-hash-changed` 或 `restructure-config-changed` 时停止，重新 inventory 和 plan。
-- 一篇文档只有一个主目标位置；跨领域关系使用链接和自动索引表达。
+- 一篇文档只有一个主目标位置；跨领域关系只通过 `related_docs` 表达，自动索引从该字段派生；不解析或改写正文链接，不自动改写 Canvas。
 - Project 只通过 `.campfire.yaml` 的稳定根 Domain id 建立绑定。领域改名和移动不修改 Project 元数据；merge 或 rekey 改变稳定 id 时由同一事务更新绑定、路径引用和子领域解析，不得手工分别维护。
 - 不手工删除 `_领域.md`、MOC 或领域目录；合并使用 `domain merge`，删除使用 `domain delete`。
 - `domain_id` 是稳定身份；`rekey` 必须更新直接子领域的 `parent_domain`，且必须显式确认。

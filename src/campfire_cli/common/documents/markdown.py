@@ -6,6 +6,8 @@ from typing import Any
 import yaml
 from yaml import YAMLError
 
+from campfire_cli.common.documents.document_types import frontmatter_bounds
+
 
 @dataclass(frozen=True)
 class MarkdownDocument:
@@ -16,19 +18,19 @@ class MarkdownDocument:
 
 
 def parse_document(text: str) -> MarkdownDocument:
-    if not text.startswith("---\n"):
+    bounds = frontmatter_bounds(text)
+    if bounds is None:
         return MarkdownDocument({}, text, False)
-    end = text.find("\n---\n", 4)
-    if end < 0:
-        return MarkdownDocument({}, text, False)
-    raw = text[4:end]
+    start, end = bounds
+    raw = text[start:end]
     try:
         value = yaml.safe_load(raw) or {}
     except YAMLError:
         value = _parse_lenient_scalars(raw)
     if not isinstance(value, dict):
         return MarkdownDocument({}, text, False)
-    body_start = end + 5
+    body_start = end + len(text[end:].splitlines(keepends=True)[0])
+    body_start += len(text[body_start:].splitlines(keepends=True)[0])
     return MarkdownDocument(
         value,
         text[body_start:],

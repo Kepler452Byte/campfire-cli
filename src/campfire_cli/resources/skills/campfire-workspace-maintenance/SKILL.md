@@ -42,7 +42,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 
 1. 选择最窄的操作范围。诊断用对应 check；新建 Space/Domain 用 create，已有目录接管用 adopt；不要手写声明。
 2. 修改文档结构时只查询尚未知的 Profile；apply 负责结构，正文由 Edit 维护。新建后用返回的 target 补正文，不手工同步类型前缀。
-3. 只改标题用 rename，跨 Domain 用 move；按各命令预览结果和哈希确认。批量语义迁移使用重构流程，不逐文件绕过计划。
+3. 只改标题用 rename，跨 Domain 用 move；确认带上预览返回的 `--expected-hash` 和 `--expected-plan`。批量语义迁移使用重构流程，不逐文件绕过计划。
 4. 声明顺序异常时使用诊断返回的 format 修复入口，不把 formatter 列为日常必经步骤。声明标记外的人工正文可直接编辑。
 5. sync 自身直接写入派生物；用户要求预览时才使用 --dry-run，不传不存在的 --confirm。使用实际 follow_up 的 scope 或用户明确的治理范围，不无条件扩大全库。
 6. 只有索引损坏或明确恢复需求才使用 workspace rebuild 预览和确认；不把 rebuild 放入普通维护链。
@@ -70,4 +70,4 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 
 ## 完成条件与回报
 
-报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。纯正文编辑无关系变化时无需同步。
+报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。关系唯一事实源是 `related_docs`，纯正文编辑不改变受管关系，无需同步。

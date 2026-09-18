@@ -284,3 +284,64 @@ def test_setup_rejects_an_invalid_existing_manifest(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert (workspace / ".campfire.yaml").read_text(encoding="utf-8") == "workspace: invalid\n"
+
+
+def test_relationships_follow_rename_move_and_retype(workspace: Path) -> None:
+    for name in ("First", "Second"):
+        domain = workspace / "mynote" / name
+        domain.mkdir()
+        (domain / "_领域.md").write_text(
+            f"---\nname: {name}\ndomain_id: {name.lower()}\ndomain_type: knowledge-domain\n"
+            f"governance: knowledge-docs\nmoc: MOC-{name}\nstatus: active\n---\n",
+            encoding="utf-8",
+        )
+
+    def call(*args):
+        result = runner.invoke(app, ["--workspace", "test", "document", *args])
+        assert result.exit_code == 0, result.output
+        return json.loads(result.output)
+
+    target = call(
+        "apply",
+        "--path",
+        "mynote/First/目标",
+        "--type",
+        "record",
+        "--set",
+        "description=目标",
+        "--confirm",
+    )["target"]
+    source = call(
+        "apply",
+        "--path",
+        "mynote/First/引用",
+        "--type",
+        "record",
+        "--set",
+        "description=引用",
+        "--set",
+        f'related_docs=["[[{target}]]"]',
+        "--confirm",
+    )["target"]
+    for command in (
+        ["rename", "--name", "新标题"],
+        ["move", "--domain", "second"],
+        ["apply", "--type", "plan"],
+    ):
+        args = [*command, "--path", target]
+        preview = call(*args)
+        result = call(
+            *args,
+            "--expected-hash",
+            preview["expected_hash"],
+            "--expected-plan",
+            preview["expected_plan"],
+            "--confirm",
+        )
+        assert result["write_performed"]
+        target = result["target"]
+        assert call("inspect", "--path", source)["relations"]["outgoing"][0]["target"] == target
+        assert call("inspect", "--path", target)["relations"]["incoming"][0]["source"] == source
+    cleared = call("apply", "--path", source, "--set", "related_docs=[]", "--confirm")
+    assert cleared["write_performed"]
+    assert call("inspect", "--path", target)["relations"]["in_degree"] == 0

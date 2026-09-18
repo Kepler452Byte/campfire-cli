@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,12 +53,16 @@ class FileChangeExecutor:
         self._vault_root = vault_root
         self._state_root = state_root
 
-    def execute(self, changes: FileChangeSet) -> None:
-        with self.transaction(changes):
+    def execute(
+        self, changes: FileChangeSet, *, before_write: Callable[[], None] | None = None
+    ) -> None:
+        with self.transaction(changes, before_write=before_write):
             pass
 
     @contextmanager
-    def transaction(self, changes: FileChangeSet) -> Iterator[None]:
+    def transaction(
+        self, changes: FileChangeSet, *, before_write: Callable[[], None] | None = None
+    ) -> Iterator[None]:
         """Apply a change set and roll it back if a coordinated commit step fails."""
 
         self._validate_paths(changes)
@@ -70,6 +74,8 @@ class FileChangeExecutor:
                 raise GovernanceBlockedError(
                     f"文件在 {changes.label} 期间发生变化：" + ", ".join(concurrent)
                 )
+            if before_write is not None:
+                before_write()
             self._validate_moves(changes.moves)
             completed_moves: list[PathMove] = []
             created_directories: list[Path] = []

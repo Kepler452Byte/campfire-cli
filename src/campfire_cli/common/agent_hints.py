@@ -38,7 +38,8 @@ HINT_BODY = """## Campfire 文档治理
 8. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
    `AUTO-GENERATED` 标记区域只能由 CLI 修改；标记外 Markdown 正文可以直接
    使用文件工具编辑。CLI 写命令完成后只执行结果实际返回的
-   `follow_up`；正文编辑会影响关系计算时执行一次局部 `maintenance sync`。
+   `follow_up`；文档关系只通过 `related_docs` 字段维护，正文链接不参与索引或自动改写。
+   rename / move / 类型联动改名确认时带回预览的 `expected_hash` 与 `expected_plan`。
    没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
 9. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，

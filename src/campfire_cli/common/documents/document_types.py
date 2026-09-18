@@ -17,10 +17,11 @@ def safe_path(root: Path, relative: str) -> Path:
 
 
 def frontmatter_bounds(text: str) -> tuple[int, int] | None:
-    if not text.startswith("---\n"):
+    opening = re.match(r"---\r?\n", text)
+    if opening is None:
         return None
-    end = text.find("\n---\n", 4)
-    return (4, end) if end >= 0 else None
+    closing = re.search(r"\r?\n---\r?\n", text[opening.end() :])
+    return (opening.end(), opening.end() + closing.start()) if closing else None
 
 
 def frontmatter_value(text: str, key: str) -> tuple[str | None, bool]:

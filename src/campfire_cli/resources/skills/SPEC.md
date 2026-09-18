@@ -10,6 +10,8 @@
 - CLI Profile 负责字段、枚举、类型、顺序和条件必填；Skill 不复制这些契约。
 - 已知唯一存在路径的正文读取和小改直接使用文件工具，不启动 bootstrap。
 - 创建正式文档、修改 Frontmatter 或显式变更类型使用 `document apply`。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时先执行一次 `document inspect`，不从 `tree`、逐层 help 或全量 Profile 探索开始。
+- Markdown Frontmatter 的 `related_docs` 是受管文档关系唯一 SSOT；Skill 通过 apply 更新该字段，不解析或自动维护正文链接。SQLite、反向关系与关系页都只是可重建投影。
+- 单篇 rename / move / retype 改变路径时，Skill 带回预览返回的 `expected_hash` 与 `expected_plan`；引用范围变化必须重新预览。
 - 发现结构化文档集合使用 `document list`，理解单篇文档的确定关系使用 `document inspect`；两者自行 reconcile，不先运行 Maintenance。
 - `document list` 不承担正文关键词、模糊匹配或相关性排序；需要正文内容时由 Agent 按返回路径读取或使用文件搜索。
 - 写入命令保持原子性；Skill 只执行命令实际返回的 scoped `maintenance sync`，诊断或发布验收时再显式 `check`。

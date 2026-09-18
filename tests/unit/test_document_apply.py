@@ -238,7 +238,8 @@ def test_rename_keeps_directory_and_updates_name_and_references(workspace: Path)
     reference = domain / "记录-引用.md"
     reference.write_text(
         "---\nname: 引用\ndescription: 引用测试\ntype: record\ndocument_status: draft\n"
-        "created: '2026-09-17'\nupdated: '2026-09-17'\ntags: []\n---\n\n"
+        "created: '2026-09-17'\nupdated: '2026-09-17'\ntags: []\n"
+        'related_docs: ["[[mywork/Example/notes/记录-旧标题.md]]"]\n---\n\n'
         "[[记录-旧标题]]\n[路径](notes/记录-旧标题.md)\n",
         encoding="utf-8",
     )
@@ -252,6 +253,7 @@ def test_rename_keeps_directory_and_updates_name_and_references(workspace: Path)
         "mywork/Example/notes/记录-旧标题.md",
         "新标题",
         expected_hash=planned.expected_hash,
+        expected_plan=planned.expected_plan,
         confirm=True,
     )
     target = domain / "notes" / "记录-新标题.md"
@@ -259,7 +261,7 @@ def test_rename_keeps_directory_and_updates_name_and_references(workspace: Path)
     assert applied.write_performed is True
     assert not source.exists()
     assert parse_document(target.read_text(encoding="utf-8")).frontmatter["name"] == "新标题"
-    assert "[[记录-新标题]]" in reference.read_text(encoding="utf-8")
+    assert "[[记录-旧标题]]" in reference.read_text(encoding="utf-8")
     assert "notes/记录-新标题.md" in reference.read_text(encoding="utf-8")
 
 
@@ -281,3 +283,146 @@ def test_rename_rejects_existing_target(workspace: Path) -> None:
     assert result.status == "blocked"
     assert result.issues == [{"code": "target-exists", "path": "mywork/Example/记录-新标题.md"}]
     assert (domain / "记录-旧标题.md").is_file()
+
+
+def test_rename_rejects_new_reference_after_preview(workspace: Path) -> None:
+    project_domain(workspace)
+    document = AppContainer.build("test").document
+    created = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/旧标题",
+            document_type="record",
+            values={"description": "目标"},
+            confirm=True,
+        )
+    )
+    preview = document.rename(created.target, "新标题")
+    reference = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/引用",
+            document_type="record",
+            values={"description": "引用", "related_docs": f'["[[{created.target}]]"]'},
+            confirm=True,
+        )
+    )
+    assert reference.status == "applied"
+    blocked = document.rename(
+        created.target,
+        "新标题",
+        expected_hash=preview.expected_hash,
+        expected_plan=preview.expected_plan,
+        confirm=True,
+    )
+    assert blocked.status == "blocked"
+    assert not blocked.write_performed
+    assert (workspace / created.target).exists()
+    assert not (workspace / preview.target).exists()
+
+
+def test_rename_preserves_body_bytes_and_does_not_edit_canvas(workspace: Path) -> None:
+    domain = project_domain(workspace)
+    document = AppContainer.build("test").document
+    created = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/旧标题",
+            document_type="record",
+            values={"description": "目标"},
+            confirm=True,
+        )
+    )
+    path = workspace / created.target
+    body = b"\r\n  Keep whitespace\r\n[[old]]\r\n"
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n") + body)
+    canvas = domain / "board.canvas"
+    canvas.write_text('{"file": "' + created.target + '"}', encoding="utf-8")
+    original_canvas = canvas.read_bytes()
+    preview = document.rename(created.target, "新标题")
+    result = document.rename(
+        created.target,
+        "新标题",
+        expected_hash=preview.expected_hash,
+        expected_plan=preview.expected_plan,
+        confirm=True,
+    )
+    assert result.status == "renamed"
+    assert (workspace / result.target).read_bytes().endswith(body)
+    assert canvas.read_bytes() == original_canvas
+
+
+def test_index_failure_reports_committed_write_and_recovers(workspace: Path, monkeypatch) -> None:
+    from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
+
+    project_domain(workspace)
+    document = AppContainer.build("test").document
+    created = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/旧标题",
+            document_type="record",
+            values={"description": "目标"},
+            confirm=True,
+        )
+    )
+    preview = document.rename(created.target, "新标题")
+    with monkeypatch.context() as patch:
+
+        def fail(*args, **kwargs):
+            raise OSError("simulated index failure")
+
+        patch.setattr(DocumentIndexService, "update_paths", fail)
+        result = document.rename(
+            created.target,
+            "新标题",
+            expected_hash=preview.expected_hash,
+            expected_plan=preview.expected_plan,
+            confirm=True,
+        )
+    assert result.status == "renamed"
+    assert result.write_performed
+    assert result.issues[0]["code"] == "document-index-refresh-failed"
+    assert (workspace / result.target).exists()
+    assert not (workspace / created.target).exists()
+    assert document.inspect(result.target)["relations"]["outgoing"] == []
+
+
+def test_reference_write_failure_rolls_back_relocation(workspace: Path, monkeypatch) -> None:
+    import pytest
+
+    from campfire_cli.common.filesystem import change_set
+
+    domain = project_domain(workspace)
+    document = AppContainer.build("test").document
+    created = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/旧标题",
+            document_type="record",
+            values={"description": "目标"},
+            confirm=True,
+        )
+    )
+    reference = document.apply(
+        DocumentApplyRequest(
+            path="mywork/Example/引用",
+            document_type="record",
+            values={"description": "引用", "related_docs": f'["[[{created.target}]]"]'},
+            confirm=True,
+        )
+    )
+    originals = {p: p.read_bytes() for p in domain.glob("*.md")}
+    preview = document.rename(created.target, "新标题")
+    write = change_set.atomic_write
+
+    def fail_reference(path, content):
+        if path == workspace / reference.target:
+            raise OSError("simulated write failure")
+        write(path, content)
+
+    monkeypatch.setattr(change_set, "atomic_write", fail_reference)
+    with pytest.raises(OSError, match="simulated"):
+        document.rename(
+            created.target,
+            "新标题",
+            expected_hash=preview.expected_hash,
+            expected_plan=preview.expected_plan,
+            confirm=True,
+        )
+    assert {p: p.read_bytes() for p in domain.glob("*.md")} == originals

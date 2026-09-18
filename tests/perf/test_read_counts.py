@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from campfire_cli.app.maintenance.service.moc_service import generate_relations
-
 
 class ReadTextCounter:
     """统计 Path.read_text 调用次数；性能回归用确定性计数代替墙钟时间。"""
@@ -35,25 +33,6 @@ def write_notes(directory: Path, start: int, count: int) -> list[Path]:
         )
         notes.append(note)
     return notes
-
-
-@pytest.mark.perf
-def test_generate_relations_reads_each_note_exactly_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    counter = ReadTextCounter(monkeypatch)
-    domain_by_note = {note: "core" for note in write_notes(tmp_path, 0, 20)}
-
-    generate_relations(list(domain_by_note), domain_by_note, tmp_path, 3, 0.1, 2, 0.05)
-    reads_small = counter.count
-
-    domain_by_note.update({note: "core" for note in write_notes(tmp_path, 20, 20)})
-    counter.reset()
-    generate_relations(list(domain_by_note), domain_by_note, tmp_path, 3, 0.1, 2, 0.05)
-    reads_large = counter.count
-
-    assert reads_small == 20
-    assert reads_large == 40
 
 
 def make_domain(vault: Path, domain_id: str, doc_count: int) -> None:

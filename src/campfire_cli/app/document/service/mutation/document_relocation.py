@@ -1,15 +1,23 @@
+"""Build targeted relationship edits and protect the complete preview plan."""
+
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
-from urllib.parse import quote
 
-from campfire_cli.app.document.service.mutation.type_apply import (
-    rebase_markdown_links,
-    rewrite_markdown_links,
-    rewrite_wikilinks,
+from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
+from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
+from campfire_cli.common.documents.domain_context import DomainContextError, resolve_domain_context
+from campfire_cli.common.documents.markdown import parse_document
+from campfire_cli.common.documents.related_docs import (
+    RELATED_DOCS,
+    related_documents,
+    rewrite_related_docs,
 )
-from campfire_cli.common.filesystem import FileWrite
-from campfire_cli.common.hashing import file_sha256
+from campfire_cli.common.filesystem import FileChangeSet, FileWrite
+from campfire_cli.common.hashing import file_sha256, text_sha256
+from campfire_cli.config.settings import WorkspaceSettings
 
 
 def prepare_document_relocation(
@@ -17,41 +25,82 @@ def prepare_document_relocation(
     source: Path,
     target: Path,
     moved_text: str,
+    index: DocumentIndexService,
 ) -> tuple[list[FileWrite], list[str], dict[Path, str | None]]:
-    """Prepare one document relocation and every deterministic reference rewrite."""
-
-    references = _reference_files(vault_root)
-    unique_stem = sum(path.stem == source.stem for path in references if path.suffix == ".md") == 1
-    source_relative = source.relative_to(vault_root).as_posix()
-    target_relative = target.relative_to(vault_root).as_posix()
-    writes: dict[Path, str] = {}
+    source_name = source.relative_to(vault_root).as_posix()
+    target_name = target.relative_to(vault_root).as_posix()
+    references = index.referencing(source_name)
+    mapping = {source_name: target_name}
+    writes = [FileWrite(target, rewrite_related_docs(moved_text, mapping))]
+    expected = {target: None, source: file_sha256(source)}
     changed: list[str] = []
-    expected = {path: file_sha256(path) for path in references}
-    for reference in references:
-        text = moved_text if reference == source else reference.read_text(encoding="utf-8")
-        updated = text.replace(source_relative, target_relative).replace(
-            quote(source_relative), quote(target_relative)
+    for name in references:
+        if name == source_name:
+            continue
+        path = vault_root / name
+        text = path.read_bytes().decode("utf-8")
+        digest = text_sha256(text)
+        updated = rewrite_related_docs(text, mapping)
+        expected[path] = digest
+        if updated != text:
+            writes.append(FileWrite(path, updated))
+            changed.append(name)
+    return writes, changed, expected
+
+
+def plan_digest(root: Path, changes: FileChangeSet) -> str:
+    payload = {
+        "expected": sorted(
+            (p.relative_to(root).as_posix(), h) for p, h in changes.expected.items()
+        ),
+        "writes": sorted(
+            (
+                w.path.relative_to(root).as_posix(),
+                hashlib.sha256(w.content.encode("utf-8")).hexdigest(),
+            )
+            for w in changes.writes
+        ),
+        "deletes": sorted(p.relative_to(root).as_posix() for p in changes.deletes),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
+
+
+def refresh_after_write(index: DocumentIndexService, paths: set[str]) -> list[dict]:
+    try:
+        index.update_paths(paths)
+    except Exception as exc:
+        # Files are already committed. Never report a failed rename that callers may replay.
+        return [
+            {
+                "code": "document-index-refresh-failed",
+                "write_performed": True,
+                "message": str(exc),
+                "hint": "文件已写入；修复索引问题后重新查询，不要重复写入。",
+            }
+        ]
+    return []
+
+
+def relationship_follow_up(settings: WorkspaceSettings, paths: set[str], texts: list[str]):
+    for text in texts:
+        paths.update(
+            item.target
+            for item in related_documents(parse_document(text).frontmatter.get(RELATED_DOCS), "")
+            if item.target
         )
-        if unique_stem and source.stem != target.stem:
-            updated = rewrite_wikilinks(updated, source.stem, target.stem)
-        if reference.suffix.lower() == ".md":
-            updated = rewrite_markdown_links(updated, reference, source, target)
-            if reference == source and source.parent != target.parent:
-                updated = rebase_markdown_links(updated, source, target)
-        output = target if reference == source else reference
-        if reference == source or updated != text:
-            writes[output] = updated
-        if reference != source and updated != text:
-            changed.append(reference.relative_to(vault_root).as_posix())
-    return [FileWrite(path, text) for path, text in writes.items()], changed, expected
-
-
-def _reference_files(vault_root: Path) -> list[Path]:
-    ignored = {".git", ".campfire"}
-    return sorted(
-        path
-        for path in vault_root.rglob("*")
-        if path.is_file()
-        and path.suffix.lower() in {".md", ".canvas"}
-        and not any(part in ignored for part in path.relative_to(vault_root).parts)
-    )
+    scopes: set[str] = set()
+    for name in paths:
+        path = settings.vault_root / name
+        try:
+            context = resolve_domain_context(settings.vault_root, path)
+            scopes.add(context.root.relative_to(settings.vault_root).as_posix())
+        except DomainContextError:
+            if not path.exists():
+                continue
+            for scope in settings.document_types.get("scope_roots", []):
+                if name.startswith(scope.rstrip("/") + "/"):
+                    scopes.add(scope)
+                    break
+    return maintenance_sync_follow_up(settings.workspace_id, scopes)

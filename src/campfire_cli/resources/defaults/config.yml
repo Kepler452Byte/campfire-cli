@@ -47,10 +47,6 @@ governance:
   collaboration_root: _协作
   space_marker: _空间.md
   domain_marker: _领域.md
-  related_limit: 3
-  related_min_score: 0.08
-  cross_domain_related_limit: 2
-  cross_domain_min_score: 0.06
   ignored_directories:
   - assets
   - archive
@@ -134,6 +130,7 @@ frontmatter_schema:
         created: {kind: date, required: true}
         updated: {kind: date, required: true}
         tags: {kind: list, required: true, items: string}
+        related_docs: {kind: list, required: false, items: document-link}
     task:
       extends: base
       unknown_fields: report
