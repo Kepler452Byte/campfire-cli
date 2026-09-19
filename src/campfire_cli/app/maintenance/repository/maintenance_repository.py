@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import delete, or_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from campfire_cli.app.maintenance.schema.maintenance_schema import (
@@ -15,6 +16,7 @@ from campfire_cli.common.database.models import (
     WorkspaceDomain,
     WorkspaceSpace,
 )
+from campfire_cli.common.exceptions import AppError
 
 
 class SqliteMaintenanceRepository:
@@ -83,22 +85,23 @@ class SqliteMaintenanceRepository:
         domains: list[DomainState],
     ) -> None:
         normalized = scope.strip("/")
-        for model in (WorkspaceDomain,):
-            selection = model.workspace_id == self._workspace_id
-            if normalized not in {"", "."}:
-                selection = selection & or_(
-                    model.path == normalized,
-                    model.path.startswith(f"{normalized}/", autoescape=True),
-                )
-            self._session.execute(delete(model).where(selection))
-        self._session.add_all(
-            [
+        selection = WorkspaceDomain.workspace_id == self._workspace_id
+        if normalized not in {"", "."}:
+            selection &= or_(
+                WorkspaceDomain.path == normalized,
+                WorkspaceDomain.path.startswith(f"{normalized}/", autoescape=True),
+                WorkspaceDomain.domain_id.in_([item.domain_id for item in domains]),
+            )
+        try:
+            self._session.execute(delete(WorkspaceDomain).where(selection))
+            self._session.add_all(
                 WorkspaceDomain(workspace_id=self._workspace_id, **item.model_dump())
                 for item in domains
-            ]
-        )
-        try:
+            )
             self._session.commit()
-        except Exception:
+        except SQLAlchemyError as exc:
             self._session.rollback()
-            raise
+            raise AppError(
+                "领域索引提交失败，已回滚本次索引更新",
+                code="domain-index-write-failed",
+            ) from exc

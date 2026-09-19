@@ -23,7 +23,7 @@ Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路�
 |-- Workspace -> resolve
 |-- 目标领域 -> domain list，已知项目则缩小范围
 |-- 代码项目 -> project resolve / show，事实核验需要时才 check
-`-- 字段契约 -> 新建查 profile show；已有文档 inspect
+`-- 字段契约 -> 新建查 profile resolve --type；已有文档 inspect
                   |
                   +-- 唯一明确 -> 返回所需上下文
                   `-- 缺失或冲突 -> 说明问题并询问，不猜测或顺手修复
@@ -42,7 +42,7 @@ Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路�
 已知注册 Workspace 为 demo，仅需查看任务契约：
 
 ```bash
-campfire --workspace demo document profile show task
+campfire --workspace demo document profile resolve --type task
 ```
 
 消费返回的有效字段与候选；不把示例中的 Workspace id 当作默认值。

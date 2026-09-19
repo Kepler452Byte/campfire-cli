@@ -5,7 +5,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.exceptions import AppError, GovernanceBlockedError
 from campfire_cli.common.filesystem.atomic import atomic_write, atomic_write_bytes
 from campfire_cli.common.governance import capture_snapshot, optimistic_write_lock
 
@@ -101,15 +101,23 @@ class FileChangeExecutor:
                     removed_directories.append(path)
                 yield
             except Exception:
-                for directory in reversed(removed_directories):
-                    directory.mkdir(parents=True, exist_ok=True)
-                self._restore(originals)
-                for move in reversed(completed_moves):
-                    if move.target.exists() and not move.source.exists():
-                        move.target.rename(move.source)
-                for directory in reversed(created_directories):
-                    with suppress(OSError):
-                        directory.rmdir()
+                try:
+                    for directory in reversed(removed_directories):
+                        directory.mkdir(parents=True, exist_ok=True)
+                    self._restore(originals)
+                    for move in reversed(completed_moves):
+                        if move.target.exists() and not move.source.exists():
+                            move.target.rename(move.source)
+                    for directory in reversed(created_directories):
+                        with suppress(OSError):
+                            directory.rmdir()
+                except OSError as exc:
+                    raise AppError(
+                        "文件操作失败且回滚未完成；停止重试并核对来源与目标",
+                        code="file-rollback-failed",
+                        write_performed=True,
+                        paths=[str(path) for path in changes.paths],
+                    ) from exc
                 raise
 
     def _validate_paths(self, changes: FileChangeSet) -> None:

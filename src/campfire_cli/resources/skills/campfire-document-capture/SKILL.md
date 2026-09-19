@@ -19,7 +19,7 @@ description: "将对话或工作成果沉淀为 Campfire 文档，或更新已�
 
 ## 上下文与契约
 
-apply 的 `--path` 必填，支持 Workspace 根相对路径或 Workspace 内绝对路径，不相对于 cwd。创建时可省略前缀与 `.md`，最终以 `target` 为准。新建契约未知时只查询目标 `document profile show <type>`，不从 tree 或全部 Profile 开始。
+apply 的 `--path` 必填，支持 Workspace 根相对路径或 Workspace 内绝对路径，不相对于 cwd。创建时可省略前缀与 `.md`，最终以 `target` 为准。新建契约未知时只查询 `document profile resolve --type <type>`，例如 `campfire --workspace demo document profile resolve --type knowledge`。type 不等于 Profile 名，`profile show` 只按 Profile 名查询；已有文档用 inspect，不从 tree 或全部 Profile 开始。
 
 ## SOP
 

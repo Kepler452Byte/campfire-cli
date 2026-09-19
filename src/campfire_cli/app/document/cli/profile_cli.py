@@ -50,6 +50,10 @@ def show_profile(ctx: typer.Context, name: str) -> None:
 
 
 @profile_cli.command("resolve")
-def resolve(ctx: typer.Context, path: str = typer.Option(..., "--path")) -> None:
-    """解析一篇文档最终使用的 Profile。"""
-    emit(invoke(lambda: service(ctx).resolve(path)))
+def resolve(
+    ctx: typer.Context,
+    path: str | None = typer.Option(None, "--path", help="已有文档的 Workspace 相对或绝对路径"),
+    document_type: str | None = typer.Option(None, "--type", help="新建文档类型，与 --path 二选一"),
+) -> None:
+    """按已有文档路径或新建文档类型解析有效 Profile。"""
+    emit(invoke(lambda: service(ctx).resolve(path, document_type)))

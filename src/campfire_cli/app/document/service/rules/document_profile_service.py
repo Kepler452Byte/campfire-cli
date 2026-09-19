@@ -41,25 +41,57 @@ class DocumentProfileService:
         }
 
     def show_profile(self, name: str) -> dict[str, Any]:
+        profiles = self._profiles()
+        try:
+            profile = profiles.get(name)
+        except ConfigurationError as exc:
+            if name not in self._type_config.get("types", {}):
+                raise
+            raise ConfigurationError(
+                "show 接收 Profile 名，不是文档类型；请用 resolve 按类型解析",
+                code="profile-name-required",
+                profile=name,
+                hint=(
+                    f"campfire --workspace {self._workspace_id} "
+                    f"document profile resolve --type {name}"
+                ),
+            ) from exc
         return {
             "status": "ok",
             "workspace_id": self._workspace_id,
-            "profile": self._profiles().get(name).model_dump(self._candidate_sets()),
+            "profile": profile.model_dump(self._candidate_sets()),
         }
 
-    def resolve(self, relative_path: str) -> dict[str, Any]:
-        path = (self._vault_root / relative_path).resolve()
-        if self._vault_root != path and self._vault_root not in path.parents:
-            raise ConfigurationError("path 必须位于当前 Workspace 内")
-        if not path.is_file():
-            raise ConfigurationError(f"文档不存在：{relative_path}")
-        frontmatter = parse_document(path.read_text(encoding="utf-8")).frontmatter
-        profile = self._profiles().resolve(frontmatter.get("type"), frontmatter, path)
+    def resolve(
+        self, relative_path: str | None = None, document_type: str | None = None
+    ) -> dict[str, Any]:
+        if (relative_path is None) == (document_type is None):
+            raise ConfigurationError(
+                "请选择 --path 解析已有文档，或 --type 解析新建文档契约",
+                code="profile-selector-invalid",
+            )
+        path = None
+        frontmatter: dict[str, Any] = {}
+        if relative_path is not None:
+            path = (self._vault_root / relative_path).resolve()
+            if self._vault_root != path and self._vault_root not in path.parents:
+                raise ConfigurationError("path 必须位于当前 Workspace 内")
+            if not path.is_file():
+                raise ConfigurationError(f"文档不存在：{relative_path}")
+            frontmatter = parse_document(path.read_text(encoding="utf-8")).frontmatter
+            document_type = frontmatter.get("type")
+        if not isinstance(document_type, str) or document_type not in self._type_config.get(
+            "types", {}
+        ):
+            raise ConfigurationError(
+                "未知文档类型", code="document-type-invalid", actual=document_type
+            )
+        profile = self._profiles().resolve(document_type, frontmatter, path)
         return {
             "status": "ok",
             "workspace_id": self._workspace_id,
-            "path": path.relative_to(self._vault_root).as_posix(),
-            "type": frontmatter.get("type"),
+            "path": path.relative_to(self._vault_root).as_posix() if path else None,
+            "type": document_type,
             "profile": profile.model_dump(self._candidate_sets()),
         }
 

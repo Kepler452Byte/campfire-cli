@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from campfire_cli.app.document.schema import (
@@ -13,7 +14,7 @@ from campfire_cli.app.document.schema import (
     DocumentIndexRecord,
 )
 from campfire_cli.common.database.models import Document, DocumentEdge, DocumentIndexState
-from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.exceptions import AppError, GovernanceBlockedError
 
 
 class SqliteDocumentIndexRepository:
@@ -222,6 +223,9 @@ class SqliteDocumentIndexRepository:
             row.rebuilt_at = metadata.rebuilt_at
             row.indexed_at = metadata.indexed_at
             self._session.commit()
+        except SQLAlchemyError as exc:
+            self._session.rollback()
+            raise AppError("文档索引提交失败，已回滚", code="document-index-write-failed") from exc
         except Exception:
             self._session.rollback()
             raise

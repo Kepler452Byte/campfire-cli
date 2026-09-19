@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
+from campfire_cli.app.document.service.document_scanner import iter_documents
 from campfire_cli.app.workspace.repository.manifest_repository import (
     WorkspaceManifestRepository,
 )
@@ -28,7 +29,7 @@ from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepos
 from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document, render_document
 from campfire_cli.common.documents.related_docs import rewrite_related_docs
-from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
+from campfire_cli.common.exceptions import AppError, ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import (
     FileChangeExecutor,
     FileChangeSet,
@@ -36,7 +37,8 @@ from campfire_cli.common.filesystem import (
     PathMove,
     safe_path,
 )
-from campfire_cli.common.hashing import file_sha256
+from campfire_cli.common.filesystem.plan import plan_digest
+from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -58,21 +60,50 @@ class DomainRestructureService:
     def rename(
         self,
         domain_id: str,
-        name: str,
+        name: str | None = None,
         *,
+        folder_name: str | None = None,
+        expected_plan: str | None = None,
         confirm: bool = False,
     ) -> DomainRestructureResult:
         domain = self._domain(domain_id)
-        new_name = name.strip()
+        if name is None and folder_name is None:
+            raise ConfigurationError("请提供 --name 或 --folder-name", code="rename-input-missing")
+        new_name = domain.name if name is None else name.strip()
         if not new_name:
             raise ConfigurationError("Domain name 不能为空")
+        target = domain.path
+        if folder_name is not None:
+            if (
+                not folder_name.strip()
+                or folder_name in {".", ".."}
+                or any(char in folder_name for char in '/\\<>:"|?*')
+                or folder_name.endswith((" ", "."))
+                or any(ord(char) < 32 for char in folder_name)
+                or re.fullmatch(r"(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?", folder_name)
+            ):
+                raise ConfigurationError(
+                    "--folder-name 必须是单个合法目录名", code="folder-name-invalid"
+                )
+            target = domain.path.with_name(folder_name)
+            if folder_name != domain.path.name and target.exists() and target.samefile(domain.path):
+                raise ConfigurationError(
+                    "当前文件系统不支持直接进行仅大小写不同的目录改名",
+                    code="case-only-rename-unsupported",
+                    hint="先用 domain rename 改为未占用的临时目录名，再改为目标名；每步先预览。",
+                )
+            target = self._validate_target(
+                target.relative_to(self._settings.vault_root).as_posix(), domain
+            )
         return self._change(
             domain,
-            target=domain.path,
+            target=target,
             name=new_name,
             new_id=domain.id,
             parent_domain=domain.parent_domain,
             confirm=confirm,
+            expected_plan=expected_plan,
+            protect_plan=folder_name is not None,
         )
 
     def move(
@@ -367,6 +398,8 @@ class DomainRestructureService:
         new_id: str,
         parent_domain: str | None,
         confirm: bool,
+        expected_plan: str | None = None,
+        protect_plan: bool = False,
     ) -> DomainRestructureResult:
         old_relative = domain.path.relative_to(self._settings.vault_root).as_posix()
         new_relative = target.relative_to(self._settings.vault_root).as_posix()
@@ -394,8 +427,6 @@ class DomainRestructureService:
             )
         for project in projects:
             operations.append({"action": "update-project", "path": project.id})
-        if not confirm:
-            return self._result(domain, new_id, name, new_relative, operations, projects, False)
         if target != domain.path and target.exists():
             raise ConfigurationError(f"目标路径已存在：{new_relative}")
         current = self._domain(domain.id)
@@ -417,15 +448,68 @@ class DomainRestructureService:
             parent_domain=parent_domain,
             updated_projects=updated_projects,
         )
+        for write in change_set.writes:
+            relative = write.path.relative_to(self._settings.vault_root).as_posix()
+            operations.append({"action": "update-file", "path": relative})
+        digest = plan_digest(self._settings.vault_root, change_set)
+        result = self._result(domain, new_id, name, new_relative, operations, projects, False)
+        result.expected_plan = digest
+        if not change_set.writes and not change_set.moves:
+            result.status = "up-to-date"
+            return result
+        if not confirm:
+            return result
+        if protect_plan and expected_plan != digest:
+            result.status = "blocked"
+            result.issues = [
+                {
+                    "code": "plan-changed" if expected_plan else "expected-plan-required",
+                    "hint": "重新预览并在确认时带回 --expected-plan。",
+                }
+            ]
+            return result
+
+        def verify_plan() -> None:
+            current_changes = self._plan_changes(
+                domain,
+                target=target,
+                name=name,
+                new_id=new_id,
+                parent_domain=parent_domain,
+                updated_projects=updated_projects,
+            )
+            if plan_digest(self._settings.vault_root, current_changes) != digest:
+                raise GovernanceBlockedError("领域内容或引用在提交前发生变化", code="plan-changed")
+
         try:
-            with self._executor.transaction(change_set):
+            with self._executor.transaction(change_set, before_write=verify_plan):
                 if updated_projects:
                     self._workspaces.save_projects(updated_projects)
-        except Exception:
+        except Exception as exc:
             if projects:
                 self._workspaces.save_projects(projects)
+            if isinstance(exc, OSError):
+                raise AppError(
+                    "领域写入失败，文件变更已回滚",
+                    code="domain-write-failed",
+                    write_performed=False,
+                    hint="排除占用或权限问题后重新预览。",
+                ) from exc
             raise
-        domain_check = self._domains.check()
+        result = self._result(domain, new_id, name, new_relative, operations, projects, True)
+        result.expected_plan = digest
+        try:
+            domain_check = self._domains.check()
+        except (AppError, OSError) as exc:
+            result.status = "needs-review"
+            result.issues = [
+                {
+                    "code": "domain-postcheck-failed",
+                    "detail": str(exc),
+                    "hint": "文件已写入，不要重复改名；排除问题后执行返回的同步与领域检查。",
+                }
+            ]
+            return result
         affected_prefix = f"{new_relative}/"
         issues = [
             issue
@@ -433,7 +517,6 @@ class DomainRestructureService:
             if str(issue.get("path", "")).startswith(affected_prefix)
             or issue.get("path") == new_relative
         ]
-        result = self._result(domain, new_id, name, new_relative, operations, projects, True)
         if issues:
             result.status = "needs-review"
             result.issues = issues
@@ -667,7 +750,7 @@ class DomainRestructureService:
         updated_projects: list[ProjectEntry],
     ) -> FileChangeSet:
         references = self._reference_files()
-        originals = {path: path.read_text(encoding="utf-8") for path in references}
+        originals = {path: path.read_bytes().decode("utf-8") for path in references}
         contents = dict(originals)
         marker = domain.path / DOMAIN_MARKER
         parsed = parse_document(contents[marker])
@@ -678,8 +761,13 @@ class DomainRestructureService:
             frontmatter["parent_domain"] = parent_domain
         else:
             frontmatter.pop("parent_domain", None)
-        body = re.sub(r"^# .+$", f"# {name}", parsed.body, count=1, flags=re.MULTILINE)
-        contents[marker] = render_document(frontmatter, body, list(frontmatter))
+        body = (
+            re.sub(r"^# .+$", lambda _: f"# {name}", parsed.body, count=1, flags=re.MULTILINE)
+            if name != domain.name
+            else parsed.body
+        )
+        if frontmatter != parsed.frontmatter or body != parsed.body:
+            contents[marker] = render_document(frontmatter, body, list(frontmatter))
 
         if new_id != domain.id:
             for child in domain.path.rglob(DOMAIN_MARKER):
@@ -697,16 +785,16 @@ class DomainRestructureService:
         old_relative = domain.path.relative_to(self._settings.vault_root).as_posix()
         new_relative = target.relative_to(self._settings.vault_root).as_posix()
         if old_relative != new_relative:
+            mapping = {
+                p.relative_to(self._settings.vault_root).as_posix(): (
+                    target / p.relative_to(domain.path)
+                )
+                .relative_to(self._settings.vault_root)
+                .as_posix()
+                for p in references
+                if domain.path in p.parents
+            }
             for path, content in contents.items():
-                mapping = {
-                    p.relative_to(self._settings.vault_root).as_posix(): (
-                        target / p.relative_to(domain.path)
-                    )
-                    .relative_to(self._settings.vault_root)
-                    .as_posix()
-                    for p in references
-                    if domain.path in p.parents
-                }
                 contents[path] = rewrite_related_docs(content, mapping)
 
         def final_path(path: Path) -> Path:
@@ -719,7 +807,18 @@ class DomainRestructureService:
             for path, content in contents.items()
             if content != originals[path]
         ]
-        expected = {path: file_sha256(path) for path in references}
+        expected = {path: text_sha256(text) for path, text in originals.items()}
+        manifest = self._manifests.path(self._settings.vault_root)
+        expected[manifest] = file_sha256(manifest) if manifest.is_file() else None
+        if target != domain.path:
+            for path in domain.path.rglob("*"):
+                if path.is_symlink():
+                    raise GovernanceBlockedError(
+                        "领域迁移不接受符号链接", code="domain-move-symlink"
+                    )
+                if path not in expected:
+                    expected[path] = file_sha256(path) if path.is_file() else None
+            expected[target] = None
         if updated_projects:
             manifest_path, manifest_content = self._manifest_update(updated_projects)
             writes.append(FileWrite(manifest_path, manifest_content))
@@ -749,16 +848,9 @@ class DomainRestructureService:
         return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
     def _reference_files(self) -> list[Path]:
-        ignored = {".git", ".obsidian"}
-        return sorted(
-            path
-            for path in self._settings.vault_root.rglob("*")
-            if path.is_file()
-            and path.suffix.lower() == ".md"
-            and not any(
-                part in ignored for part in path.relative_to(self._settings.vault_root).parts
-            )
-        )
+        documents = iter_documents(self._settings.vault_root, self._settings.document_types)
+        declarations = [domain.path / DOMAIN_MARKER for domain in self._domains.discover()[0]]
+        return sorted(set(documents) | set(declarations))
 
     def _result(
         self,
@@ -775,13 +867,23 @@ class DomainRestructureService:
             domain_id=domain_id,
             name=name,
             path=path,
+            old_path=domain.path.relative_to(self._settings.vault_root).as_posix(),
+            path_changed=path != domain.path.relative_to(self._settings.vault_root).as_posix(),
             operations=operations,
             affected_projects=[project.id for project in projects],
             write_performed=written,
             follow_up=(
                 maintenance_sync_follow_up(
                     self._settings.workspace_id,
-                    [domain.path.relative_to(self._settings.vault_root).as_posix(), path],
+                    [
+                        domain.path.relative_to(self._settings.vault_root).as_posix(),
+                        path,
+                        *(
+                            Path(item["path"]).parent.as_posix()
+                            for item in operations
+                            if item["action"] == "update-file"
+                        ),
+                    ],
                 )
                 if written
                 else []

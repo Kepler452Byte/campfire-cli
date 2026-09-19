@@ -27,6 +27,7 @@ document/
 ```
 
 - `profile`：定义并解析不同文档的属性契约。
+- `profile resolve --type` 用于新建前查询，`--path` 用于已有文档，两者互斥；和 apply 共用 ProfileRegistry。`show` 只按 Profile 名查询，不把 type 当作同义参数，不新增领域覆盖机制。
 - `type`：检查、规划和执行单选类型与文件命名治理。
 - `frontmatter`：检查、规划、执行和格式化文档属性。
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。

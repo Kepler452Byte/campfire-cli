@@ -81,6 +81,7 @@ Campfire 使用语义化版本：
 ```
 
 - 已发布版本不可原地修改；同一版本号必须对应唯一、可重复构建的代码和资源。
+- 已公开标签对象不可变。发布准备必须执行 `scripts/release_check.py --tag <tag>` 对比本地、远端对象及目标提交；对象或提交不一致即停止，禁止重建、强推或自动覆盖本地标签。发布重试复用原标签，不以提交相同为理由替换附注对象。
 - 只修复既有行为时增加补丁版本，例如 `0.17.0 -> 0.17.1`。
 - 新增 CLI 能力、改变治理契约或增加可选公共字段时增加次版本，例如 `0.17.x -> 0.18.0`。
 - 删除或重命名公共命令、改变不可兼容的数据格式时增加主版本；`0.x` 阶段仍应显式记录破坏性变化。
@@ -103,6 +104,7 @@ Campfire 使用语义化版本：
 
 - `domain_id`、`name` 和 `path` 分别表示稳定身份、显示名称和物理位置，不得隐式绑定。
 - 普通 rename 和 move 不得改变 `domain_id`；只有显式 `domain rekey` 可以修改稳定身份。
+- rename 的 `--name` 与 `--folder-name` 分别修改显示名称与原父级内目录名；只有显式传入才修改。目录改名确认带回 `expected_plan`，复用共享文件变更集摘要与补偿机制；不解析正文或 Canvas，不承诺崩溃原子性。
 - 修改领域名称不得修改 Project 名称；Project 展示名称只能由 `workspace project update --name` 显式修改。
 - `.campfire.yaml` 的 `projects[].document_domain_id` 是 Project 到根 Domain 绑定的唯一事实；Domain 声明不保存 Project 字段。
 - Space/Domain 声明 Frontmatter 和 `AUTO-GENERATED` 标记区域由 CLI 管理；标记外 Markdown 正文允许人和 Agent 直接编辑，formatter 必须完整保留。

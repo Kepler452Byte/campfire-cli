@@ -18,4 +18,6 @@ maintenance/
 ```
 
 归档仅是 Document Profile 中的 `document_status` 值，通过 `document apply` 修改；Maintenance 不提供归档命令。
+
+scoped sync 在全局拓扑中检查目标身份是否重复，再按稳定 Domain id 和当前 scope 更新结构投影；合法外部改名不依赖先 check。文档索引先独立提交完整 generation，再在文件变更事务内提交领域索引；领域索引提交失败回滚其事务并补偿生成文件，不在领域提交之后追加可能失败的文档索引提交。两个投影可分别重建，不宣称文件系统与 SQLite 共享事务。可捕获失败返回阶段与实际写入状态，补偿失败须停止并核对文件，不盲目重放。
 关系页只消费 Document Index 的 `related_docs` 正向和反向投影；不另行解析正文链接、不计算标签或文本相似度。正文不再作为关系 SSOT，旧正文不自动迁移。

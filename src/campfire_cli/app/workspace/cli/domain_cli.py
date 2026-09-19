@@ -115,15 +115,23 @@ def adopt(
 def rename(
     ctx: typer.Context,
     domain_id: str = typer.Option(..., "--domain"),
-    name: str = typer.Option(..., "--name"),
+    name: str | None = typer.Option(None, "--name", help="只修改显示名称"),
+    folder_name: str | None = typer.Option(
+        None, "--folder-name", help="原父级内的新目录名，不改稳定 id"
+    ),
+    expected_plan: str | None = typer.Option(
+        None, "--expected-plan", help="目录改名确认需带回预览摘要"
+    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
-    """修改 Domain 显示名称，不隐式修改目录或 Project。"""
+    """分别或同时修改 Domain 显示名称、目录名，不改变身份和 Project 绑定。"""
     emit(
         invoke(
             lambda: applications(ctx).domain_restructure.rename(
                 domain_id,
                 name,
+                folder_name=folder_name,
+                expected_plan=expected_plan,
                 confirm=confirm,
             )
         )

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 
 from campfire_cli.app.base.schema.operation_schema import maintenance_sync_follow_up
@@ -15,7 +13,7 @@ from campfire_cli.common.documents.related_docs import (
     related_documents,
     rewrite_related_docs,
 )
-from campfire_cli.common.filesystem import FileChangeSet, FileWrite
+from campfire_cli.common.filesystem import FileWrite
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -46,25 +44,6 @@ def prepare_document_relocation(
             writes.append(FileWrite(path, updated))
             changed.append(name)
     return writes, changed, expected
-
-
-def plan_digest(root: Path, changes: FileChangeSet) -> str:
-    payload = {
-        "expected": sorted(
-            (p.relative_to(root).as_posix(), h) for p, h in changes.expected.items()
-        ),
-        "writes": sorted(
-            (
-                w.path.relative_to(root).as_posix(),
-                hashlib.sha256(w.content.encode("utf-8")).hexdigest(),
-            )
-            for w in changes.writes
-        ),
-        "deletes": sorted(p.relative_to(root).as_posix() for p in changes.deletes),
-    }
-    return hashlib.sha256(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
-    ).hexdigest()
 
 
 def refresh_after_write(index: DocumentIndexService, paths: set[str]) -> list[dict]:

@@ -134,6 +134,8 @@ campfire workspace restructure verify --batch move-001
 
 仓库 Skill 编写规范见 `src/campfire_cli/resources/skills/SPEC.md`。本地与 CI 共用 `uv run python scripts/quality_check.py`；发布前使用 `--release` 增加构建、wheel 隔离安装与冒烟验证。测试日志包含最慢 10 项耗时。Release 的公共 PyPI 安装验证最多等待 3 分钟、间隔 15 秒重试，不重试上传；安装后版本不符直接失败。
 
+发布准备先执行 `uv run python scripts/release_check.py --tag <目标标签>`（默认检查 HEAD，可用 `--target <提交>` 指定）。这是只读检查，不创建或推送标签。远端标签不存在时按正常流程创建；已有标签一致时复用；对象不同或提交不同时停止核对，不强推、不重建。远端已有而本地缺失时先获取原标签再检查。IDE 拉取时的标签冲突不等于源码合并冲突，也不代表分支拉取已完成；不要全局开启“始终替换本地标记”。检查通过不替代质量门禁或用户发布授权。
+
 ## 许可
 
 MIT。

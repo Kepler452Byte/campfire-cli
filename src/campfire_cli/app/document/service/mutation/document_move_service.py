@@ -7,7 +7,6 @@ from typing import Any, Literal
 from campfire_cli.app.document.schema import DocumentMoveResult
 from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.mutation.document_relocation import (
-    plan_digest,
     prepare_document_relocation,
     refresh_after_write,
     relationship_follow_up,
@@ -29,6 +28,7 @@ from campfire_cli.common.documents.frontmatter_format import render_patch
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
+from campfire_cli.common.filesystem.plan import plan_digest
 from campfire_cli.common.hashing import text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 

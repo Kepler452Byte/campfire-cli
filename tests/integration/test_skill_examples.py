@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 
@@ -55,10 +56,16 @@ def test_published_creation_examples_and_follow_up(tmp_path: Path) -> None:
     resources = Path(__file__).resolve().parents[2] / "src/campfire_cli/resources/skills"
     for name in ("campfire-task-management", "campfire-document-capture"):
         text = (resources / name / "SKILL.md").read_text(encoding="utf-8")
+        example = re.search(
+            r"`(campfire --workspace (?:demo|<id>) document profile resolve --type \w+)`", text
+        )
+        assert example is not None
+        contract = invoke(shlex.split(example[1].replace("<id>", "demo"))[1:])
         commands = [line for line in text.splitlines() if line.startswith("campfire ")]
         assert len(commands) == 2
         planned = invoke(shlex.split(commands[0])[1:])
         assert planned["status"] == "planned"
+        assert planned["profile"] == contract["profile"]["name"]
         assert planned["expected_hash"] == "missing"
         assert planned["follow_up"] == []
         applied = invoke(shlex.split(commands[1])[1:])

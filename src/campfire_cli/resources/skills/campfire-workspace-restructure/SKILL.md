@@ -27,7 +27,8 @@ Workspace 未知才 resolve；读取尚未知的局部规则和相关文档，�
 ├── 单篇跨 Domain  → document move
 ├── 一批内容文档   → inventory / plan / apply / verify
 └── 已声明 Domain
-    ├── 修改人类名称     → domain rename
+    ├── 修改显示名称     → domain rename --name
+    ├── 原地修改目录名   → domain rename --folder-name
     ├── 移入目标领域/空间 → domain move
     ├── 并入另一领域     → domain merge
     ├── 删除逻辑空领域   → domain delete
@@ -42,15 +43,20 @@ Workspace 未知才 resolve；读取尚未知的局部规则和相关文档，�
 
 ```bash
 campfire workspace domain rename --domain <id> --name <name>
+campfire workspace domain rename --domain <id> --folder-name <folder-name>
 campfire workspace domain move --domain <id> --target <space-or-domain-id>
 campfire workspace domain merge --source <id> --target <id>
 campfire workspace domain delete --domain <id>
 campfire workspace domain rekey --domain <id> --new-id <id>
 ```
 
-先运行不带 `--confirm` 的同一命令审查计划；用户已授权且没有 issues 时原样追加 `--confirm`。预览或阻塞结果的 `follow_up` 必须为空；只在确认命令实际写入成功后执行其返回的一个后续。`rename` 只修改领域显示名称，不隐式修改目录或 Project；`move` 只接收目标 Space/Domain 的稳定 ID，由 CLI 推导路径与父子关系。`merge` 一次完成内容迁移、直接子领域改挂和源领域移除；`delete` 只接受没有内容、附件、子领域、Project 绑定或人工声明正文的逻辑空领域。普通操作保持 `domain_id`；只有用户明确要求改变稳定身份时使用 `rekey`。
+先运行不带 `--confirm` 的同一命令审查计划；用户已授权且没有 issues 时追加 `--confirm`。包含 `--folder-name` 的 rename 还必须带回预览的 `--expected-plan <摘要>`；检查 old_path、path、path_changed 和 operations，摘要不一致就重新预览。预览或阻塞结果的 follow_up 为空，只在实际写入成功后执行返回的后续。
 
-单篇 document rename / move 的确认需要预览返回的 `--expected-hash` 和 `--expected-plan`，摘要变化时重新预览；此参数不适用于上面的领域命令。
+`rename --name` 只改显示名称，`--folder-name` 只改原父级内的目录名；用户明确要求两者一起改时同时传入，不推断命名前缀。两者均不改 Domain id 或 Project 绑定。当前文件系统不支持直接大小写改名时，CLI 明确阻止；需要两次使用未占用中间名称时，先确认这个额外操作，不手工移动。可捕获写入失败会尝试回滚，回滚失败先核对实际文件，不盲目重试；不承诺断电原子性。
+
+`move` 只接收目标 Space/Domain 稳定 ID，由 CLI 推导路径与父子关系。`merge` 一次完成内容迁移、直接子领域改挂和源领域移除；`delete` 只接受没有内容、附件、子领域、Project 绑定或人工声明正文的逻辑空领域。普通操作保持 domain_id；只有用户明确要求改变稳定身份时使用 rekey。
+
+单篇 document rename / move 的确认需要预览返回的 `--expected-hash` 和 `--expected-plan`；领域目录 rename 只需计划摘要，不传文档级 expected-hash。其余领域命令沿用各自参数，不套用单篇文档示例。
 
 以下仅用于需要持久批次的重构；原子命令已经覆盖的操作不进入此链路。
 

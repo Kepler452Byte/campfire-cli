@@ -46,7 +46,7 @@ description: "查询、创建、更新和完成 Campfire 任务文档；按结�
 ### 执行步骤
 
 1. 目标和授权明确后，优先使用最近 Domain 的任务模板；没有模板时正文只写任务目标、已知约束和完成条件，不补造事实。
-2. task 契约未知时运行 `campfire --workspace <id> document profile show task`；已知时跳过。`--path` 必填，接受 Workspace 根相对路径或内部绝对路径，不相对于 cwd。创建可省略类型前缀与 `.md`；标题由路径推导，不传 `title` 字段。
+2. 新建 task 契约未知时运行 `campfire --workspace <id> document profile resolve --type task`；已知时跳过，已有任务用 inspect。type 不一定与 Profile 同名。apply 的 `--path` 必填，接受 Workspace 根相对路径或内部绝对路径，不相对于 cwd。创建可省略类型前缀与 `.md`；标题由路径推导，不传 `title` 字段。
 3. apply 默认预览。确认计划与授权一致且没有 issues 后，保持原输入并追加返回的 `expected_hash` 与 `--confirm`。失败时按全部 issues / missing_fields 一次修正；缺业务事实才问用户，不猜枚举。
 4. 成功后按 `target` 找到文件，用 Edit 补正文，保留 CLI 生成的 Frontmatter 和自动生成区。没有 `--body` 参数。完成正文后执行结果实际返回的 follow_up，不固定追加 check 或全库扫描。
 

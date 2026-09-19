@@ -11,7 +11,7 @@ from campfire_cli.app.workspace.repository.workspace_repository import (
 )
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.documents.markdown import render_document
-from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.common.exceptions import AppError, ConfigurationError
 from campfire_cli.config.settings import campfire_home
 from campfire_cli.container import AppContainer
 
@@ -160,8 +160,10 @@ def test_failed_snapshot_replace_keeps_previous_generation(workspace: Path) -> N
         )
     write_task(task, "Todo", "blocked")
 
-    with pytest.raises(IntegrityError, match="rejected test snapshot"):
+    with pytest.raises(AppError) as failure:
         document.list(document_type="task")
+    assert failure.value.code == "document-index-write-failed"
+    assert isinstance(failure.value.__cause__, IntegrityError)
 
     with sqlite3.connect(database) as connection:
         generation = connection.execute(

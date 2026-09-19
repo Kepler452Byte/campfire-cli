@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from campfire_cli.common.exceptions import AppError
 from campfire_cli.common.filesystem import (
     FileChangeExecutor,
     FileChangeSet,
@@ -126,3 +127,23 @@ def test_change_set_removes_empty_directories_and_restores_them_on_failure(
 
     assert marker.read_text(encoding="utf-8") == "marker\n"
     assert generated.read_text(encoding="utf-8") == "generated\n"
+
+
+def test_rollback_failure_reports_incomplete_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "note.md"
+    path.write_text("before", encoding="utf-8")
+
+    def fail(*args):
+        raise PermissionError("occupied")
+
+    monkeypatch.setattr("campfire_cli.common.filesystem.change_set.atomic_write", fail)
+    monkeypatch.setattr("campfire_cli.common.filesystem.change_set.atomic_write_bytes", fail)
+    with pytest.raises(AppError) as failure:
+        FileChangeExecutor(tmp_path, tmp_path / "state").execute(
+            FileChangeSet(writes=(FileWrite(path, "after"),))
+        )
+    assert failure.value.code == "file-rollback-failed"
+    assert failure.value.details["write_performed"] is True
+    assert str(path) in failure.value.details["paths"]

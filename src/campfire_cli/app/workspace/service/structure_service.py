@@ -256,7 +256,7 @@ class DomainService:
     def discover(self) -> tuple[list[Domain], list[dict[str, str]]]:
         spaces, issues = self.spaces.discover()
         domains: list[Domain] = []
-        seen: set[str] = set()
+        seen: dict[str, str] = {}
         for space in spaces:
             space_root = self.root / space.path
             for directory in sorted([space_root, *space_root.rglob("*")]):
@@ -306,9 +306,14 @@ class DomainService:
                 domain_id = meta.get("domain_id", "")
                 if domain_id in seen:
                     issues.append(
-                        {"code": "duplicate-domain-id", "path": relative, "detail": domain_id}
+                        {
+                            "code": "duplicate-domain-id",
+                            "path": relative,
+                            "actual": domain_id,
+                            "detail": f"{domain_id}: {seen[domain_id]} | {relative}",
+                        }
                     )
-                seen.add(domain_id)
+                seen[domain_id] = relative
                 domains.append(
                     Domain(
                         id=domain_id,

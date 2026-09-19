@@ -70,6 +70,9 @@ class DomainRestructureResult(BaseModel):
     domain_id: str
     name: str
     path: str
+    old_path: str = ""
+    path_changed: bool = False
+    expected_plan: str | None = None
     operations: list[dict[str, str]] = Field(default_factory=list)
     affected_projects: list[str] = Field(default_factory=list)
     write_performed: bool = False

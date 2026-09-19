@@ -26,7 +26,7 @@ from campfire_cli.common.documents.domain_context import (
     resolve_domain_context,
 )
 from campfire_cli.common.documents.markdown import parse_document
-from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.exceptions import AppError, GovernanceBlockedError
 from campfire_cli.common.filesystem import (
     FileChangeExecutor,
     FileChangeSet,
@@ -159,10 +159,15 @@ class MaintenanceService:
         domains, issues = DomainService(
             self._settings.vault_root, self._settings.state_root
         ).discover()
+        topology_snapshot = capture_snapshot(
+            self._settings.vault_root,
+            [domain.path / "_领域.md" for domain in domains],
+        )
         if scope:
             scope_path = (self._settings.vault_root / scope).resolve()
             if not self._is_within_workspace(scope_path):
                 return self._sync_blocked("scope-outside-workspace", scope, scope)
+            scope = scope_path.relative_to(self._settings.vault_root).as_posix()
             exact = [domain for domain in domains if domain.path == scope_path]
             if not exact and not scope_path.exists():
                 return self._sync_blocked("scope-missing", scope, scope)
@@ -184,7 +189,17 @@ class MaintenanceService:
             if not descendants and not empty_governance_root:
                 return self._sync_blocked("scope-unmanaged", scope, scope)
             domains = descendants
-            issues = [issue for issue in issues if self._path_matches_scope(issue["path"], scope)]
+            scoped_ids = {domain.id for domain in domains}
+            issues = [
+                issue
+                for issue in issues
+                if scope == "."
+                or self._path_matches_scope(issue["path"], scope)
+                or (
+                    issue["code"] == "duplicate-domain-id"
+                    and issue.get("actual") in scoped_ids
+                )
+            ]
         if issues:
             return MaintenanceResult(
                 status="blocked",
@@ -200,6 +215,7 @@ class MaintenanceService:
             (domain.path for domain in domains),
         )
         snapshot = capture_snapshot(self._settings.vault_root, scoped_documents)
+        snapshot.update(topology_snapshot)
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
         changes: list[tuple[Path, str]] = []
         generated_snapshot: dict[str, str | None] = {}
@@ -223,7 +239,11 @@ class MaintenanceService:
             domain_by_note,
             key=lambda path: str(path.relative_to(self._settings.vault_root)).casefold(),
         )
-        all_relations = self._document_index.relation_views(all_notes)
+        try:
+            indexed_document_count = self._document_index.reconcile().document_count
+            all_relations = self._document_index.relation_views(all_notes)
+        except AppError as exc:
+            return self._sync_failure(exc, "document-index", scope)
         for domain in sorted(domains, key=lambda item: item.id):
             notes = notes_by_domain[domain.id]
             note_count += len(notes)
@@ -288,7 +308,6 @@ class MaintenanceService:
         ]
         for path, expected in generated_snapshot.items():
             snapshot.setdefault(path, expected)
-        indexed_document_count = 0
         if not dry_run:
             expected = {
                 self._settings.vault_root / path: digest for path, digest in snapshot.items()
@@ -299,12 +318,24 @@ class MaintenanceService:
                 expected=expected,
             )
             try:
-                with self._executor.transaction(change_set):
+
+                def verify_topology() -> None:
+                    current, _ = DomainService(
+                        self._settings.vault_root, self._settings.state_root
+                    ).discover()
+                    current_snapshot = capture_snapshot(
+                        self._settings.vault_root, [item.path / "_领域.md" for item in current]
+                    )
+                    if current_snapshot != topology_snapshot:
+                        raise GovernanceBlockedError("领域拓扑在同步期间发生变化")
+
+                with self._executor.transaction(change_set, before_write=verify_topology):
                     domain_states = self._topology_states([], domains)[1]
                     self._repository.replace_scope_index(scope or ".", domain_states)
-                    indexed_document_count = self._document_index.reconcile().document_count
             except GovernanceBlockedError as exc:
                 return self._sync_blocked("concurrent-change", str(exc), scope)
+            except (AppError, OSError) as exc:
+                return self._sync_failure(exc, "generated-files-and-domain-index", scope)
         return MaintenanceResult(
             status="dry-run" if dry_run else "synced",
             document_count=note_count,
@@ -315,6 +346,31 @@ class MaintenanceService:
             operations=operations,
             scope=scope,
             domain_count=len(domains),
+        )
+
+    def _sync_failure(self, exc: Exception, phase: str, scope: str | None) -> MaintenanceResult:
+        incomplete_rollback = isinstance(exc, AppError) and bool(exc.details.get("write_performed"))
+        return MaintenanceResult(
+            status="blocked",
+            document_count=0,
+            issue_count=1,
+            issues=[
+                Issue(
+                    code=(exc.code or exc.error_code)
+                    if isinstance(exc, AppError)
+                    else "maintenance-write-failed",
+                    path=scope or ".",
+                    detail=str(exc),
+                    suggestion=(
+                        "回滚未完成，停止自动重试并核对实际文件。"
+                        if incomplete_rollback
+                        else "排除文件占用或数据库错误后重跑同范围 sync；不需要先执行 check。"
+                    ),
+                )
+            ],
+            blocked_phase=phase,
+            blocked_scope=scope or "workspace",
+            write_performed=incomplete_rollback,
         )
 
     def _sync_blocked(self, code: str, path: str, scope: str | None) -> MaintenanceResult:
