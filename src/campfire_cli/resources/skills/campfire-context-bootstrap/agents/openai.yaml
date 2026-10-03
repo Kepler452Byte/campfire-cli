@@ -1,0 +1,3 @@
+interface:
+  display_name: "Campfire 上下文启动"
+  short_description: "解析 Workspace、Project、源码和文档中心"

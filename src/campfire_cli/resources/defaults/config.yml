@@ -1,0 +1,275 @@
+version: 2
+workspace:
+  version: 2
+  system_directories:
+  - _收件箱/用户输入
+  - _收件箱/待接管
+  - _待用户确认
+  - _模板
+  - _治理视图
+  spaces:
+  - id: knowledge
+    name: 知识
+    path: mynote
+    type: knowledge
+  - id: work
+    name: 工作
+    path: mywork
+    type: work
+  - id: log
+    name: 日志
+    path: mylog
+    type: log
+  - id: research
+    name: 研究
+    path: myresearch
+    type: research
+  - id: blog
+    name: 创作
+    path: myblog
+    type: content
+governance:
+  version: 2
+  inbox: _收件箱
+  human_request_root: _待用户确认
+  collaboration_root: _协作
+  space_marker: _空间.md
+  domain_marker: _领域.md
+document_types:
+  version: 3
+  space_marker: _空间.md
+  scope_roots:
+  - _待用户确认
+  - _模板
+  exempt_basenames:
+  - _领域.md
+  - _空间.md
+  - README.md
+  - CLAUDE.md
+  - AGENTS.md
+  - COMMAND.md
+  types:
+    moc:
+      prefix: MOC-
+      label: 索引
+    prd:
+      prefix: PRD-
+      label: 产品需求
+    trd:
+      prefix: TRD-
+      label: 技术设计
+    decision:
+      prefix: 决策-
+      label: 决策
+    plan:
+      prefix: 计划-
+      label: 计划
+    task:
+      prefix: 任务-
+      label: 任务
+    human-request:
+      prefix: 待确认-
+      label: 待用户确认
+    record:
+      prefix: 记录-
+      label: 记录
+    board:
+      prefix: 看板-
+      label: 看板
+    template:
+      prefix: 模板-
+      label: 模板
+    knowledge:
+      prefix: 知识-
+      label: 知识
+    weekly-report:
+      prefix: 周报-
+      label: 周报
+frontmatter_schema:
+  version: 3
+  resolver:
+    fallback: base
+    profile_by_type:
+      task: task
+      board: board
+      human-request: human-request
+  profiles:
+    base:
+      unknown_fields: report
+      fields:
+        name: {kind: string, required: true}
+        description: {kind: string, required: true}
+        type: {kind: string, required: true}
+        document_status: {kind: enum, required: true, default: draft, values: [draft, current, archived]}
+        created: {kind: date, required: true}
+        updated: {kind: date, required: true}
+        tags: {kind: list, required: true, items: string}
+        related_docs: {kind: list, required: false, items: document-link}
+    task:
+      extends: base
+      unknown_fields: report
+      fields:
+        document_status: {kind: enum, required: true, default: current, values: [draft, current, archived]}
+        task_status: {kind: enum, required: true, values: [todo, in-progress, blocked, completed, cancelled]}
+        priority: {kind: enum, required: false, values: [urgent, high, medium, low]}
+        related_project: {kind: enum, required: false, values_from: workspace.project_ids}
+    board:
+      extends: base
+      unknown_fields: preserve
+      fields: {}
+    human-request:
+      extends: base
+      unknown_fields: report
+      fields:
+        human_decision_status: {kind: enum, required: true, default: pending, values: [pending, decided, deferred, cancelled]}
+moc:
+  project_groups:
+  - label: 任务
+    types:
+    - task
+  - label: 索引
+    types:
+    - moc
+  - label: 产品需求
+    types:
+    - prd
+  - label: 技术设计
+    types:
+    - trd
+  - label: 决策
+    types:
+    - decision
+  - label: 计划
+    types:
+    - plan
+  - label: 记录
+    types:
+    - record
+  - label: 看板
+    types:
+    - board
+project:
+  version: 1
+  statuses:
+  - active
+  - paused
+  - archived
+  default_space_type: work
+issues:
+  version: 1
+  default:
+    message: 发现治理规则问题。
+    suggestion: 根据 code、path 和 detail 审查后处理。
+  warning_codes:
+  - untitled-note
+  - undeclared-directory
+  catalog:
+    untitled-note:
+    - 文档仍使用临时名称。
+    - 理解正文后按文档类型改为有意义的名称；无法判断时保留并请求用户确认。
+    project-doc-frontmatter-missing:
+    - 项目文档缺少 Frontmatter。
+    - 根据正文确定类型和领域，再使用对应项目文档模板补齐元数据。
+    frontmatter-missing:
+    - 受管文档缺少 Frontmatter。
+    - 由 Agent 阅读正文并确认类型后，使用 campfire document apply 一次补齐完整 Profile。
+    frontmatter-field-order-invalid:
+    - Frontmatter 属性顺序不符合当前文档 Profile。
+    - 使用 document format 预览并确认格式化。
+    frontmatter-field-missing:
+    - Frontmatter 缺少必填字段。
+    - 根据 detail 指定的字段补充真实值，不要编造业务信息。
+    frontmatter-field-empty:
+    - Frontmatter 必填字段存在但值为空。
+    - 根据 field 补充真实值；无法确认时保留问题并请求用户确认。
+    frontmatter-field-not-allowed:
+    - 字段不属于当前文档 Profile。
+    - 将叙述信息移入正文，或确认文档类型和领域归属是否正确。
+    frontmatter-enum-invalid:
+    - Frontmatter 使用了契约之外的枚举值。
+    - 使用 issue 的 allowed 值；任务进度写入 task_status，文档状态写入 document_status。
+    template-enum-invalid:
+    - Skill 模板中的枚举值与当前 Schema 不一致。
+    - 修改项目内 Skill SSOT 后运行 campfire skill sync。
+    concurrent-change:
+    - 预览后有文件被其他会话修改。
+    - 读取最新内容后重新执行原命令；不要覆盖其他会话的修改。
+    restructure-source-not-in-inventory:
+    - 重构来源不在冻结的批次清单中。
+    - 重新执行 inventory 正确范围，或修正计划规格中的 source。
+    restructure-config-changed:
+    - 生成计划后治理配置发生变化。
+    - 重新执行 inventory 和 plan，避免用旧规则执行重构。
+    source-hash-changed:
+    - 生成重构计划后源文档已被修改。
+    - 审查其他会话的变更后重新生成重构计划。
+    moc-missing:
+    - 领域声明引用的 MOC 文件不存在。
+    - 创建声明的 MOC 文件后重新运行 sync；不要让 sync 猜测文件名。
+    scope-missing:
+    - 指定范围内没有可同步的正式领域。
+    - 检查 --scope 路径和领域声明后重试。
+    scope-unmanaged:
+    - 指定范围存在，但不属于任何受管 Domain，且范围内也没有 Domain。
+    - 使用 Domain 或其内部路径；需要接管的目录先执行 workspace domain adopt。
+    scope-outside-workspace:
+    - 指定范围超出当前 Workspace。
+    - 使用当前 Workspace 内的相对路径。
+    project-doc-current-conflict:
+    - 同一物理领域存在多个当前唯一文档。
+    - 审查 actual 中的文档，只保留一份 current，或调整其领域和生命周期。
+  categories:
+    restructure-:
+    - 重构计划不满足执行条件。
+    - 修正规格或重新生成重构批次后再执行。
+    source-:
+    - 重构源文件状态不符合计划。
+    - 重新执行 inventory 和 plan，避免覆盖新变化。
+    target-:
+    - 重构目标路径存在问题。
+    - 检查目标路径、重复项和已有文件。
+    frontmatter-:
+    - Frontmatter 不符合当前契约。
+    - 根据字段规则修正后重新检查。
+    document-:
+    - 文档类型、命名或状态不符合规则。
+    - 按文档类型契约修正并重新检查。
+    task-:
+    - 任务文档缺少必要状态或证据。
+    - 补充真实任务信息后重新检查。
+    domain-:
+    - 领域声明不完整或不一致。
+    - 检查 _领域.md 与目录结构。
+    inbox-:
+    - 全局收件箱配置异常。
+    - 检查治理配置与 _收件箱 目录。
+skills:
+  version: 1
+  targets:
+  - "~/.claude/skills"
+  - "~/.agents/skills"
+  managed_skills:
+  - campfire-workspace-onboarding
+  - campfire-workspace-adoption
+  - campfire-workspace-maintenance
+  - campfire-workspace-restructure
+  - campfire-context-bootstrap
+  - campfire-conversation-router
+  - campfire-document-capture
+  - campfire-inbox-triage
+  - campfire-weekly-report-writing
+  - campfire-kanban-board
+  - campfire-task-management
+  unknown_skill_policy: ignore
+  orphaned_skill_policy: report
+bases:
+  version: 2
+  target: _治理视图
+  managed_bases:
+  - 文档工作台.base
+  - 任务工作台-项目.base
+  - 任务工作台-个人.base
+  - 待人决策工作台.base
+  - 归档文档工作台.base
+  unknown_base_policy: ignore
+  orphaned_base_policy: report

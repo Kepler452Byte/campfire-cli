@@ -1,0 +1,460 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+from uuid import uuid4
+
+from campfire_cli.app.document.service.document_scanner import iter_documents
+from campfire_cli.app.document.service.rules.document_rule_service import DocumentRuleService
+from campfire_cli.app.document.service.rules.profile_candidates import workspace_candidate_sets
+from campfire_cli.app.maintenance.schema.maintenance_schema import (
+    DocumentState,
+    DomainState,
+    Issue,
+    MaintenanceResult,
+    MaintenanceRunRecord,
+    SpaceState,
+)
+from campfire_cli.app.maintenance.service import moc_service as governance_sync
+from campfire_cli.app.maintenance.service.maintenance_protocol import (
+    DocumentIndexMaintainerProtocol,
+    MaintenanceRepositoryProtocol,
+)
+from campfire_cli.app.workspace.service.structure_service import DomainService
+from campfire_cli.common.documents.domain_context import (
+    DomainContextError,
+    resolve_domain_context,
+)
+from campfire_cli.common.documents.markdown import parse_document
+from campfire_cli.common.exceptions import AppError, GovernanceBlockedError
+from campfire_cli.common.filesystem import (
+    FileChangeExecutor,
+    FileChangeSet,
+    FileWrite,
+    atomic_write,
+)
+from campfire_cli.common.governance import (
+    capture_snapshot,
+    enrich_issue,
+    filter_issues,
+    optimistic_write_lock,
+)
+from campfire_cli.common.hashing import file_sha256
+from campfire_cli.common.reports.json_report import render_json_report
+from campfire_cli.common.reports.markdown_report import render_maintenance_report
+from campfire_cli.config.settings import WorkspaceSettings
+
+
+class MaintenanceService:
+    def __init__(
+        self,
+        settings: WorkspaceSettings,
+        repository: MaintenanceRepositoryProtocol,
+        document_index: DocumentIndexMaintainerProtocol,
+    ) -> None:
+        self._settings = settings
+        self._repository = repository
+        self._document_index = document_index
+        self._rules = DocumentRuleService(
+            settings.document_types,
+            settings.frontmatter_schema,
+            workspace_candidate_sets(settings.vault_root),
+        )
+        self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
+
+    def check(
+        self,
+        *,
+        scope: str | None = None,
+        code: str | None = None,
+        severity: str | None = None,
+        summary: bool = False,
+    ) -> MaintenanceResult:
+        structure = DomainService(self._settings.vault_root, self._settings.state_root)
+        discovered_domains, domain_issues = structure.discover()
+        discovered_spaces, _space_issues = structure.spaces.discover()
+        spaces, domains = self._topology_states(discovered_spaces, discovered_domains)
+        documents: list[DocumentState] = []
+        issues: list[Issue] = []
+        issues.extend(Issue.model_validate(enrich_issue(item)) for item in domain_issues)
+        paths = self._iter_documents()
+        for path in paths:
+            documents.append(self._document_state(path))
+            issues.extend(
+                Issue.model_validate(enrich_issue(item))
+                for item in self._rules.check_document(self._settings.vault_root, path)
+            )
+        issues.extend(
+            Issue.model_validate(enrich_issue(item))
+            for item in self._rules.check_collection(self._settings.vault_root, paths)
+        )
+        issues.extend(Issue.model_validate(enrich_issue(item)) for item in self._check_inbox())
+        for skills_root in self._settings.skill_targets():
+            issues.extend(
+                Issue.model_validate(enrich_issue(item))
+                for item in self._rules.check_templates(skills_root.parent, skills_root)
+            )
+        issues = list({(item.path, item.code, item.detail): item for item in issues}.values())
+        result = MaintenanceResult(
+            status="ok" if not issues else "needs-review",
+            document_count=len(documents),
+            issue_count=len(issues),
+            total_issue_count=len(issues),
+            issues=issues,
+            issue_counts=self._issue_counts(issues),
+            space_count=len(spaces),
+            domain_count=len(domains),
+        )
+        completed_at = datetime.now(UTC)
+        run = MaintenanceRunRecord(
+            run_id=str(uuid4()),
+            status=result.status,
+            scanned_count=result.document_count,
+            issue_count=result.issue_count,
+            started_at=completed_at,
+            finished_at=completed_at,
+        )
+        observed = {document.path: document.content_hash for document in documents}
+        observed.update({f"{item.path}/_空间.md": item.source_hash for item in spaces})
+        observed.update({f"{item.path}/_领域.md": item.source_hash for item in domains})
+        with optimistic_write_lock(
+            self._settings.state_root, observed, self._settings.vault_root
+        ) as changed:
+            if changed:
+                return self._concurrent_result(changed)
+            self._repository.replace_current_state(issues, spaces, domains)
+            self._document_index.rebuild()
+            self._repository.save_run(run)
+            self._export_current_report(result, completed_at)
+        selected = filter_issues(
+            (item.model_dump() for item in issues), scope=scope, code=code, severity=severity
+        )
+        selected_issues = [Issue.model_validate(item) for item in selected]
+        scoped_documents = [
+            item
+            for item in documents
+            if scope is None or self._path_matches_scope(item.path, scope)
+        ]
+        return MaintenanceResult(
+            status="ok" if not selected_issues else "needs-review",
+            document_count=len(scoped_documents),
+            issue_count=len(selected_issues),
+            total_issue_count=len(issues),
+            issues=[] if summary else selected_issues,
+            issue_counts=self._issue_counts(selected_issues),
+            scope=scope,
+            workspace_status=result.status,
+            space_count=len(spaces),
+            domain_count=len(domains),
+        )
+
+    def _export_current_report(self, result: MaintenanceResult, exported_at: datetime) -> None:
+        payload = result.model_dump(mode="json")
+        payload["exported_at"] = exported_at.isoformat()
+        report_root = self._settings.state_root / "reports"
+        atomic_write(report_root / "current.json", render_json_report(payload))
+        atomic_write(report_root / "current.md", render_maintenance_report(payload))
+
+    def sync(self, dry_run: bool = False, scope: str | None = None) -> MaintenanceResult:
+        domains, issues = DomainService(
+            self._settings.vault_root, self._settings.state_root
+        ).discover()
+        topology_snapshot = capture_snapshot(
+            self._settings.vault_root,
+            [domain.path / "_领域.md" for domain in domains],
+        )
+        if scope:
+            scope_path = (self._settings.vault_root / scope).resolve()
+            if not self._is_within_workspace(scope_path):
+                return self._sync_blocked("scope-outside-workspace", scope, scope)
+            scope = scope_path.relative_to(self._settings.vault_root).as_posix()
+            exact = [domain for domain in domains if domain.path == scope_path]
+            if not exact and not scope_path.exists():
+                return self._sync_blocked("scope-missing", scope, scope)
+            containing = [domain for domain in domains if domain.path in scope_path.parents]
+            if exact:
+                scope_path = exact[0].path
+            elif containing:
+                scope_path = max(containing, key=lambda domain: len(domain.path.parts)).path
+                scope = scope_path.relative_to(self._settings.vault_root).as_posix()
+            descendants = [
+                domain
+                for domain in domains
+                if domain.path == scope_path or scope_path in domain.path.parents
+            ]
+            space_marker = self._settings.governance.get("space_marker", "_空间.md")
+            empty_governance_root = (
+                scope_path == self._settings.vault_root or (scope_path / space_marker).is_file()
+            )
+            if not descendants and not empty_governance_root:
+                return self._sync_blocked("scope-unmanaged", scope, scope)
+            domains = descendants
+            scoped_ids = {domain.id for domain in domains}
+            issues = [
+                issue
+                for issue in issues
+                if scope == "."
+                or self._path_matches_scope(issue["path"], scope)
+                or (
+                    issue["code"] == "duplicate-domain-id"
+                    and issue.get("actual") in scoped_ids
+                )
+            ]
+        if issues:
+            return MaintenanceResult(
+                status="blocked",
+                document_count=0,
+                issue_count=len(issues),
+                issues=[Issue.model_validate(enrich_issue(item)) for item in issues],
+                blocked_phase="preflight",
+                blocked_scope=scope or "workspace",
+            )
+        scoped_documents = iter_documents(
+            self._settings.vault_root,
+            self._settings.document_types,
+            (domain.path for domain in domains),
+        )
+        snapshot = capture_snapshot(self._settings.vault_root, scoped_documents)
+        snapshot.update(topology_snapshot)
+        marker_name = self._settings.governance.get("domain_marker", "_领域.md")
+        changes: list[tuple[Path, str]] = []
+        generated_snapshot: dict[str, str | None] = {}
+        note_count = 0
+        notes_by_domain = {
+            domain.id: governance_sync.direct_notes(domain, marker_name) for domain in domains
+        }
+        templates_by_domain = {
+            domain.id: governance_sync.direct_templates(domain) for domain in domains
+        }
+        try:
+            indexed_document_count = self._document_index.reconcile().document_count
+        except AppError as exc:
+            return self._sync_failure(exc, "document-index", scope)
+        for domain in sorted(domains, key=lambda item: item.id):
+            notes = notes_by_domain[domain.id]
+            note_count += len(notes)
+            if domain.governance == "project-docs":
+                generated = governance_sync.generate_project_domain_content(
+                    domain,
+                    domains,
+                    notes,
+                    templates_by_domain[domain.id],
+                    marker_name,
+                )
+            else:
+                generated = governance_sync.generate_domain_content(
+                    domain, domains, notes, templates_by_domain[domain.id]
+                )
+            moc = domain.path / f"{domain.moc}.md"
+            if not moc.is_file():
+                return MaintenanceResult(
+                    status="blocked",
+                    document_count=note_count,
+                    issue_count=1,
+                    issues=[
+                        Issue.model_validate(
+                            enrich_issue(
+                                {
+                                    "code": "moc-missing",
+                                    "path": moc.relative_to(self._settings.vault_root).as_posix(),
+                                }
+                            )
+                        )
+                    ],
+                    blocked_phase="preflight",
+                    blocked_scope=scope or "workspace",
+                )
+            current_moc = moc.read_text(encoding="utf-8")
+            generated_snapshot[moc.relative_to(self._settings.vault_root).as_posix()] = file_sha256(
+                moc
+            )
+            updated = governance_sync.replace_generated_region(current_moc, generated)
+            if updated != current_moc:
+                changes.append((moc, updated))
+        operations = [
+            {
+                "action": "update" if path.is_file() else "create",
+                "path": path.relative_to(self._settings.vault_root).as_posix(),
+                "reason": "refresh-generated-content",
+            }
+            for path, _content in changes
+        ]
+        for path, expected in generated_snapshot.items():
+            snapshot.setdefault(path, expected)
+        if not dry_run:
+            expected = {
+                self._settings.vault_root / path: digest for path, digest in snapshot.items()
+            }
+            change_set = FileChangeSet(
+                writes=tuple(FileWrite(path, content) for path, content in changes),
+                label="maintenance sync",
+                expected=expected,
+            )
+            try:
+
+                def verify_topology() -> None:
+                    current, _ = DomainService(
+                        self._settings.vault_root, self._settings.state_root
+                    ).discover()
+                    current_snapshot = capture_snapshot(
+                        self._settings.vault_root, [item.path / "_领域.md" for item in current]
+                    )
+                    if current_snapshot != topology_snapshot:
+                        raise GovernanceBlockedError("领域拓扑在同步期间发生变化")
+
+                with self._executor.transaction(change_set, before_write=verify_topology):
+                    domain_states = self._topology_states([], domains)[1]
+                    self._repository.replace_scope_index(scope or ".", domain_states)
+            except GovernanceBlockedError as exc:
+                return self._sync_blocked("concurrent-change", str(exc), scope)
+            except (AppError, OSError) as exc:
+                return self._sync_failure(exc, "generated-files-and-domain-index", scope)
+        return MaintenanceResult(
+            status="dry-run" if dry_run else "synced",
+            document_count=note_count,
+            issue_count=0,
+            indexed_document_count=indexed_document_count,
+            generated_file_count=len(changes),
+            write_performed=bool(changes and not dry_run),
+            operations=operations,
+            scope=scope,
+            domain_count=len(domains),
+        )
+
+    def _sync_failure(self, exc: Exception, phase: str, scope: str | None) -> MaintenanceResult:
+        incomplete_rollback = isinstance(exc, AppError) and bool(exc.details.get("write_performed"))
+        return MaintenanceResult(
+            status="blocked",
+            document_count=0,
+            issue_count=1,
+            issues=[
+                Issue(
+                    code=(exc.code or exc.error_code)
+                    if isinstance(exc, AppError)
+                    else "maintenance-write-failed",
+                    path=scope or ".",
+                    detail=str(exc),
+                    suggestion=(
+                        "回滚未完成，停止自动重试并核对实际文件。"
+                        if incomplete_rollback
+                        else "排除文件占用或数据库错误后重跑同范围 sync；不需要先执行 check。"
+                    ),
+                )
+            ],
+            blocked_phase=phase,
+            blocked_scope=scope or "workspace",
+            write_performed=incomplete_rollback,
+        )
+
+    def _sync_blocked(self, code: str, path: str, scope: str | None) -> MaintenanceResult:
+        return MaintenanceResult(
+            status="blocked",
+            document_count=0,
+            issue_count=1,
+            issues=[Issue.model_validate(enrich_issue({"code": code, "path": path}))],
+            blocked_phase="preflight",
+            blocked_scope=scope or "workspace",
+        )
+
+    def _is_within_workspace(self, path: Path) -> bool:
+        return path == self._settings.vault_root or self._settings.vault_root in path.parents
+
+    @staticmethod
+    def _path_matches_scope(path: str, scope: str) -> bool:
+        normalized_path = path.strip("/")
+        normalized_scope = scope.strip("/")
+        return normalized_path == normalized_scope or normalized_path.startswith(
+            normalized_scope + "/"
+        )
+
+    def _iter_documents(self) -> list[Path]:
+        return iter_documents(self._settings.vault_root, self._settings.document_types)
+
+    def _nearest_domain(self, path: Path) -> str | None:
+        try:
+            return resolve_domain_context(self._settings.vault_root, path).domain_id
+        except DomainContextError:
+            return None
+
+    def _document_state(self, path: Path) -> DocumentState:
+        parsed = parse_document(path.read_text(encoding="utf-8"))
+        document_type = parsed.frontmatter.get("type")
+        return DocumentState(
+            path=path.relative_to(self._settings.vault_root).as_posix(),
+            content_hash=file_sha256(path),
+            document_type=document_type if isinstance(document_type, str) else None,
+            domain_id=self._nearest_domain(path),
+            status=parsed.frontmatter.get("document_status"),
+        )
+
+    def _topology_states(self, spaces, domains) -> tuple[list[SpaceState], list[DomainState]]:
+        space_states: list[SpaceState] = []
+        seen_spaces: set[str] = set()
+        for space in spaces:
+            marker = self._settings.vault_root / space.path / "_空间.md"
+            if not space.id or space.id in seen_spaces or not marker.is_file():
+                continue
+            seen_spaces.add(space.id)
+            space_states.append(
+                SpaceState(
+                    space_id=space.id,
+                    name=space.name,
+                    path=space.path,
+                    space_type=space.type,
+                    status=space.status,
+                    source_hash=file_sha256(marker),
+                )
+            )
+        domain_states: list[DomainState] = []
+        seen_domains: set[str] = set()
+        for domain in domains:
+            marker = domain.path / "_领域.md"
+            if not domain.id or domain.id in seen_domains or not marker.is_file():
+                continue
+            seen_domains.add(domain.id)
+            domain_states.append(
+                DomainState(
+                    domain_id=domain.id,
+                    space_id=domain.space_id,
+                    parent_domain_id=domain.parent_domain,
+                    project_id=domain.project_id,
+                    name=domain.name,
+                    path=domain.path.relative_to(self._settings.vault_root).as_posix(),
+                    domain_type=domain.type,
+                    governance=domain.governance,
+                    moc=domain.moc,
+                    status=domain.status,
+                    source_hash=file_sha256(marker),
+                )
+            )
+        return space_states, domain_states
+
+    def _check_inbox(self) -> list[Issue]:
+        inbox = self._settings.vault_root / self._settings.governance.get("inbox", "_收件箱")
+        if not inbox.is_dir():
+            return [Issue(code="inbox-missing", path=inbox.name)]
+        requests = self._settings.vault_root / self._settings.governance["human_request_root"]
+        if not requests.is_dir():
+            return [Issue(code="human-request-root-missing", path=requests.name)]
+        return []
+
+    @staticmethod
+    def _issue_counts(issues: list[Issue]) -> dict[str, int]:
+        result: dict[str, int] = {}
+        for issue in issues:
+            result[issue.code] = result.get(issue.code, 0) + 1
+        return dict(sorted(result.items()))
+
+    @staticmethod
+    def _concurrent_result(paths: list[str]) -> MaintenanceResult:
+        issues = [
+            Issue.model_validate(enrich_issue({"code": "concurrent-change", "path": path}))
+            for path in paths
+        ]
+        return MaintenanceResult(
+            status="blocked",
+            document_count=0,
+            issue_count=len(issues),
+            issues=issues,
+            issue_counts=MaintenanceService._issue_counts(issues),
+        )

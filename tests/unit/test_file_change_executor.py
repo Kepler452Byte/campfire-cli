@@ -1,0 +1,149 @@
+from pathlib import Path
+
+import pytest
+
+from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.filesystem import (
+    FileChangeExecutor,
+    FileChangeSet,
+    FileWrite,
+    PathMove,
+)
+from campfire_cli.common.filesystem.atomic import atomic_write as real_atomic_write
+from campfire_cli.common.hashing import file_sha256
+
+
+def test_change_set_restores_all_files_when_commit_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    vault = tmp_path / "vault"
+    state = tmp_path / "state"
+    vault.mkdir()
+    first = vault / "first.md"
+    second = vault / "second.md"
+    first.write_bytes(b"first-before\r\n")
+    second.write_text("second-before\n", encoding="utf-8")
+    calls = 0
+
+    def fail_second_write(path: Path, content: str) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected commit failure")
+        real_atomic_write(path, content)
+
+    monkeypatch.setattr("campfire_cli.common.filesystem.change_set.atomic_write", fail_second_write)
+
+    with pytest.raises(OSError, match="injected commit failure"):
+        FileChangeExecutor(vault, state).execute(
+            FileChangeSet(
+                writes=(
+                    FileWrite(first, "first-after\n"),
+                    FileWrite(second, "second-after\n"),
+                )
+            )
+        )
+
+    assert first.read_bytes() == b"first-before\r\n"
+    assert second.read_text(encoding="utf-8") == "second-before\n"
+
+
+def test_change_set_moves_directory_and_writes_inside_target(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    state = tmp_path / "state"
+    source = vault / "old"
+    source.mkdir(parents=True)
+    original = source / "note.md"
+    original.write_text("before\n", encoding="utf-8")
+    target = vault / "nested/new"
+
+    FileChangeExecutor(vault, state).execute(
+        FileChangeSet(
+            writes=(FileWrite(target / "note.md", "after\n"),),
+            moves=(PathMove(source, target),),
+            expected={original: file_sha256(original), target: None},
+        )
+    )
+
+    assert not source.exists()
+    assert (target / "note.md").read_text(encoding="utf-8") == "after\n"
+
+
+def test_change_set_transaction_restores_move_when_coordinated_step_fails(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "vault"
+    state = tmp_path / "state"
+    source = vault / "old"
+    source.mkdir(parents=True)
+    original = source / "note.md"
+    original.write_text("before\n", encoding="utf-8")
+    target = vault / "nested/new"
+    executor = FileChangeExecutor(vault, state)
+
+    with (
+        pytest.raises(RuntimeError, match="database failed"),
+        executor.transaction(
+            FileChangeSet(
+                writes=(FileWrite(target / "note.md", "after\n"),),
+                moves=(PathMove(source, target),),
+                expected={original: file_sha256(original), target: None},
+            )
+        ),
+    ):
+        raise RuntimeError("database failed")
+
+    assert original.read_text(encoding="utf-8") == "before\n"
+    assert not target.exists()
+    assert not (vault / "nested").exists()
+
+
+def test_change_set_removes_empty_directories_and_restores_them_on_failure(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "vault"
+    state = tmp_path / "state"
+    source = vault / "old"
+    nested = source / "generated"
+    nested.mkdir(parents=True)
+    marker = source / "_domain.md"
+    generated = nested / "moc.md"
+    marker.write_text("marker\n", encoding="utf-8")
+    generated.write_text("generated\n", encoding="utf-8")
+    executor = FileChangeExecutor(vault, state)
+
+    with (
+        pytest.raises(RuntimeError, match="database failed"),
+        executor.transaction(
+            FileChangeSet(
+                deletes=(marker, generated),
+                remove_empty_directories=(nested, source),
+                expected={marker: file_sha256(marker), generated: file_sha256(generated)},
+            )
+        ),
+    ):
+        assert not source.exists()
+        raise RuntimeError("database failed")
+
+    assert marker.read_text(encoding="utf-8") == "marker\n"
+    assert generated.read_text(encoding="utf-8") == "generated\n"
+
+
+def test_rollback_failure_reports_incomplete_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "note.md"
+    path.write_text("before", encoding="utf-8")
+
+    def fail(*args):
+        raise PermissionError("occupied")
+
+    monkeypatch.setattr("campfire_cli.common.filesystem.change_set.atomic_write", fail)
+    monkeypatch.setattr("campfire_cli.common.filesystem.change_set.atomic_write_bytes", fail)
+    with pytest.raises(AppError) as failure:
+        FileChangeExecutor(tmp_path, tmp_path / "state").execute(
+            FileChangeSet(writes=(FileWrite(path, "after"),))
+        )
+    assert failure.value.code == "file-rollback-failed"
+    assert failure.value.details["write_performed"] is True
+    assert str(path) in failure.value.details["paths"]

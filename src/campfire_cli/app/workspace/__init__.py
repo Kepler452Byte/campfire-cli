@@ -1,0 +1,1 @@
+"""Registered Workspace management application."""

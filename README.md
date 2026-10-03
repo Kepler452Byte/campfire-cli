@@ -1,0 +1,151 @@
+# Campfire
+
+`campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕同一份持久共享上下文协作：把口头要求、临时笔记、任务进度、项目资料和长期知识沉淀进可检索、可交接、可审计的 Workspace。
+
+- **人类和 Agent 同一条链路**：同一套 CLI 契约 + 全局 Agent Skill，没有两套规则。
+- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；SQLite 只是可重建的本机索引与运行状态。
+- **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，多会话并发不会互相覆盖。
+- **本地优先**：不绑定云服务、不内置账号；Obsidian Vault 是当前首个存储适配器，Workspace 才是顶层概念。
+
+产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。不知道 Campfire 是否具有某项能力时用 `campfire tree` 发现命令；已知文档操作不把 tree 作为固定前置步骤。
+
+## 安装
+
+### v0.1.24 变更说明
+
+`maintenance sync` 不再生成 `_generated/相关文档-*.md`，并移除 MOC 自动区域中的关系页入口；MOC 的文档导航、分组和模板入口保持不变。`related_docs` 仍为可选字段，Agent 通过 `document list` 定位文档、通过 `document inspect` 查询出向、入向及失效关联，查询不要求先同步 MOC。
+
+同步不会删除或改写历史关系页，也不会修改人工正文链接。历史清理须先核实来源和人工内容，再确认具体范围；不能按 `_generated` 或 `generated` 目录名递归删除。Base 同步策略和领域模型不在本次变更范围内。
+
+标准安装（已发布至 PyPI，无需源码仓库）：
+
+```bash
+uv tool install campfire-cli
+campfire version
+```
+
+升级：`campfire upgrade` 是一条幂等命令——检测 PyPI 新版本并按安装方式（uv tool / pipx）更新包本身（更新器在独立进程中等待当前进程退出后执行，完成后自动用新版代码对齐治理资源），随后对齐 SQLite Schema、全局 Skill、Base 与提示词路标。离线、已是最新、editable 源码安装或无法识别安装方式时跳过包更新仅对齐资源。
+
+开发机安装（跟随本地源码）：
+
+```bash
+git clone https://github.com/Kepler452Byte/campfire-cli
+uv tool install --editable /path/to/campfire-cli
+```
+
+源码开发使用 `uv sync` 后直接 `uv run campfire --help`。
+
+## 快速上手
+
+```bash
+# 1. 接入已有 Vault（目录已存在，含或不含 .campfire.yaml）
+campfire setup --path /path/to/vault --default
+
+# 2. 或者从零创建新 Workspace（初始化目录结构并注册）
+campfire workspace create --id personal --path /path/to/vault --default
+
+# 3. 日常：检查治理状态、刷新生成视图
+campfire maintenance check --summary
+campfire maintenance sync --dry-run
+```
+
+不指定 `--path` 运行 `campfire setup` 是降级执行而不是报错：仍会同步全局 Skill 与提示词路标，输出接入引导，并显式列出被跳过的 Manifest 相关步骤。
+
+`setup` 会向 `~/.claude/CLAUDE.md`、`~/.agents/AGENTS.md` 注入幂等的 campfire 路标块，保留标记外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标。`setup` 与 `skill sync` 会把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`，可通过 `CAMPFIRE_SKILL_TARGETS` 覆盖。单独执行 `skill sync` 不更新提示词路标。
+
+## 核心概念
+
+```text
+Workspace ── Space ── Domain 树 ── 文档
+     │        （_空间.md）（_领域.md + 自动 MOC）
+     └── Project（关联代码仓库与项目根 Domain）
+```
+
+| 对象 | 说明 | 事实源 |
+|------|------|--------|
+| Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/campfire.db`（注册）+ `.campfire.yaml`（便携 Manifest） |
+| Space / Domain | 顶级容器 / 可嵌套内容边界，声明式 + 自动 MOC | Vault 内 `_空间.md`、`_领域.md` |
+| Document | 知识、计划、问题、决策、记录等持久内容 | Markdown 正文 + Frontmatter |
+| Human request | Agent 需要人类回答的待确认事项 | `_待用户确认/` 中的 `human-request` 文档 |
+| Generated View | MOC、相关文档页、Base、报告 | 派生数据，能生成就不手工维护 |
+
+`任务/`、`记录/` 可按实际组织需要成为 Domain，但文档类型不强制对应同名目录，也不要求每个 Project 预建。新建受管文档在 Frontmatter 后提供 `<!-- CAMPFIRE:BODY -->`，Agent 以该锚点定位人工正文；旧文档无需迁移。
+
+设备边界：`.campfire.yaml` 只保存可跨设备同步的稳定身份与逻辑关联（Project id、Git remote、文档 Domain 等），禁止本机绝对路径；新设备执行 `campfire setup --path <vault>` 即可恢复。本机路径绑定、索引、锁与报告都在 `~/.campfire/`（可用 `CAMPFIRE_HOME` 覆盖），按 Workspace 隔离。
+
+## 常用命令
+
+```bash
+campfire tree                                    # 完整命令树
+campfire workspace resolve                       # Workspace 不明确时解析
+campfire workspace list / show / export / import # 注册库管理与备份
+campfire workspace project resolve               # 当前目录属于哪个已注册项目
+
+campfire maintenance check [--summary] [--scope] # Schema/枚举校验 + 刷新索引
+campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 与相关文档页
+
+campfire document inspect / check / format       # 单篇文档查看、校验、格式化
+campfire document list                           # 精确枚举和筛选受管文档
+campfire document apply / move / rename          # 结构写入、跨 Domain 移动、原地改名
+campfire document profile list / show / resolve  # Frontmatter Profile 规则
+campfire document type list                      # 文档类型与前缀
+campfire base list / show / check / sync          # Obsidian Base `_治理视图/`
+```
+
+通用模板集中在 Workspace 根目录 `_模板/`，方便人类查看维护；模板使用 `template` 类型和基础属性。正文顶部说明适用类型和裁剪规则，Agent 按需参考，不强制套用；更新已有文档优先保留合理结构。局部模板只在用户或领域规则明确指定时使用，不逐层查找或自动覆盖。模板不替代 Profile，也不校验正文。
+
+新建 Workspace 默认附带模板原则 README、任务模板和版本发布清单模板，无需额外参数。模板仅初始化一次，之后由用户维护；setup、upgrade 不覆盖修改，也不补回被删除的模板。实际使用时保留格式规范卡片、替换示例正文，不把模板当成真实任务。
+
+结构治理命令默认只输出计划，追加 `--confirm` 才执行：
+
+```bash
+campfire workspace space create --id research --name "研究" --path myresearch --type research
+campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
+  --type knowledge-domain --confirm
+campfire --workspace personal workspace project adopt --id example \
+  --name "Example" --domain project-example --local-path /path/to/repo
+campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
+```
+
+## 存量接管与结构重构
+
+`workspace domain adopt` 用一条命令接管一个已有文件夹。Vault 外来源经临时暂存和哈希校验复制到目标 Domain，原目录始终保留；Vault 内来源原地声明或移动到明确目标。命令一次建立一个粗粒度 Domain，语义细分交给后续 Restructure。
+
+```bash
+campfire workspace domain adopt --source /path/to/folder --target-path "mynote/新领域" \
+  --id knowledge-new --name "新领域" \
+  --type knowledge-domain --governance knowledge-docs
+# 审查同一份结构化计划后，对相同命令追加 --confirm
+```
+
+单篇文档在已声明 Domain 之间移动使用 `document move --path <source> --domain <target-domain-id> [--name <filename>]`。常见 Domain 调整直接使用 `domain move/merge/delete`；只有批量文档映射、领域拆分或 Frontmatter Patch 才进入持久批次：
+
+```bash
+campfire workspace restructure inventory --scope work --batch move-001
+campfire workspace restructure plan --batch move-001 --spec restructure.yaml
+campfire workspace restructure apply --batch move-001 --confirm
+campfire workspace restructure verify --batch move-001
+```
+
+领域三个维度独立演进：`domain rename`（显示名）、`domain move --target <space-or-domain-id>`（物理位置）、`domain rekey`（稳定身份，高风险）。领域合并和逻辑空领域删除分别使用 `domain merge`、`domain delete`；领域级命令联动 `_领域.md`、子领域、Project、`.campfire.yaml` 与路径引用。
+
+## 治理模型
+
+- **本地查询投影**：`document list` 按 Project、Domain、类型、`document_status` 和 `task_status` 精确筛选；`document inspect` 返回显式关联、出链、反向链接和失效/歧义引用。两者在查询前自动 reconcile，Agent 无需先运行 Maintenance。SQLite 不复制正文，正文仍由 Agent 按返回路径读取。
+- **校验分工**：`maintenance check` 汇总 Space/Domain 结构与正式文档问题，并刷新可重建索引；`workspace space/domain check` 提供结构声明的专项诊断。`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
+- **Frontmatter Profile**：声明式一层继承（`base` 或 `base → task/human-request/board`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
+- **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，失败恢复到执行前。
+- **按需后续治理**：写入命令只在实际写入成功且派生内容可能变化时返回零或一个、且可直接执行的最小 scope `maintenance sync`；预览和阻塞结果的 `follow_up` 为空。位于 Domain 内部的 scope 由 CLI 归一化为有效 Domain。Skill 消费该结果，没有 follow-up 就结束，不固定追加 dry-run 或全量 check。
+- **配置两层模型**：产品默认契约在包内 `resources/defaults/config.yml`（SSOT），用户只在 `~/.campfire/config.yml` 写覆盖项；Mapping 递归合并，`campfire workspace config check` 验证有效配置。
+
+## Agent 协作
+
+全局 Skill 定义 Agent 的文档工作流：已知路径的人工正文直接 Edit；新建文档先 apply 创建结构，再按返回的 `target` 补正文。只在治理上下文缺失时加载 bootstrap；字段契约未知时，新建查一次目标 Profile，更新查一次 inspect。已明确的信息不重复查询，用户已有授权不重复询问。文档相对路径以 Workspace 根目录为基准，不随 cwd 改变；创建时可省略类型前缀与 `.md`。改标题用 rename，跨 Domain 移动用 move，完成后仅执行实际 follow_up。归档仍需用户对具体文档明确同意，关键歧义不得自行猜测。
+
+仓库 Skill 编写规范见 `src/campfire_cli/resources/skills/SPEC.md`。本地与 CI 共用 `uv run python scripts/quality_check.py`；发布前使用 `--release` 增加构建、wheel 隔离安装与冒烟验证。测试日志包含最慢 10 项耗时。Release 的公共 PyPI 安装验证最多等待 3 分钟、间隔 15 秒重试，不重试上传；安装后版本不符直接失败。
+
+发布准备先执行 `uv run python scripts/release_check.py --tag <目标标签>`（默认检查 HEAD，可用 `--target <提交>` 指定）。这是只读检查，不创建或推送标签。远端标签不存在时按正常流程创建；已有标签一致时复用；对象不同或提交不同时停止核对，不强推、不重建。远端已有而本地缺失时先获取原标签再检查。IDE 拉取时的标签冲突不等于源码合并冲突，也不代表分支拉取已完成；不要全局开启“始终替换本地标记”。检查通过不替代质量门禁或用户发布授权。
+
+## 许可
+
+MIT。

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 构建与发布
+dist/
+*.egg-info/
+
+# 本机环境
+.DS_Store
+Thumbs.db

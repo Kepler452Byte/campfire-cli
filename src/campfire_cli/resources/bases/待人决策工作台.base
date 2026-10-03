@@ -1,0 +1,36 @@
+filters:
+  and:
+    - file.ext == "md"
+    - type == "human-request"
+properties:
+  file.name: {displayName: 待决事项}
+  description: {displayName: 问题摘要}
+  human_decision_status: {displayName: 人类决策状态}
+  updated: {displayName: 更新时间}
+  tags: {displayName: 标签}
+views:
+  - type: table
+    name: 待人决策
+    filters: human_decision_status == "pending"
+    order: [file.name, description, updated]
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: 已决待处理
+    filters: human_decision_status == "decided"
+    order: [file.name, description, updated]
+  - type: table
+    name: 已暂缓
+    filters: human_decision_status == "deferred"
+    order: [file.name, updated]
+  - type: table
+    name: 已取消
+    filters: human_decision_status == "cancelled"
+    order: [file.name, updated]
+  - type: table
+    name: 全部待决事项
+    order: [file.name, description, human_decision_status, updated]
+    sort:
+      - property: updated
+        direction: DESC

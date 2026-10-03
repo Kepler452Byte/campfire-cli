@@ -1,0 +1,27 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'document_status != "archived"'
+properties:
+  file.name: {displayName: 文档}
+  type: {displayName: 类型}
+  description: {displayName: 摘要}
+  document_status: {displayName: 文档状态}
+  updated: {displayName: 更新时间}
+  tags: {displayName: 标签}
+views:
+  - type: table
+    name: 全部当前文档
+    groupBy: {property: type, direction: ASC}
+    order: [file.name, type, description, document_status, updated, tags]
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: 草稿
+    filters: 'document_status == "draft"'
+    order: [file.name, type, description, updated]
+  - type: table
+    name: 当前计划
+    filters: 'type == "plan" && document_status == "current"'
+    order: [file.name, description, updated]
