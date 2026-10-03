@@ -31,7 +31,7 @@ HINT_BODY = """## Campfire 文档治理
    `--path` 可省略 `.md`，创建时可省略类型前缀，由 CLI 返回最终 target。
    相对路径以 Workspace 根为基准，不是 cwd；创建成功后按 target 用 Edit
    补正文，不传 title 或不存在的 --body 参数。新建契约未知时只查询目标
-   `document profile show <type>`，用户已明确授权就不重复询问是否创建。
+   `document profile resolve --type <type>`，用户已明确授权就不重复询问是否创建。
 7. 只改一篇文档标题时使用 `campfire document rename --path <source> --name <标题>`；
    它保留原目录并同步标题、规范文件名和受管引用。跨 Domain 移动才使用
    `campfire document move`。
@@ -44,9 +44,9 @@ HINT_BODY = """## Campfire 文档治理
 9. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
    CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
    不为通过检查而猜测。
-10. 创建结构化文档时，从目标 Domain 开始向父 Domain 查找
-   `_模板/模板-<用途>.md`，使用找到的第一份；不合并模板，不修改模板源文档。
-   模板不存在时使用对应 Skill 的最小结构，不自行发明复杂格式。
+10. 创建结构化文档时，默认按需查看 Workspace 根 `_模板/`；
+   局部模板仅在用户或领域规则明确指定时使用，不逐层查找、不合并模板。
+   正文按需裁剪，没有模板不阻塞写作，不修改模板源文档。
 11. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
    `--confirm` 只确认 CLI 写入，不代表归档授权。
 

@@ -42,7 +42,7 @@ campfire base list / show / check / sync
 
 Space、Domain、Project 的 `create`/`adopt`，以及文档移动和重构写操作默认先预览；审查通过后才追加 `--confirm`。归档通过 `document apply --set document_status=archived` 修改，且必须先获得用户明确同意。已注册 Workspace 只通过根级 `campfire --workspace <id> ...` 选择；已声明 Space、Domain 和 Project 使用稳定 ID，CLI 自行推导路径和父子关系。路径参数只用于新位置、具体文件、外部输入和显式扫描范围。
 
-目录名以 `_` 开头时表示系统治理区域，不能声明为 Space 或 Domain；错误结果返回命中的 `reserved_directory` 和修复提示。其他目录名默认没有隐藏保留语义，`任务/`、`记录/`、`assets/`、`archive/`、`generated/` 均可按需 create/adopt 为 Domain。文档类型不强制对应同名 Domain，归档只通过 `document_status=archived` 表达；CLI 关系页写入 `_generated/`，Base 写入 `_治理视图/`。
+目录名以 `_` 开头时表示系统治理区域，不能声明为 Space 或 Domain；错误结果返回命中的 `reserved_directory` 和修复提示。其他目录名默认没有隐藏保留语义，`任务/`、`记录/`、`assets/`、`archive/`、`generated/` 均可按需 create/adopt 为 Domain。文档类型不强制对应同名 Domain，归档只通过 `document_status=archived` 表达；不再生成关系页；Base 写入 `_治理视图/`，无需 Obsidian 即可查询文档关联。
 
 `document apply` 可新建、更新、为已有正文补齐 Frontmatter，或通过显式 `--type` 原子转换文档类型。新建文档在 Frontmatter 后包含唯一的 `<!-- CAMPFIRE:BODY -->`，调用方只在锚点后编辑正文；存量文档不强制迁移。创建或唯一更新时可省略 `.md`；创建和类型转换时还可省略类型前缀。CLI 在 `normalization` 中返回每项标准化，并在 `target` 中返回最终路径；调用方不手工同步类型、前缀与 Markdown 后缀。`document move` 可在任意已声明 Domain 之间移动单篇文档，并对齐目标 Profile 与可确定引用。目标 Profile 缺少语义字段时返回 `missing_fields`，调用方补齐明确业务值。只有实际写入成功的结果才可返回零或一个、且可直接执行的 scoped `maintenance sync` follow-up；Domain 内部路径会归一化为对应 Domain，预览、阻塞或无派生影响时返回空列表。具体参数以对应命令的 `-h` 为准。
 

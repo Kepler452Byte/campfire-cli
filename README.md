@@ -3,15 +3,24 @@
 `campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕同一份持久共享上下文协作：把口头要求、临时笔记、任务进度、项目资料和长期知识沉淀进可检索、可交接、可审计的 Workspace。
 
 - **人类和 Agent 同一条链路**：同一套 CLI 契约 + 全局 Agent Skill，没有两套规则。
-- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；SQLite 只是可重建的本机索引与运行状态。
-- **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，多会话并发不会互相覆盖。
-- **本地优先**：不绑定云服务、不内置账号；Obsidian Vault 是当前首个存储适配器，Workspace 才是顶层概念。
+- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；SQLite 保存可重建索引，也保存本机注册与运行状态，不能整体当作缓存删除。
+- **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，检测到输入变化时拒绝覆盖；不承诺外部编辑器遵守锁或跨介质崩溃原子性。
+- **本地优先**：不绑定云服务、不内置账号；Obsidian 是推荐阅读工具而非强依赖；CLI 可独立治理 Markdown Workspace。
 
 产品目标、业务对象、SSOT 与模块边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。不知道 Campfire 是否具有某项能力时用 `campfire tree` 发现命令；已知文档操作不把 tree 作为固定前置步骤。
 
+## 使用入口
+
+首次使用先看 [独立环境快速上手](docs/quickstart.md)，完整走通文档创建与关联查询，不接入真实 Vault。需要 Python 3.12+；发布流程验证 Linux、macOS 和 Windows，具体 Shell 要求见示例。
+
+- [数据安全、误操作恢复与退出](docs/safety.md)
+- [版本变化](CHANGELOG.md) · [贡献指南](CONTRIBUTING.md) · [安全反馈](SECURITY.md)
+
+推荐搭配 Obsidian：内置 Bases 展示表格，大纲提供章节导航；Kanban 用于看板，Obsidian Git 用于版本历史。它们不是普通文档查询和治理的前提。Templater、TOC 不作为依赖。插件配置教程等待维护者提供博客链接，不在 CLI 输出或仓库重复编写，也不自动修改插件设置。
+
 ## 安装
 
-### v0.1.24 变更说明
+### 升级注意事项
 
 `maintenance sync` 不再生成 `_generated/相关文档-*.md`，并移除 MOC 自动区域中的关系页入口；MOC 的文档导航、分组和模板入口保持不变。`related_docs` 仍为可选字段，Agent 通过 `document list` 定位文档、通过 `document inspect` 查询出向、入向及失效关联，查询不要求先同步 MOC。
 
@@ -67,7 +76,7 @@ Workspace ── Space ── Domain 树 ── 文档
 | Space / Domain | 顶级容器 / 可嵌套内容边界，声明式 + 自动 MOC | Vault 内 `_空间.md`、`_领域.md` |
 | Document | 知识、计划、问题、决策、记录等持久内容 | Markdown 正文 + Frontmatter |
 | Human request | Agent 需要人类回答的待确认事项 | `_待用户确认/` 中的 `human-request` 文档 |
-| Generated View | MOC、相关文档页、Base、报告 | 派生数据，能生成就不手工维护 |
+| Generated View | MOC、Base、报告 | 派生数据，能生成就不手工维护 |
 
 `任务/`、`记录/` 可按实际组织需要成为 Domain，但文档类型不强制对应同名目录，也不要求每个 Project 预建。新建受管文档在 Frontmatter 后提供 `<!-- CAMPFIRE:BODY -->`，Agent 以该锚点定位人工正文；旧文档无需迁移。
 
@@ -82,7 +91,7 @@ campfire workspace list / show / export / import # 注册库管理与备份
 campfire workspace project resolve               # 当前目录属于哪个已注册项目
 
 campfire maintenance check [--summary] [--scope] # Schema/枚举校验 + 刷新索引
-campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 与相关文档页
+campfire maintenance sync [--dry-run] [--scope]  # 刷新 MOC 导航
 
 campfire document inspect / check / format       # 单篇文档查看、校验、格式化
 campfire document list                           # 精确枚举和筛选受管文档
@@ -101,7 +110,7 @@ campfire base list / show / check / sync          # Obsidian Base `_治理视图
 ```bash
 campfire workspace space create --id research --name "研究" --path myresearch --type research
 campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
-  --type knowledge-domain --confirm
+  --type knowledge-domain --governance knowledge-base --confirm
 campfire --workspace personal workspace project adopt --id example \
   --name "Example" --domain project-example --local-path /path/to/repo
 campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
@@ -134,7 +143,7 @@ campfire workspace restructure verify --batch move-001
 - **本地查询投影**：`document list` 按 Project、Domain、类型、`document_status` 和 `task_status` 精确筛选；`document inspect` 返回显式关联、出链、反向链接和失效/歧义引用。两者在查询前自动 reconcile，Agent 无需先运行 Maintenance。SQLite 不复制正文，正文仍由 Agent 按返回路径读取。
 - **校验分工**：`maintenance check` 汇总 Space/Domain 结构与正式文档问题，并刷新可重建索引；`workspace space/domain check` 提供结构声明的专项诊断。`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
 - **Frontmatter Profile**：声明式一层继承（`base` 或 `base → task/human-request/board`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
-- **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，失败恢复到执行前。
+- **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，可捕获失败尝试补偿；若报告恢复失败，停止重试并核对实际文件。
 - **按需后续治理**：写入命令只在实际写入成功且派生内容可能变化时返回零或一个、且可直接执行的最小 scope `maintenance sync`；预览和阻塞结果的 `follow_up` 为空。位于 Domain 内部的 scope 由 CLI 归一化为有效 Domain。Skill 消费该结果，没有 follow-up 就结束，不固定追加 dry-run 或全量 check。
 - **配置两层模型**：产品默认契约在包内 `resources/defaults/config.yml`（SSOT），用户只在 `~/.campfire/config.yml` 写覆盖项；Mapping 递归合并，`campfire workspace config check` 验证有效配置。
 

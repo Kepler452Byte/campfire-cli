@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import tomllib
@@ -95,6 +96,28 @@ def smoke_test_wheel(version: str, artifact_dir: Path | None = None) -> None:
             env=smoke_environment,
         ).stdout
         json.loads(output)
+        # Every CLI process has exited before taking the offline state snapshot.
+        state = directory / "campfire-home"
+        backup = directory / "backup"
+        shutil.copytree(workspace, backup / "workspace")
+        shutil.copytree(state, backup / "state")
+        document = workspace / "_模板" / "README.md"
+        original = document.read_bytes()
+        document.write_bytes(original + b"\nRecovery drill\n")
+        shutil.copy2(backup / "workspace" / "_模板" / "README.md", document)
+        shutil.copytree(backup / "state", state, dirs_exist_ok=True)
+        subprocess.run(
+            [str(campfire), "--workspace", "smoke", "document", "type", "list"],
+            cwd=directory,
+            check=True,
+            capture_output=True,
+            env=smoke_environment,
+        )
+        if document.read_bytes() != original:
+            raise SystemExit("offline document restore changed content")
+        run("uv", "pip", "uninstall", "--python", str(python), "campfire-cli")
+        if campfire.exists() or document.read_bytes() != original or not state.is_dir():
+            raise SystemExit("uninstall must remove the CLI and preserve user content and state")
 
 
 def main() -> None:

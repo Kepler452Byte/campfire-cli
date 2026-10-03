@@ -1,6 +1,6 @@
 [project]
 name = "campfire-cli"
-version = "0.1.24"
+version = "0.1.25"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 license = "MIT"
@@ -14,6 +14,12 @@ dependencies = [
   "sqlalchemy>=2.0",
   "typer>=0.12",
 ]
+
+[project.urls]
+Repository = "https://github.com/Kepler452Byte/campfire-cli"
+Documentation = "https://github.com/Kepler452Byte/campfire-cli#readme"
+Issues = "https://github.com/Kepler452Byte/campfire-cli/issues"
+Changelog = "https://github.com/Kepler452Byte/campfire-cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
 campfire = "campfire_cli.main:app"

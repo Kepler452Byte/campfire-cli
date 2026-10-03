@@ -18,9 +18,9 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 - **Project**：Workspace 连接的外部工作资源，关联代码仓库、本地路径和一个项目根 Domain。
 - **Participant**：参与协作的人类或 Agent。
 - **Document**：知识、项目、决策、计划、问题、记录等持久内容。
-- **Task Channel**：围绕一项任务持续记录负责人、状态、进展、阻塞、交接、结果和验收的异步协作通道。
+- **Task Channel（演进设想，非已实现协议）**：围绕一项任务持续记录负责人、状态、进展、阻塞、交接、结果和验收的异步协作通道。
 - **Inbox Item**：尚未完成归属、类型或意图判断的输入，以及需要人类确认的问题。
-- **Human request**：Agent 需要人类确认的 Markdown 事项，位于全局收件箱并以 Frontmatter 状态跟踪。
+- **Human request**：Agent 需要人类确认的 Markdown 事项，位于 `_待用户确认/` 并以 Frontmatter 状态跟踪。
 - **Generated View**：由事实数据生成的 MOC、Base、报告和索引，不由人手重复维护。
 
 ## 3. 业务架构
@@ -42,7 +42,7 @@ Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion�
 
 Domain 由声明而不是目录名称决定；`任务/`、`记录/`、`assets/` 等普通目录可按需要成为 Domain，但文档类型不强制绑定同名目录。以下划线开头的 `_xxx/` 统一表示治理基础设施，不能声明为 Space 或 Domain；MOC 保留领域导航，Base 使用 `_治理视图/`；不再生成 `_generated/` 关系页。归档是 `document_status=archived`，不对应特殊物理目录。
 
-Task Channel 借鉴 Go 的原则：**Do not communicate by sharing memory; instead, share memory by communicating.** 多个参与者不依赖各自会话中的隐式记忆，而是通过明确的任务状态与事件共享上下文。它是持久异步 Channel，不承诺实时唤醒；外部 Agent 运行时可在其上增加通知和调度。
+Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate by sharing memory; instead, share memory by communicating.** 多个参与者不依赖各自会话中的隐式记忆，而是通过明确的任务状态与事件共享上下文。它是持久异步 Channel，不承诺实时唤醒；外部 Agent 运行时可在其上增加通知和调度。
 
 ## 4. 系统架构
 
@@ -159,7 +159,7 @@ Campfire 不把“调用方能够猜对未声明契约”作为可靠性前提�
 | Workspace、Project 本机路径绑定 | `~/.campfire/campfire.db` | 本机 CLI 命令 |
 | Campfire Skills | Python 包内 `resources/skills/` | 全局 Agent Skill 目录 |
 | 文档查询索引 | Workspace Markdown、结构声明与有效治理契约 | `~/.campfire/campfire.db` 中按 `workspace_id` 隔离的可重建投影 |
-| Decision、结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；当前不能仅从 Workspace 重建 |
+| 结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；当前不能仅从 Workspace 重建 |
 
 SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索引可以从 Markdown 重建；SQLite 不是知识内容的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
 
@@ -186,13 +186,12 @@ SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索�
 每台设备独立维护
   Project local_path
   SQLite 查询投影与运行记录
-  Decision 与事件
   Skills 安装路径、锁、缓存和报告
 ```
 
 Project 的逻辑身份可以跨设备保持一致，但 `local_path` 是机器绑定：同一个 Project 在不同电脑上可以位于不同目录，也可以在某台电脑上尚未克隆。新设备通过稳定 Project id 和 `git_remote_url` 识别代码仓库，自动探测失败时由用户或 Agent 在本机显式绑定路径。
 
-可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、根 `document_domain_id`、Git remote、默认分支和状态，明确禁止 `local_path`。`projects[].document_domain_id` 是 Project–Domain 绑定的唯一事实；`_领域.md` 不保存 Project 字段。现有 `_空间.md` 与 `_领域.md` 分别承载 Space 和 Domain 自身事实。Decision 当前保持本地，不属于该 Manifest。
+可移植元数据由 Vault 根目录唯一的 `.campfire.yaml` 承载并随 Git 或文件同步；不得提交 `campfire.db` 来共享状态。Manifest 使用稳定的 `workspace.id`，保存 Workspace 名称、治理版本，以及 Project 的 id、名称、根 `document_domain_id`、Git remote、默认分支和状态，明确禁止 `local_path`。`projects[].document_domain_id` 是 Project–Domain 绑定的唯一事实；`_领域.md` 不保存 Project 字段。现有 `_空间.md` 与 `_领域.md` 分别承载 Space 和 Domain 自身事实。待人确认内容以 Markdown 文档同步，不存在当前公共 Decision 状态机。
 
 Space/Domain 声明采用区域所有权：Frontmatter 由 Workspace App 管理，成对 `AUTO-GENERATED` 标记内由生成器管理，标记外 Markdown 正文由人和 Agent 自由维护。声明 formatter 只能重排 Frontmatter，必须逐字节保留正文；生成器遇到重复、嵌套或未闭合标记时停止，不猜测覆盖范围。
 
@@ -216,21 +215,11 @@ SQLite 中的 `spaces`、`domains` 与 `documents` 是本机查询投影，不�
 
 Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain adopt` 一次完成只读盘点、预览和确认后的原子接管，不持久化中间批次。外部目录通过临时隐藏目录复制并校验，原来源保持不变；Vault 内目录原地声明或移动到目标。CLI 负责哈希、软链接与冲突保护、声明、初始 MOC 和 Project/Manifest 联动；Agent 负责阅读正文、选择目标 Space/Domain，并执行返回的 `follow_up`。
 
-## 6. 本地 Web 工作台
+## 6. 可选阅读环境与未来交付
 
-Campfire 可以提供由 CLI 启动的单进程本地 HTTP 服务和浏览器工作台。CLI 与 HTTP 是同级交付适配器，必须复用同一个 Application Service、Repository、事务和审计逻辑；前端不得直接访问 SQLite，也不得复制 Decision 状态机。
+当前公共入口是 CLI，没有已交付的 Web 工作台或独立 Decision HTTP 状态机。Obsidian 是推荐阅读工具，不是 CLI 的强依赖；Bases、大纲和可选 Kanban 负责相应展示，普通 Markdown 和文档查询不依赖这些组件。Obsidian Git 可辅助版本历史，CLI 不另建备份系统。
 
-```text
-Agent / Terminal ──> CLI Adapter  ──┐
-                                    ├── Application Service ──> Repository
-Human / Browser  ──> HTTP Adapter ──┘                           │
-                                                                ├── SQLite
-                                                                └── Vault
-```
-
-第一期 Web UI 只处理 Decision：查看 pending、answered、closed、cancelled，阅读问题、证据、建议、关联文档与来源 Session，并执行 answer 或 cancel。用户回答后仍由原 Agent 消费答案并调用 close。Obsidian Base 继续作为只读快速视图，不承担状态写入。
-
-本地服务默认只监听 `127.0.0.1`，不内置账号、云同步、远程调度或多服务器部署。前端源码独立构建，静态产物随 Python wheel 发布；最终用户不需要 Node.js。
+如未来增加其他交付适配器，必须复用 Application Service，不复制治理规则；这不是当前版本的交付承诺。插件配置教程由维护者后续博客说明，不在 CLI 内实现安装器或配置管理。
 
 ## 7. 稳定不变量
 
@@ -239,7 +228,7 @@ Human / Browser  ──> HTTP Adapter ──┘                           │
 3. 规则集中在配置契约和规则引擎，Skill、模板、CLI 不复制枚举定义。
 4. MOC、Base 和报告能生成就不手工维护；文档关系通过 CLI 查询，不再复制为关系页。
 5. 有歧义的分类和结构重构进入待确认，不由 Agent 擅自决定。
-6. Markdown 内容可脱离 Campfire 阅读和迁移；文档查询投影在 SQLite 丢失后可以重建，Decision 与未完成批次等工作流状态不作此承诺。
+6. Markdown 内容可脱离 Campfire 阅读和迁移；文档查询投影在 SQLite 丢失后可以重建，未完成重构批次等本机工作流状态不作此承诺。
 7. 只有一个用户级 SQLite；所有 Workspace 业务表必须携带 `workspace_id`，Repository 查询不得越界。
 8. 正式文档必须归入 Domain；Space 不直接替代 Domain，系统区域不伪装成 Space。
 

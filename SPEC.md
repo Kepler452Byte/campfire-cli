@@ -94,7 +94,7 @@ Campfire 使用语义化版本：
 - 可跨设备共享的是 Workspace、Space、Domain 和 Project 的稳定身份与逻辑关联，不是本机文件路径。
 - `git_remote_url`、Project id、文档 Domain 和治理契约版本属于可移植元数据。
 - `local_path`、Skill 安装位置、锁、缓存、索引和运行报告属于设备本地状态，不得写入可移植元数据。
-- Decision 及其事件当前属于创建它的本机工作流状态，不要求跨设备同步。
+- 待人确认采用 `_待用户确认/` 中的 Markdown 文档；本机重构批次和运行记录不承诺跨设备同步。
 - 新设备接管已有 Workspace 时，从可移植元数据恢复逻辑关系，再在本机独立绑定项目路径并重建 SQLite 派生状态。
 - Vault 根目录的 `.campfire.yaml` 是唯一可移植 Manifest；禁止在其他文件重复维护 Workspace/Project 便携元数据。
 - `.campfire.yaml` 禁止保存 Vault 或代码仓库的本机绝对路径。
