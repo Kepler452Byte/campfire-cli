@@ -5,17 +5,12 @@ OSError。所有以 cwd 作为解析起点的入口统一走 safe_cwd：探测�
 调用方拿到的语义是"尽力而为的上下文锚点"而非进程崩溃。
 """
 
-import sys
 from pathlib import Path
 
 
 def safe_cwd() -> Path:
-    """返回当前工作目录；目录已不存在时回落用户 HOME 并告警。"""
+    """返回当前工作目录；目录已不存在时回落用户 HOME。"""
     try:
         return Path.cwd()
     except OSError:
-        print(
-            '{"warning": "当前工作目录已不存在，已回落 HOME 解析"}',
-            file=sys.stderr,
-        )
         return Path.home()

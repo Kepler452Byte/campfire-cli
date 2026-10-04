@@ -133,6 +133,8 @@ Frontmatter 规则采用声明式 Profile：`base` 是最小公共契约，`task
 
 ### CLI 设计理念：治理原语 + Skill SOP
 
+公共命令统一 JSON：成功时 stdout 一个对象，错误时 stderr 一个单行对象并非零退出。`--help` 与无参数帮助返回结构化参数、类型、默认值和子命令；`version` 返回版本字段，`tree` 返回嵌套命令树。不维护文本输出模式或 shell 补全脚本入口；第三方安装与下载日志由适配器捕获，不污染 JSON。
+
 Campfire 不是“Markdown 版 kubectl”，而是面向人机协作场景组合成熟 CLI 经验形成的独立设计。它在资源心智模型、`apply` 语义和机器可读接口上借鉴 kubectl，在“计划—审查—执行”上借鉴 Terraform，在稳定原语与上层工作流分离上借鉴 Git/Unix；Markdown SSOT、Agent 语义判断和显式 Maintenance 则是 Campfire 自身边界。
 
 | 参考 | Campfire 采用的部分 | Campfire 不照搬的部分 |

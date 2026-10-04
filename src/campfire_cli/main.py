@@ -20,7 +20,7 @@ from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
 from campfire_cli.app.workspace.cli.workspace_cli import workspace_cli
-from campfire_cli.common.cli_output import JsonTyperGroup, emit, invoke
+from campfire_cli.common.cli_output import JsonTyperGroup, command_tree, emit, invoke
 from campfire_cli.common.exceptions import AppError, ConfigurationError
 from campfire_cli.container import AppContainer
 
@@ -59,6 +59,7 @@ class LazyContainer:
 
 
 app = typer.Typer(
+    add_completion=False,
     help="人类与 Agent 共用的 Workspace 文档治理 CLI",
     no_args_is_help=True,
     context_settings=CONTEXT_SETTINGS,
@@ -91,32 +92,13 @@ def main(
 @app.command("version")
 def version() -> None:
     """显示 CLI 版本。"""
-    typer.echo(__version__)
-
-
-def render_command_tree(command: Any, name: str, prefix: str = "") -> list[str]:
-    lines = [prefix + name]
-    if not hasattr(command, "commands"):
-        return lines
-    children = [
-        (child_name, child)
-        for child_name, child in command.commands.items()
-        if not getattr(child, "hidden", False)
-    ]
-    for index, (child_name, child) in enumerate(children):
-        last = index == len(children) - 1
-        connector = "└── " if last else "├── "
-        child_prefix = prefix + ("    " if last else "│   ")
-        child_lines = render_command_tree(child, child_name, child_prefix)
-        child_lines[0] = prefix + connector + child_name
-        lines.extend(child_lines)
-    return lines
+    emit({"status": "ok", "version": __version__})
 
 
 @app.command("tree")
 def tree(ctx: typer.Context) -> None:
     """显示完整 CLI 命令树，便于人类和 Agent 渐进式发现能力。"""
-    typer.echo("\n".join(render_command_tree(ctx.find_root().command, "campfire")))
+    emit({"status": "ok", "tree": command_tree(ctx.find_root().command, "campfire")})
 
 
 @app.command("setup")

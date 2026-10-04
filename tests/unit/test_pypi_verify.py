@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import runpy
 import subprocess
 from pathlib import Path
@@ -39,7 +40,7 @@ def test_pypi_install_retry_boundary(
             assert "--refresh" in command
             if attempts <= failures:
                 raise subprocess.CalledProcessError(1, command, stderr="version unavailable")
-        return subprocess.CompletedProcess(command, 0, stdout=installed)
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"version": installed}))
 
     verify.__globals__["subprocess"] = SimpleNamespace(
         run=run,

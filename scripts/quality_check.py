@@ -73,7 +73,8 @@ def smoke_test_wheel(version: str, artifact_dir: Path | None = None) -> None:
             capture_output=True,
             text=True,
             env=smoke_environment,
-        ).stdout.strip()
+        ).stdout
+        installed = json.loads(installed)["version"]
         if installed != version:
             raise SystemExit(f"installed version {installed} does not match {version}")
         subprocess.run(

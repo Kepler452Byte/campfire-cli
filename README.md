@@ -20,6 +20,8 @@
 
 ## 本地视频图文（v0.2.0a1 Alpha 实验能力）
 
+本版统一公共 CLI 输出：成功在 stdout 返回一个 JSON 对象，错误在 stderr 返回一个 JSON 对象并以非零状态退出。`--help` 返回结构化参数，`tree` 返回层级命令树，`version` 返回 `{"status":"ok","version":"0.2.0a1"}`。旧脚本若将版本输出当纯字符串读取，须改读 `version` 字段；不再提供文本帮助或 shell 补全脚本输出。
+
 试用预发布版：`uv tool install "campfire-cli==0.2.0a1"`；已有 uv tool 安装可用 `uv tool upgrade "campfire-cli==0.2.0a1"`。Alpha 不是正式稳定版本，不建议替换重要工作环境；先在独立测试目录验收。
 
 本功能按实验性质逐步推进，不承诺高可用性、所有媒体兼容性或自动整理结果的准确性；生成内容须经人工或 Agent 核验。实验阶段仍保留只读来源、写入预览和冲突保护。

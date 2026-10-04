@@ -235,11 +235,10 @@ def test_timestamp_schema_rejects_invalid():
 
 
 def test_video_help_without_workspace():
-    from rich.text import Text
-
     result = CliRunner().invoke(app, ["video", "prepare", "--help"], terminal_width=120)
     assert result.exit_code == 0
-    assert "--expected-plan" in Text.from_ansi(result.stdout).plain
+    help_data = json.loads(result.stdout)
+    assert any("--expected-plan" in p["options"] for p in help_data["parameters"])
 
 
 def test_binary_changeset_rolls_back(tmp_path, monkeypatch):
@@ -725,14 +724,24 @@ def test_setup_without_safe_installer_is_readonly(media):
     assert not service.state_root.exists()
 
 
-def test_download_adapter_pins_snapshot_and_wraps_network_failure(tmp_path, monkeypatch):
+def test_download_adapter_pins_snapshot_and_wraps_network_failure(tmp_path, monkeypatch, capsys):
     hub = pytest.importorskip("huggingface_hub")
     from campfire_cli.common.exceptions import AppError
     from campfire_cli.common.media.model_download import download_model
 
     calls = []
-    monkeypatch.setattr(hub, "snapshot_download", lambda **kwargs: calls.append(kwargs))
+
+    def snapshot(**kwargs):
+        import sys
+
+        calls.append(kwargs)
+        print("download progress")
+        print("download warning", file=sys.stderr)
+
+    monkeypatch.setattr(hub, "snapshot_download", snapshot)
     download_model("owner/model", "a" * 40, tmp_path)
+    captured = capsys.readouterr()
+    assert captured.out == captured.err == ""
     assert calls[0]["revision"] == "a" * 40
     assert calls[0]["local_dir"] == tmp_path
     assert calls[0]["token"] is False

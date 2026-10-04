@@ -9,6 +9,7 @@ side_effects:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import tempfile
@@ -50,7 +51,8 @@ def verify(version: str, environment: Path) -> None:
         capture_output=True,
         text=True,
         timeout=30,
-    ).stdout.strip()
+    ).stdout
+    installed = json.loads(installed)["version"]
     if installed != version:
         raise SystemExit(f"installed version {installed} does not match {version}")
 
