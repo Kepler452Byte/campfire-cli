@@ -235,11 +235,11 @@ def test_timestamp_schema_rejects_invalid():
 
 
 def test_video_help_without_workspace():
-    from click import unstyle
+    from rich.text import Text
 
     result = CliRunner().invoke(app, ["video", "prepare", "--help"], terminal_width=120)
     assert result.exit_code == 0
-    assert "--expected-plan" in unstyle(result.stdout)
+    assert "--expected-plan" in Text.from_ansi(result.stdout).plain
 
 
 def test_binary_changeset_rolls_back(tmp_path, monkeypatch):
