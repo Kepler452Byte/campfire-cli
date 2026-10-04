@@ -46,7 +46,9 @@ def setup(
 @video_cli.command("prepare")
 def prepare(
     source: Path = typer.Option(..., help="只读本地视频路径，不接受 URL"),
-    output: Path = typer.Option(..., help="Workspace 外尚不存在的素材目录"),
+    output: Path | None = typer.Option(
+        None, help="Workspace 外尚不存在的素材目录；默认 <CAMPFIRE_HOME>/materials/<视频SHA-256>"
+    ),
     model: Path | None = typer.Option(
         None,
         help="本地模型目录；默认使用 video setup 准备的模型，缺失时提示初始化",

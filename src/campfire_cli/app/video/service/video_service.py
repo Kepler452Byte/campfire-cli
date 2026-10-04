@@ -154,7 +154,7 @@ class VideoService:
     def prepare(
         self,
         source: Path,
-        output: Path,
+        output: Path | None = None,
         *,
         model: Path | None = None,
         transcript: Path | None = None,
@@ -162,9 +162,12 @@ class VideoService:
         expected_plan: str | None = None,
     ) -> dict:
         source = checked_path(source)
-        output = checked_path(output)
         if not source.is_file() or not 0 < source.stat().st_size <= self.limits["max_bytes"]:
             raise InputError("输入须为大小限制内的本地视频文件", field="source")
+        source_hash = digest(source)
+        output = checked_path(
+            output if output is not None else self.state_root / "materials" / source_hash
+        )
         if output.exists():
             raise GovernanceBlockedError("素材目录已存在；复用其中材料或选择新的目录")
         if any((p / ".campfire.yaml").exists() for p in (output, *output.parents)):
@@ -196,7 +199,6 @@ class VideoService:
             "model": str(model) if model else None,
             "transcript": str(transcript) if transcript else None,
         }
-        source_hash = digest(source)
         signature = {
             **request,
             "source_hash": source_hash,

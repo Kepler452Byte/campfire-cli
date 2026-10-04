@@ -98,6 +98,55 @@ def test_prepare_requires_current_plan(media):
     assert not output.exists()
 
 
+def test_default_material_directory(media):
+    service, source, transcript, _ = media
+    output = service.state_root / "materials" / digest(source)
+    plan = service.prepare(source, transcript=transcript)
+    assert Path(plan["output"]) == output
+    assert not service.state_root.exists()
+    assert service.prepare(source, transcript=transcript) == plan
+    result = service.prepare(
+        source, transcript=transcript, confirm=True, expected_plan=plan["expected_plan"]
+    )
+    assert Path(result["material"]) == output / "material.json"
+    assert service.inspect(output)["material"]["source_sha256"] == digest(source)
+    assert source.read_bytes() == b"source"
+    assert not list(output.rglob("*.mp4"))
+    with pytest.raises(GovernanceBlockedError):
+        service.prepare(source, transcript=transcript)
+
+
+def test_default_material_source_change_invalidates_plan(media):
+    service, source, transcript, _ = media
+    plan = service.prepare(source, transcript=transcript)
+    source.write_bytes(b"changed")
+    with pytest.raises(GovernanceBlockedError):
+        service.prepare(
+            source, transcript=transcript, confirm=True, expected_plan=plan["expected_plan"]
+        )
+    assert not service.state_root.exists()
+
+
+def test_cli_default_material_home(media, monkeypatch, tmp_path):
+    from campfire_cli.container import AppContainer
+
+    service, source, transcript, _ = media
+    home = tmp_path / "custom-home"
+    monkeypatch.setenv("CAMPFIRE_HOME", str(home))
+    container = AppContainer.build_video()
+    container.backend = service.backend
+    monkeypatch.setattr(AppContainer, "build_video", lambda: container)
+    args = ["video", "prepare", "--source", str(source), "--transcript", str(transcript)]
+    runner = CliRunner()
+    preview = runner.invoke(app, args)
+    assert preview.exit_code == 0, preview.output
+    plan = json.loads(preview.stdout)
+    assert Path(plan["output"]) == home / "materials" / digest(source)
+    result = runner.invoke(app, [*args, "--expected-plan", plan["expected_plan"], "--confirm"])
+    assert result.exit_code == 0, result.output
+    assert Path(json.loads(result.stdout)["material"]).is_file()
+
+
 def test_prepare_and_inspect(media):
     service, source, _, output = media
     assert prepare(media)["status"] == "ready"
@@ -180,6 +229,13 @@ def test_delivery_atomic_images_and_preserved_frontmatter(media, tmp_path):
     assert not list(root.rglob("*.mp4"))
     with pytest.raises(GovernanceBlockedError):
         service.deliver(output, draft, target, root, tmp_path / "state")
+    delivered = target.read_text(encoding="utf-8")
+    for material_file in output.iterdir():
+        material_file.unlink()
+    output.rmdir()
+    assert target.read_text(encoding="utf-8") == delivered
+    assert next(root.rglob("*.jpg")).read_bytes() == b"fixed-test-image"
+    assert str(output) not in delivered
 
 
 def test_deliver_rejects_changed_draft(media, tmp_path):
