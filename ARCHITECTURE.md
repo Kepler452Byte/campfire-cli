@@ -46,6 +46,8 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
 
 ## 4. 系统架构
 
+本地视频能力由 `app/video` 承担素材准备与交付校验，`common/media` 提供模型下载、媒体解码与抽帧机制；可选原生处理依赖在独立子进程中延迟加载。`AppContainer.deliver_video` 组合文档治理检查与视频交付，不让 Video Service 调用 Document Service。文档结构仍由 `document apply` 创建，正文和二进制图片复用文件变更集及乐观锁；没有新的数据库、独立下载服务或模型调度器。语义整理留给宿主 Agent 与内置 Skill，结构检查不等于语义保真验收。
+
 ```text
 人类 / Codex / Claude Code / 其他 Agent
                   │
@@ -59,18 +61,61 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
         │ document          │
         │ maintenance       │
         │ skill / base      │
+        │ video (实验能力)  │
         └─────────┬─────────┘
                   │
         Common 治理与原子能力
       schema / documents / links /
-      filesystem / database / reports
+      filesystem / database / reports / media
                   │
       ┌───────────┴───────────┐
 Markdown Workspace Adapter   用户级状态
  文档事实、任务、知识、项目    ~/.campfire/
                               campfire.db + config.yml
                               batches/reports/locks
+                              models/faster-whisper-small
 ```
+
+### 本地视频模型与运行边界
+
+```text
+video setup：统一初始化预览，不联网、不落盘
+    +-- Python 环境 -> 列出 video extra 缺失依赖
+    +-- 本地模型可用 -> 计划复用，不检查远端更新
+    +-- 默认模型缺失 -> 计划列出来源、固定版本、约 486 MB 与路径
+    +-- 已有目录不完整 -> 报错，不覆盖
+    |
+    v
+一次授权 -> --expected-plan + --confirm -> 复核环境与模型计划
+    |
+    +-- 缺依赖 -> uv / 环境内 pip -> 安装到当前隔离环境
+    |
+    +-- 需下载 -> huggingface-hub -> Hugging Face（仅下载模型）
+    |                |
+    |          临时目录 -> 必要文件非空检查 -> 锁内安装
+    |                |
+    |          <CAMPFIRE_HOME>/models/faster-whisper-small
+    |                |
+    +-- 直接复用 ----+--> 离线验证依赖与模型加载 -> ready
+
+日常：本地视频 -> video prepare（预览 / 确认）
+    |
+    v
+离线媒体子进程（复用已就绪环境）
+    +-- PyAV + Pillow：解码与截图
+    +-- faster-whisper + CTranslate2：CPU int8 转写
+    |
+    v
+素材包 -> Agent 核验与整理 -> 文档 + assets
+```
+
+`CAMPFIRE_HOME` 默认是各平台用户目录下的 `.campfire`，统一相对布局而非绝对路径；显式 `--model` 可覆盖模型位置。模型权重是用户级本地资源，Python 依赖属于 Campfire 安装环境，两者都不随 Vault 同步。公开模型下载不需要 Hugging Face Token，转写不调用云端模型；Agent 整理内容仍使用宿主自身的模型服务，不能把整条链路称为完全离线。
+
+下载失败或正常取消时清理本次临时目录，已有目录不覆盖；下载成功但后续转写失败时保留模型供重试。文件非空检查不等于模型可用性验证，实际加载由转写引擎完成。强制杀进程可能遗留临时目录，实验阶段不承诺自动恢复。
+
+Python 依赖由 `pyproject.toml` 的 `video` extra 声明，初始化从包元数据读取需求并交给包管理器解析，不复制依赖版本。`video setup` 只向当前隔离环境安装缺失的二进制依赖，固定已有版本，不重装正在运行的 Campfire；无安全安装器时返回 `needs-input`，版本冲突时停止，不擅自修改系统 Python。安装与模型下载不是跨资源事务，失败保留已完成部分，重试补齐；包管理器后续同步若移除可选依赖，可再次初始化。`prepare` 不再安装或下载，缺环境提示 `setup`。
+
+当前 CPU 路径不要求 CUDA、PyTorch、Ollama 或独立模型服务。通常使用携带 FFmpeg 库的 PyAV wheel，无需独立 FFmpeg 命令；Windows 还需要 Visual C++ 运行库，缺失时须单独安装。参考 [faster-whisper 运行要求](https://github.com/SYSTRAN/faster-whisper#requirements)与 [CTranslate2 安装要求](https://opennmt.net/CTranslate2/installation.html)。本功能为实验能力，平台路径统一不等于全部平台已验收。
 
 待人确认以全局系统受管区 `_待用户确认/` 的 `human-request` 文档为事实来源；它不属于任何 Space、Domain 或 Project。`human_decision_status` 只表达待人处理状态，用户结论随后写回正式文档。不存在独立的 Decision SQLite 状态机或 `_协作/` 投影。
 

@@ -9,3 +9,4 @@
 - `workspace/`：注册、初始化、解析和选择多个 Workspace，并通过扁平的 Restructure Service 执行一次性、大规模、批次化结构重构。
 - `skill/`：Campfire SOP Skill 的发现、加载、校验和同步。
 - `base/`：Obsidian Base 标准治理视图。
+- `video/`：实验性的本地视频素材准备、草稿校验与图文交付。

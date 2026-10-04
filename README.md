@@ -18,6 +18,26 @@
 
 推荐搭配 Obsidian：内置 Bases 展示表格，大纲提供章节导航；Kanban 用于看板，Obsidian Git 用于版本历史。它们不是普通文档查询和治理的前提。Templater、TOC 不作为依赖。插件配置教程等待维护者提供博客链接，不在 CLI 输出或仓库重复编写，也不自动修改插件设置。
 
+## 本地视频图文（v0.2.0a1 Alpha 实验能力）
+
+试用预发布版：`uv tool install "campfire-cli==0.2.0a1"`；已有 uv tool 安装可用 `uv tool upgrade "campfire-cli==0.2.0a1"`。Alpha 不是正式稳定版本，不建议替换重要工作环境；先在独立测试目录验收。
+
+本功能按实验性质逐步推进，不承诺高可用性、所有媒体兼容性或自动整理结果的准确性；生成内容须经人工或 Agent 核验。实验阶段仍保留只读来源、写入预览和冲突保护。
+
+本轮只接受本地单视频，不解析抖音、B站或其他 URL。核心 CLI 不依赖视频运行库；首次使用执行 `campfire video setup`，统一预览缺失依赖与默认模型下载，带回 `--expected-plan <摘要> --confirm` 后一次完成安装和模型加载验证。无需 Workspace 或输入视频。视频由 PyAV 解码，无需额外安装 FFmpeg 命令；语音由 faster-whisper 在 CPU 本地转写。PyAV 暂限 `<19`，避免其删除的 `metadata_errors` 参数与当前转写库冲突。
+
+初始化后运行 `campfire video prepare --source <本地视频> --output <Workspace外新目录>` 预览，带回 `--expected-plan` 和 `--confirm` 处理。`prepare` 不再安装依赖或下载模型，缺失时提示 `video setup`。默认模型位于 `<CAMPFIRE_HOME>/models/faster-whisper-small`，主目录默认 `~/.campfire`，Windows、macOS、Linux 沿用同一相对布局。初始化预览列出 Python 环境、缺失依赖、Hugging Face 固定版本、约 486 MB 模型体积及目标目录；确认后先安装再下载，最后在离线子进程中验证加载。已有依赖和模型复用，不静默更新模型，不上传媒体。
+
+依赖安装只支持当前 uv tool、pipx 或 venv 隔离环境，通过可用的 uv 或环境内 pip 安装二进制包；不修改系统 Python，不重装运行中的 Campfire，不替换已有包。无可用安装器时返回 `needs-input`；版本冲突或缺少兼容 wheel 时停止，由用户按原安装方式修复后重试。安装中断时保留已完成部分，不回滚卸载；正常下载失败清理本次模型临时目录，下载成功但验证失败则保留模型并报告错误。包管理器升级或同步后若移除了可选依赖，重新执行 `video setup` 补齐。源码开发者仍可用 `uv sync --extra video` 管理锁定依赖，再用 `video setup` 验证模型。
+
+可用 `--model <本地模型目录>` 覆盖默认位置；显式路径缺失或不完整时只报错，不下载或覆盖。已有默认目录不完整时也拒绝覆盖。也可用 `--transcript` 提供时间戳 JSON 数组，格式见命令帮助，此时不需要模型。模型权重目录须含非空的 `model.bin`、`config.json`、`tokenizer.json`；配置与权重能否实际加载仍由转写引擎校验。
+
+内置 `campfire-video-capture` Skill 引导 Agent 阅读全部转写、查看候选截图、用 `video frames` 补帧并整理草稿。`video inspect` 校验结构和引用，不能证明内容保真；`video deliver` 向已通过治理检查且正文为空的文档交付正文及图片。沿用 `document apply` 创建结构，不覆盖已有人工内容，不自动处理重复来源。
+
+默认限制为 4 GiB、2 小时、240 张截图、单次处理 3 小时，默认每 30 秒候选抽帧，超长素材按帧数上限增大间隔；配置在内置 `config.yml` 的 `video` 分区。只支持本地 MP4/MOV、Matroska/WebM、AVI、MPEG-TS 容器，具体解码依赖所装 PyAV。截图稀疏采样加精确像素去重，不保证捕获短暂画面，必须按内容补帧。
+
+素材目录包含转写与候选图片，保留用于核验，不自动过期；用户确认后可删除指定素材目录。原视频只读，Vault 仅接收选定图片与正文。模型权重及媒体内容各自的许可由使用者核对；PyAV/FFmpeg 许可随安装构建而异，本项目不捆绑模型或独立 FFmpeg 可执行文件。
+
 ## 安装
 
 ### 升级注意事项

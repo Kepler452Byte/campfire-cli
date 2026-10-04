@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 PYPI_INDEX_URL = "https://pypi.org/pypi/{package}/json"
 REQUEST_TIMEOUT_SECONDS = 3.0
 
@@ -31,18 +33,11 @@ def fetch_latest_version(package: str) -> str | None:
 
 
 def is_newer_version(candidate: str, current: str) -> bool:
-    """按点分段数值比较版本号，candidate 大于 current 时返回 True。
-
-    段不可数值化时退化为字符串不等比较，例如本地装了 dev 版本。
-    """
-
-    def segments(value: str) -> tuple[int | str, ...]:
-        return tuple(int(part) if part.isdigit() else part for part in value.strip().split("."))
-
+    """Compare Python release versions; ignore invalid remote or installed versions."""
     try:
-        return segments(candidate) > segments(current)
-    except TypeError:
-        return candidate != current
+        return Version(candidate) > Version(current)
+    except InvalidVersion:
+        return False
 
 
 @dataclass(frozen=True)

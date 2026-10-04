@@ -13,7 +13,7 @@ from campfire_cli.common.governance import capture_snapshot, optimistic_write_lo
 @dataclass(frozen=True)
 class FileWrite:
     path: Path
-    content: str
+    content: str | bytes
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,10 @@ class FileChangeExecutor:
                     path: path.read_bytes() if path.is_file() else None for path in content_paths
                 }
                 for item in changes.writes:
-                    atomic_write(item.path, item.content)
+                    if isinstance(item.content, bytes):
+                        atomic_write_bytes(item.path, item.content)
+                    else:
+                        atomic_write(item.path, item.content)
                 for path in changes.deletes:
                     path.unlink(missing_ok=True)
                 for path in changes.remove_empty_directories:

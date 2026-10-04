@@ -15,7 +15,12 @@ def plan_digest(root: Path, changes: FileChangeSet) -> str:
             (p.relative_to(root).as_posix(), h) for p, h in changes.expected.items()
         ),
         "writes": sorted(
-            (w.path.relative_to(root).as_posix(), hashlib.sha256(w.content.encode()).hexdigest())
+            (
+                w.path.relative_to(root).as_posix(),
+                hashlib.sha256(
+                    w.content if isinstance(w.content, bytes) else w.content.encode()
+                ).hexdigest(),
+            )
             for w in changes.writes
         ),
         "moves": sorted(

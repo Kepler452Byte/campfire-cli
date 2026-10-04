@@ -56,6 +56,46 @@ class AppContainer:
     skill: SkillService
     base: BaseService
 
+    @staticmethod
+    def build_video():
+        from campfire_cli.app.video.service.video_service import VideoService
+        from campfire_cli.common.media.media_backend import ProcessMediaBackend
+        from campfire_cli.common.media.model_download import download_model
+        from campfire_cli.common.media.video_runtime import LocalVideoRuntime
+        from campfire_cli.config.defaults import config_section
+
+        return VideoService(
+            ProcessMediaBackend(),
+            config_section("video"),
+            campfire_home(),
+            download_model,
+            LocalVideoRuntime(),
+        )
+
+    def deliver_video(
+        self,
+        bundle: Path,
+        draft: Path,
+        path: str,
+        *,
+        confirm: bool,
+        expected_plan: str | None,
+    ) -> dict:
+        from campfire_cli.common.exceptions import GovernanceBlockedError
+
+        inspection = self.document.inspect(path)
+        if inspection.get("issues") or not inspection.get("domain_id"):
+            raise GovernanceBlockedError("目标必须是领域内通过治理检查的受管文档")
+        return self.build_video().deliver(
+            bundle,
+            draft,
+            self.settings.vault_root / inspection["path"],
+            self.settings.vault_root,
+            self.settings.state_root,
+            confirm=confirm,
+            expected_plan=expected_plan,
+        )
+
     @classmethod
     def setup(
         cls, workspace: Path, make_default: bool = False, workspace_id: str | None = None

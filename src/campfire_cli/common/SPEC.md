@@ -6,6 +6,7 @@
 - `database/`：SQLite、模型和数据库迁移机制。
 - `filesystem/`：安全路径、原子写入和锁。
 - `reports/`：稳定 JSON 与 Markdown 报告渲染。
+- `media/`：可选的本地媒体解码、抽帧、语音转写及隔离进程，不负责文档治理与交付。
 - `governance/`：跨用例共享的规则引擎、Issue 目录和乐观并发快照；治理规则不得散落在 Service。
 
 `common/` 不承载完整用例流程；检查、计划、执行与验收的编排仍由 `app/` Service 负责。

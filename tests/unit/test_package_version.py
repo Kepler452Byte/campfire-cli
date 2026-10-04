@@ -22,9 +22,17 @@ class VersionComparisonTests(unittest.TestCase):
         self.assertFalse(is_newer_version("0.1.4", "0.1.4"))
         self.assertFalse(is_newer_version("0.1.3", "0.1.4"))
 
-    def test_non_numeric_segments_fall_back_to_inequality(self) -> None:
+    def test_development_versions_follow_pep440(self) -> None:
         self.assertTrue(is_newer_version("0.1.5.dev1", "0.1.4"))
-        self.assertFalse(is_newer_version("0.1.4", "0.1.4.dev1"))
+        self.assertTrue(is_newer_version("0.1.4", "0.1.4.dev1"))
+
+    def test_alpha_versions_do_not_trigger_downgrades(self) -> None:
+        self.assertTrue(is_newer_version("0.2.0", "0.2.0a1"))
+        self.assertTrue(is_newer_version("0.2.0a2", "0.2.0a1"))
+        self.assertTrue(is_newer_version("0.2.0a10", "0.2.0a2"))
+        self.assertFalse(is_newer_version("0.2.0a1", "0.2.0"))
+        self.assertFalse(is_newer_version("0.1.25", "0.2.0a1"))
+        self.assertFalse(is_newer_version("invalid", "0.2.0a1"))
 
 
 class InstallDetectionTests(unittest.TestCase):

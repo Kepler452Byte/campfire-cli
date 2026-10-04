@@ -1,4 +1,17 @@
-version: 2
+version: 3
+video:
+  model:
+    repository: Systran/faster-whisper-small
+    revision: 536b0662742c02347bc0e980a01041f333bce120
+    approximate_bytes: 486212372
+  max_bytes: 4294967296
+  max_duration: 7200
+  max_frames: 240
+  frame_interval: 30
+  max_dimension: 1920
+  max_pixels: 33177600
+  timeout: 10800
+  max_text_bytes: 8388608
 workspace:
   version: 2
   system_directories:
@@ -256,6 +269,7 @@ skills:
   - campfire-context-bootstrap
   - campfire-conversation-router
   - campfire-document-capture
+  - campfire-video-capture
   - campfire-inbox-triage
   - campfire-weekly-report-writing
   - campfire-kanban-board
