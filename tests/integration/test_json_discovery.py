@@ -51,7 +51,6 @@ def test_version_and_tree_are_json():
         "setup",
         "prepare",
         "inspect",
-        "frames",
         "deliver",
     }
 
@@ -60,11 +59,9 @@ def test_help_hides_internal_options_and_exposes_types():
     runner = CliRunner()
     upgrade = json.loads(runner.invoke(app, ["upgrade", "--help"]).stdout)
     assert "skip_package" not in {p["name"] for p in upgrade["parameters"]}
-    frames = json.loads(runner.invoke(app, ["video", "frames", "--help"]).stdout)
-    at = next(p for p in frames["parameters"] if p["name"] == "at")
-    assert at["required"] is True
-    assert at["multiple"] is True
-    assert at["type"] == "float"
+    removed = runner.invoke(app, ["video", "frames", "--help"])
+    assert removed.exit_code != 0
+    assert json.loads(removed.stderr)["status"] == "error"
 
 
 @pytest.mark.parametrize("args", [["missing-command"], ["video", "prepare"], ["--bad-option"]])

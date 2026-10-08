@@ -1,6 +1,6 @@
 [project]
 name = "campfire-cli"
-version = "0.2.0a2"
+version = "0.2.0"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 license = "MIT"
@@ -23,7 +23,7 @@ Issues = "https://github.com/Kepler452Byte/campfire-cli/issues"
 Changelog = "https://github.com/Kepler452Byte/campfire-cli/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-video = ["av>=14,<19", "Pillow>=11", "faster-whisper>=1.1,<2", "huggingface-hub>=0.24,<2", "markdown-it-py>=3"]
+video = ["av>=14,<19", "faster-whisper>=1.1,<2", "huggingface-hub>=0.24,<2", "markdown-it-py>=3"]
 
 [project.scripts]
 campfire = "campfire_cli.main:app"

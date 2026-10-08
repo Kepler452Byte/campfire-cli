@@ -8,7 +8,7 @@ from campfire_cli.common.cli_output import invoke as invoke_app
 from campfire_cli.common.exceptions import InputError
 from campfire_cli.container import AppContainer
 
-video_cli = typer.Typer(help="本地视频素材与保真图文交付，不解析 URL", cls=JsonTyperGroup)
+video_cli = typer.Typer(help="本地视频素材与文字交付，不解析 URL", cls=JsonTyperGroup)
 
 
 def invoke(operation: Callable[[], dict]) -> dict:
@@ -76,40 +76,30 @@ def prepare(
 @video_cli.command("inspect")
 def inspect(
     bundle: Path = typer.Option(..., help="包含 material.json 的素材目录"),
-    draft: Path | None = typer.Option(None, help="可选草稿 JSON；校验覆盖与图片引用"),
+    draft: Path | None = typer.Option(
+        None, help="可选草稿 JSON；校验两种产物的覆盖、顺序及来源映射"
+    ),
 ) -> None:
     emit(invoke(lambda: AppContainer.build_video().inspect(bundle, draft)))
-
-
-@video_cli.command("frames")
-def frames(
-    source: Path = typer.Option(..., help="原始本地视频，须与素材哈希一致"),
-    bundle: Path = typer.Option(..., help="已有素材目录"),
-    at: list[float] = typer.Option(..., help="补帧秒数，可重复 --at"),
-    expected_plan: str | None = typer.Option(None, help="预览返回的计划摘要"),
-    confirm: bool = typer.Option(False, help="按预览计划补帧"),
-) -> None:
-    emit(
-        invoke(
-            lambda: AppContainer.build_video().frames(
-                source,
-                bundle,
-                at,
-                confirm=confirm,
-                expected_plan=expected_plan,
-            )
-        )
-    )
 
 
 @video_cli.command("deliver")
 def deliver(
     ctx: typer.Context,
     bundle: Path = typer.Option(..., help="素材目录"),
-    draft: Path = typer.Option(..., help="经 Agent 整理的草稿 JSON，格式见内置视频 Skill"),
+    draft: Path = typer.Option(
+        ...,
+        help=(
+            "草稿 JSON：schema_version=2，output_kind=transcript/article，"
+            "title、source_sha256、purpose、sections=[{title,body,segment_ids:[0]}]；"
+            "可选 limitations:[文字]、omissions:[{segment_ids:[1],reason:文字}]；"
+            "ID 为素材 segments 的零基下标，时间单位秒。"
+            "transcript 顺序覆盖一次全部 ID；article 可重排，未采用 ID 在 omissions 说明。"
+        ),
+    ),
     path: str = typer.Option(..., help="Workspace 内已有的受管空正文文档路径"),
     expected_plan: str | None = typer.Option(None, help="预览返回的计划摘要"),
-    confirm: bool = typer.Option(False, help="按预览计划写入正文及图片"),
+    confirm: bool = typer.Option(False, help="按预览计划写入正文"),
 ) -> None:
     workspace = ctx.find_root().params.get("workspace")
     emit(

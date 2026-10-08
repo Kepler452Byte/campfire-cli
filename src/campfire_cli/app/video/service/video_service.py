@@ -3,15 +3,15 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import math
 import re
 import shutil
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import ValidationError
 
-from campfire_cli.app.video.schema.video_schema import Draft, Frame, Material
+from campfire_cli.app.video.schema.video_schema import Draft, Material
 from campfire_cli.app.video.service.video_protocol import (
     MediaBackend,
     ModelDownloader,
@@ -59,7 +59,14 @@ class VideoService:
         self.model_config = limits.get("model", {})
         if not isinstance(self.model_config, dict):
             raise ConfigurationError("video.model 须为模型配置对象")
-        limits = {key: value for key, value in limits.items() if key != "model"}
+        self.ignored_config = sorted(
+            set(limits) & {"max_frames", "frame_interval", "max_dimension", "max_pixels"}
+        )
+        limits = {
+            key: value
+            for key, value in limits.items()
+            if key != "model" and key not in self.ignored_config
+        }
         if any(type(v) is not int or v <= 0 for v in limits.values()):
             raise ConfigurationError("video 配置限制须为正整数")
         repository = self.model_config.get("repository", "")
@@ -97,6 +104,7 @@ class VideoService:
                 "write_performed": False,
                 "skipped": ["dependency-install", "model-download", "model-validation"],
                 "hint": "需在隔离环境安装 Campfire，并提供 uv 或该环境的 pip；不修改系统 Python",
+                "ignored_legacy_config": self.ignored_config,
             }
         if not confirm:
             return {
@@ -107,6 +115,7 @@ class VideoService:
                 "installer": environment["installer"] if environment["missing"] else None,
                 "model": str(model),
                 "model_download": download,
+                "ignored_legacy_config": self.ignored_config,
                 "write_performed": False,
             }
         if expected_plan != plan:
@@ -122,6 +131,7 @@ class VideoService:
             "status": "ready",
             "model": str(model),
             "validation": "passed",
+            "ignored_legacy_config": self.ignored_config,
             "write_performed": bool(environment["missing"] or download),
         }
 
@@ -217,7 +227,7 @@ class VideoService:
             }
         if expected_plan != plan:
             raise GovernanceBlockedError("输入或计划已变化；重新预览并带回 expected_plan")
-        required = ["av", "PIL"] + (["faster_whisper"] if model else [])
+        required = ["av"] + (["faster_whisper"] if model else [])
         missing = [name for name in required if importlib.util.find_spec(name) is None]
         if missing:
             raise InputError(
@@ -233,10 +243,12 @@ class VideoService:
                 source_name=source.name,
                 source_sha256=source_hash,
                 **data,
-                warnings=["自动转写和稀疏截图未经语义核验，须逐段阅读并检查关键画面。"],
+                warnings=["自动转写未经语义核验，须阅读全部转写；画面依赖内容须标明回看。"],
             )
             if not material.segments:
-                material.warnings.append("没有可用转写；须按画面整理，不能声称口播覆盖完整。")
+                material.warnings.append(
+                    "没有可用转写；请提供显式转写或检查音轨，不能交付声称完整的文字稿。"
+                )
             atomic_write(staging / "material.json", material.model_dump_json(indent=2))
             with workspace_write_lock(self.state_root):
                 checked_path(output)
@@ -254,9 +266,9 @@ class VideoService:
             "status": "ready",
             "material": str(output / "material.json"),
             "segments": len(material.segments),
-            "frames": len(material.frames),
             "duration": material.duration,
             "warnings": material.warnings,
+            "ignored_legacy_config": self.ignored_config,
             "write_performed": True,
         }
 
@@ -266,82 +278,25 @@ class VideoService:
         if not path.is_file() or path.stat().st_size > self.limits["max_text_bytes"]:
             raise InputError("素材清单不存在或过大", field="bundle")
         try:
-            material = Material.model_validate_json(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("素材清单须为 JSON 对象")
+            legacy = data.get("schema_version", 1) == 1
+            if legacy:
+                data.pop("frames", None)
+                data["schema_version"] = 2
+            material = Material.model_validate(data)
+            if legacy:
+                material.warnings.append(
+                    "Alpha 素材仅只读使用文字部分；截图及旧目录保留；新转写用 --output 指定新目录。"
+                )
         except (ValueError, OSError) as exc:
-            raise InputError("素材清单格式无效", field="bundle", detail=str(exc)) from exc
-        if len(material.frames) > self.limits["max_frames"]:
-            raise InputError("截图数量超过限制")
-        for frame in material.frames:
-            path = checked_path(bundle / frame.path)
-            if path.parent != bundle or path.suffix != ".jpg":
-                raise InputError("截图路径必须是素材目录内的 JPEG 文件名")
-            if not path.is_file() or path.stat().st_size > self.limits["max_text_bytes"]:
-                raise InputError("截图缺失或过大")
-            if digest(path) != frame.sha256:
-                raise GovernanceBlockedError("截图内容与清单哈希不符")
+            raise InputError(
+                "素材清单格式无效；重新 prepare --output <新目录>，不覆盖原素材",
+                field="bundle",
+                detail=str(exc),
+            ) from exc
         return bundle, material
-
-    def frames(
-        self,
-        source: Path,
-        bundle: Path,
-        times: list[float],
-        *,
-        confirm: bool = False,
-        expected_plan: str | None = None,
-    ) -> dict:
-        bundle, material = self.load(bundle)
-        source = checked_path(source)
-        if not source.is_file() or digest(source) != material.source_sha256:
-            raise GovernanceBlockedError("补帧源视频与素材哈希不一致")
-        if not times or any(not math.isfinite(t) or not 0 <= t < material.duration for t in times):
-            raise InputError("截图时间须为视频时长内的秒数", field="at")
-        if len(times) + len(material.frames) > self.limits["max_frames"]:
-            raise InputError("补帧后数量超过上限")
-        original = (bundle / "material.json").read_bytes()
-        if Material.model_validate_json(original) != material:
-            raise GovernanceBlockedError("读取期间素材变化，请重试")
-        plan = hashlib.sha256(original + json.dumps(times).encode()).hexdigest()
-        if not confirm:
-            return {"status": "planned", "expected_plan": plan, "write_performed": False}
-        if expected_plan != plan:
-            raise GovernanceBlockedError("素材或时间参数变化，重新预览")
-        staging = Path(tempfile.mkdtemp(prefix=".campfire-frames-", dir=bundle.parent))
-        try:
-            data = self.backend.run(
-                {
-                    "source": str(source),
-                    "output": str(staging),
-                    "limits": self.limits,
-                    "frames_only": True,
-                    "times": times,
-                },
-                self.limits["timeout"],
-            )
-            existing = {frame.id: frame for frame in material.frames}
-            writes = []
-            expected = {bundle / "material.json": hashlib.sha256(original).hexdigest()}
-            for value in data["frames"]:
-                frame = Frame.model_validate(value)
-                if frame.id in existing:
-                    continue
-                path = checked_path(bundle / frame.path)
-                if path.parent != bundle or path.exists():
-                    raise GovernanceBlockedError("补帧目标冲突")
-                writes.append(FileWrite(path, (staging / frame.path).read_bytes()))
-                expected[path] = None
-                material.frames.append(frame)
-                existing[frame.id] = frame
-            if digest(source) != material.source_sha256:
-                raise GovernanceBlockedError("补帧期间源视频变化")
-            material.frames.sort(key=lambda f: f.seconds)
-            writes.append(FileWrite(bundle / "material.json", material.model_dump_json(indent=2)))
-            FileChangeExecutor(bundle, self.state_root).execute(
-                FileChangeSet(writes=tuple(writes), expected=expected, label="video frames")
-            )
-        finally:
-            shutil.rmtree(staging)
-        return {"status": "applied", "frames": len(material.frames), "write_performed": True}
 
     def validate(self, bundle: Path, draft: Path) -> tuple[Material, Draft]:
         _, material = self.load(bundle)
@@ -351,17 +306,33 @@ class VideoService:
         try:
             content = Draft.model_validate_json(draft.read_text(encoding="utf-8"))
         except (ValueError, OSError) as exc:
-            raise InputError("草稿 JSON 无效", field="draft", detail=str(exc)) from exc
+            raise InputError(
+                "草稿 JSON 无效；Alpha 草稿需重写为 schema_version=2，"
+                "output_kind=transcript/article，移除 frame_ids/visual_reviewed",
+                expected_type="draft schema v2",
+                field="draft",
+                detail=str(exc),
+            ) from exc
         if content.source_sha256 != material.source_sha256:
             raise GovernanceBlockedError("草稿与素材来源不同")
-        used = {i for s in content.sections for i in s.segment_ids}
-        if used != set(range(len(material.segments))):
-            raise InputError("章节须覆盖所有转写 segment_ids，且不能引用不存在的片段")
-        frame_ids = {f.id for f in material.frames}
-        if any(f not in frame_ids for s in content.sections for f in s.frame_ids):
-            raise InputError("章节引用了不存在的截图")
-        if not content.visual_reviewed or not any(s.frame_ids for s in content.sections):
-            raise InputError("图文交付须核验画面并选图；无视觉能力时报告降级，不进行完整交付")
+        ids = [i for section in content.sections for i in section.segment_ids]
+        omitted = [i for omission in content.omissions for i in omission.segment_ids]
+        all_ids = set(range(len(material.segments)))
+        if not all_ids or not set(ids + omitted) <= all_ids:
+            raise InputError(
+                "草稿须引用有效转写；segment_ids 为 segments 的零基整数下标",
+                field="segment_ids",
+                expected_type="list[int]",
+            )
+        if content.output_kind == "transcript":
+            if ids != list(range(len(material.segments))) or omitted:
+                raise InputError(
+                    "校订稿须按原顺序逐段覆盖一次，不允许遗漏或重排", field="segment_ids"
+                )
+        elif set(ids) & set(omitted) or set(ids + omitted) != all_ids:
+            raise InputError(
+                "成文稿须映射全部来源；未采用的片段在 omissions 中说明取舍", field="omissions"
+            )
         from markdown_it import MarkdownIt
 
         parser = MarkdownIt()
@@ -372,7 +343,7 @@ class VideoService:
                         token.type == "text" and "![[" in token.content
                     ):
                         raise InputError(
-                            "正文不能嵌入图片或 HTML，须通过 frame_ids 引用截图；代码示例不受限"
+                            "文字交付不能嵌入图片或 HTML；截图建议写用途和参考时段；代码示例不受限"
                         )
         return material, content
 
@@ -385,6 +356,7 @@ class VideoService:
             "material": material.model_dump(),
             "structural_validation": "passed",
             "semantic_review_required": True,
+            "ignored_legacy_config": self.ignored_config,
         }
 
     def deliver(
@@ -400,7 +372,16 @@ class VideoService:
     ) -> dict:
         bundle = checked_path(bundle)
         target = checked_path(target)
+        input_hashes = {
+            "bundle": digest(bundle / "material.json"),
+            "draft": digest(checked_path(draft)),
+        }
         material, content = self.validate(bundle, draft)
+        if input_hashes != {
+            "bundle": digest(bundle / "material.json"),
+            "draft": digest(checked_path(draft)),
+        }:
+            raise GovernanceBlockedError("素材或草稿在读取期间变化；重新预览")
         original_bytes = target.read_bytes()
         original = original_bytes.decode("utf-8")
         anchor = "<!-- CAMPFIRE:BODY -->"
@@ -409,55 +390,53 @@ class VideoService:
         prefix, body = original.split(anchor, 1)
         if body.strip():
             raise GovernanceBlockedError("首期仅交付到空正文；已有内容请人工合并，不自动覆盖")
-        assets = target.parent / "assets" / ("video-" + material.source_sha256[:16])
 
         def check_destinations():
             for candidate in expected:
                 checked_path(candidate)
-            marker = f"来源 SHA-256：`{material.source_sha256}`"
-            for sibling in target.parent.glob("*.md"):
-                if (
-                    sibling != target
-                    and not sibling.is_symlink()
-                    and marker in sibling.read_text(encoding="utf-8")
-                ):
-                    raise GovernanceBlockedError(
-                        "同目录已有此来源的文档；请先确认复用或合并", path=str(sibling)
-                    )
+            if (
+                digest(bundle / "material.json") != payload["bundle"]
+                or digest(checked_path(draft)) != payload["draft"]
+            ):
+                raise GovernanceBlockedError("素材或草稿在交付期间变化；重新预览")
 
-        by_id = {f.id: f for f in material.frames}
         lines = [
             f"# {content.title}",
             "",
             f"来源文件：{material.source_name}",
             f"来源 SHA-256：`{material.source_sha256}`",
             f"时长：{timestamp(material.duration)}；转写：{material.transcript_source}",
+            f"处理日期：{datetime.now(UTC).date().isoformat()}（UTC）；产物：{content.output_kind}",
+            f"用途与读者：{content.purpose}",
             "",
         ]
         writes = []
         expected = {target: hashlib.sha256(original_bytes).hexdigest()}
-        selected = {f for s in content.sections for f in s.frame_ids}
-        for frame_id in sorted(selected):
-            frame = by_id[frame_id]
-            destination = checked_path(assets / f"{frame.sha256[:16]}.jpg")
-            data = (bundle / frame.path).read_bytes()
-            if hashlib.sha256(data).hexdigest() != frame.sha256:
-                raise GovernanceBlockedError("截图在校验后变化")
-            expected[destination] = digest(destination) if destination.exists() else None
-            if expected[destination] not in (None, frame.sha256):
-                raise GovernanceBlockedError("已有同名附件内容冲突")
-            if not destination.exists():
-                writes.append(FileWrite(destination, data))
         for section in content.sections:
             times = [material.segments[i].start for i in section.segment_ids]
             suffix = f"（{timestamp(min(times))}）" if times else ""
-            lines.extend([f"## {section.title}{suffix}", "", section.body, ""])
-            for frame_id in section.frame_ids:
-                frame = by_id[frame_id]
-                relative = (
-                    (assets / f"{frame.sha256[:16]}.jpg").relative_to(target.parent).as_posix()
+            references = ", ".join(
+                f"{i}: {timestamp(material.segments[i].start)}"
+                f"–{timestamp(material.segments[i].end)}"
+                for i in section.segment_ids
+            )
+            lines.extend(
+                [
+                    f"## {section.title}{suffix}",
+                    "",
+                    section.body,
+                    "",
+                    f"来源片段（ID: 原媒体起止时间）：{references}",
+                    "",
+                ]
+            )
+        if content.omissions:
+            lines.extend(["## 内容取舍", ""])
+            for omission in content.omissions:
+                times = ", ".join(
+                    timestamp(material.segments[i].start) for i in omission.segment_ids
                 )
-                lines.extend([f"![视频画面 {timestamp(frame.seconds)}]({relative})", ""])
+                lines.extend([f"- {times}：{omission.reason}", ""])
         lines.extend(
             [
                 "## 核验与限制",
@@ -472,14 +451,14 @@ class VideoService:
         payload = {
             "expected": {str(p): h for p, h in expected.items()},
             "content": hashlib.sha256(rendered.encode()).hexdigest(),
-            "bundle": digest(bundle / "material.json"),
+            **input_hashes,
         }
         plan = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
         result = {
             "status": "planned",
             "expected_plan": plan,
             "target": str(target),
-            "images": len(selected),
+            "output_kind": content.output_kind,
             "write_performed": False,
             "follow_up": [],
         }
@@ -487,12 +466,12 @@ class VideoService:
         if not confirm:
             return result
         if expected_plan != plan:
-            raise GovernanceBlockedError("文档、草稿或附件已变化；重新预览")
+            raise GovernanceBlockedError("文档、素材或草稿已变化；重新预览")
         try:
             FileChangeExecutor(root, state_root).execute(
                 FileChangeSet(writes=tuple(writes), expected=expected, label="video deliver"),
                 before_write=check_destinations,
             )
         except OSError as exc:
-            raise AppError("图文写入失败，已尝试回滚；原视频未修改") from exc
+            raise AppError("正文写入失败，已尝试回滚；原视频未修改") from exc
         return {**result, "status": "applied", "write_performed": True}

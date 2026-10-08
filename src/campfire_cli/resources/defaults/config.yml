@@ -1,4 +1,4 @@
-version: 3
+version: 4
 video:
   model:
     repository: Systran/faster-whisper-small
@@ -6,10 +6,6 @@ video:
     approximate_bytes: 486212372
   max_bytes: 4294967296
   max_duration: 7200
-  max_frames: 240
-  frame_interval: 30
-  max_dimension: 1920
-  max_pixels: 33177600
   timeout: 10800
   max_text_bytes: 8388608
 workspace:

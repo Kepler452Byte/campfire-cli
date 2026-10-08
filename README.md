@@ -18,13 +18,11 @@
 
 推荐搭配 Obsidian：内置 Bases 展示表格，大纲提供章节导航；Kanban 用于看板，Obsidian Git 用于版本历史。它们不是普通文档查询和治理的前提。Templater、TOC 不作为依赖。插件配置教程等待维护者提供博客链接，不在 CLI 输出或仓库重复编写，也不自动修改插件设置。
 
-## 本地视频图文（v0.2.0a2 Alpha 实验能力）
+## 本地视频文字整理（v0.2.0）
 
-本版统一公共 CLI 输出：成功在 stdout 返回一个 JSON 对象，错误在 stderr 返回一个 JSON 对象并以非零状态退出。`--help` 返回结构化参数，`tree` 返回层级命令树，`version` 返回 `{"status":"ok","version":"0.2.0a2"}`。旧脚本若将版本输出当纯字符串读取，须改读 `version` 字段；不再提供文本帮助或 shell 补全脚本输出。
+本版统一公共 CLI 输出：成功在 stdout 返回一个 JSON 对象，错误在 stderr 返回一个 JSON 对象并以非零状态退出。`--help` 返回结构化参数，`tree` 返回层级命令树，`version` 返回 `{"status":"ok","version":"0.2.0"}`。旧脚本若将版本输出当纯字符串读取，须改读 `version` 字段；不再提供文本帮助或 shell 补全脚本输出。
 
-试用预发布版：`uv tool install "campfire-cli==0.2.0a2"`；已有 uv tool 安装可用 `uv tool upgrade "campfire-cli==0.2.0a2"`。Alpha 不是正式稳定版本，不建议替换重要工作环境；先在独立测试目录验收。
-
-本功能按实验性质逐步推进，不承诺高可用性、所有媒体兼容性或自动整理结果的准确性；生成内容须经人工或 Agent 核验。实验阶段仍保留只读来源、写入预览和冲突保护。
+安装正式版：`uv tool install "campfire-cli==0.2.0"`；已有安装使用 `campfire upgrade`。生成内容仍须实际核对，CLI 结构检查不能证明语义保真。
 
 本轮只接受本地单视频，不解析抖音、B站或其他 URL。核心 CLI 不依赖视频运行库；首次使用执行 `campfire video setup`，统一预览缺失依赖与默认模型下载，带回 `--expected-plan <摘要> --confirm` 后一次完成安装和模型加载验证。无需 Workspace 或输入视频。视频由 PyAV 解码，无需额外安装 FFmpeg 命令；语音由 faster-whisper 在 CPU 本地转写。PyAV 暂限 `<19`，避免其删除的 `metadata_errors` 参数与当前转写库冲突。
 
@@ -34,11 +32,17 @@
 
 可用 `--model <本地模型目录>` 覆盖默认位置；显式路径缺失或不完整时只报错，不下载或覆盖。已有默认目录不完整时也拒绝覆盖。也可用 `--transcript` 提供时间戳 JSON 数组，格式见命令帮助，此时不需要模型。模型权重目录须含非空的 `model.bin`、`config.json`、`tokenizer.json`；配置与权重能否实际加载仍由转写引擎校验。
 
-内置 `campfire-video-capture` Skill 引导 Agent 阅读全部转写、查看候选截图、用 `video frames` 补帧并整理草稿。`video inspect` 校验结构和引用，不能证明内容保真；`video deliver` 向已通过治理检查且正文为空的文档交付正文及图片。沿用 `document apply` 创建结构，不覆盖已有人工内容，不自动处理重复来源。
+内置 `campfire-video-capture` Skill 引导 Agent 阅读全部转写，再按意图生成校订转写稿或用途文章。校订稿保持顺序和有意义细节；文章可重组内容，保留来源映射并说明取舍。术语、数字和画面依赖内容明确标记待核实或回看。无需截图或视觉能力；可选截图建议仅说明用途及参考时段。
 
-默认限制为 4 GiB、2 小时、240 张截图、单次处理 3 小时，默认每 30 秒候选抽帧，超长素材按帧数上限增大间隔；配置在内置 `config.yml` 的 `video` 分区。只支持本地 MP4/MOV、Matroska/WebM、AVI、MPEG-TS 容器，具体解码依赖所装 PyAV。截图稀疏采样加精确像素去重，不保证捕获短暂画面，必须按内容补帧。
+`video inspect` 校验素材与草稿，不证明内容质量；`video deliver` 向受管空正文交付文字，沿用 `document apply` 创建结构，不覆盖已有人工正文。同源不同目标可分别交付，Agent 仅在用户明确要求时创建第二份。草稿 schema_version=2，包含 output_kind（transcript/article）、title、source_sha256、purpose、sections（title/body/segment_ids）、可选 omissions（segment_ids/reason）与 limitations。ID 为 segments 的零基下标。校订稿须顺序覆盖一次全部片段；文章允许重排，未采用片段需说明取舍。格式与示例见内置 Skill 和 deliver 命令帮助。
 
-`prepare` 可省略 `--output`，素材默认保存到 `<CAMPFIRE_HOME>/materials/<视频SHA-256>/`，预览返回实际目录；显式指定时仍须为 Workspace 外的新目录。同一视频已有素材时拒绝覆盖，可复用素材或指定其他目录重新处理。素材目录包含转写与候选图片，保留用于核验，不自动过期；用户确认后可删除指定素材目录。原视频只读且不复制，Vault 仅接收选定图片与正文，交付后不依赖素材目录。模型权重及媒体内容各自的许可由使用者核对；PyAV/FFmpeg 许可随安装构建而异，本项目不捆绑模型或独立 FFmpeg 可执行文件。
+默认限制为 4 GiB、2 小时、单次处理 3 小时，配置在内置 config.yml 的 video 分区。支持本地 MP4/MOV、Matroska/WebM、AVI、MPEG-TS，具体解码依赖 PyAV。素材默认保存到 `<CAMPFIRE_HOME>/materials/<视频SHA-256>/`，`--output` 可指定 Workspace 外新目录；已有目录不覆盖。素材保留用于核验，不自动过期。原视频只读且不复制，Vault 仅接收正文，交付后可独立阅读。
+
+### 从 Alpha 升级
+
+0.2.0 移除 `video frames`、自动抽帧和截图附件交付；移除 Pillow 直接依赖。旧 max_frames/frame_interval/max_dimension/max_pixels 配置忽略并在视频结果中报告。旧素材仅只读读取文字部分，不校验或复制旧截图；新转写用 `--output <新目录>`，不覆盖旧目录。旧图文草稿拒绝并提示重写为版本 2，删除 frame_ids/visual_reviewed 字段并选择产物用途。旧文档、附件、模型和素材保留。显式 transcript 输入与模型复用继续支持。
+
+模型权重与媒体许可由使用者核对，PyAV/FFmpeg 许可随安装构建而异，本项目不捆绑模型或独立 FFmpeg 可执行文件。
 
 ## 安装
 

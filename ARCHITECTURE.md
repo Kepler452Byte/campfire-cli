@@ -46,7 +46,7 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
 
 ## 4. 系统架构
 
-本地视频能力由 `app/video` 承担素材准备与交付校验，`common/media` 提供模型下载、媒体解码与抽帧机制；可选原生处理依赖在独立子进程中延迟加载。`AppContainer.deliver_video` 组合文档治理检查与视频交付，不让 Video Service 调用 Document Service。文档结构仍由 `document apply` 创建，正文和二进制图片复用文件变更集及乐观锁；没有新的数据库、独立下载服务或模型调度器。语义整理留给宿主 Agent 与内置 Skill，结构检查不等于语义保真验收。
+本地视频能力由 `app/video` 承担素材准备与交付校验，`common/media` 提供模型下载、媒体探测与语音转写机制；可选原生处理依赖在独立子进程中延迟加载。`AppContainer.deliver_video` 组合文档治理检查与视频交付，不让 Video Service 调用 Document Service。文档结构仍由 `document apply` 创建，正文复用文件变更集及乐观锁；没有新的数据库、独立下载服务或模型调度器。语义整理留给宿主 Agent 与内置 Skill，结构检查不等于语义保真验收。
 
 ```text
 人类 / Codex / Claude Code / 其他 Agent
@@ -102,11 +102,11 @@ video setup：统一初始化预览，不联网、不落盘
     |
     v
 离线媒体子进程（复用已就绪环境）
-    +-- PyAV + Pillow：解码与截图
+    +-- PyAV：媒体探测与音频解码
     +-- faster-whisper + CTranslate2：CPU int8 转写
     |
     v
-素材包 -> Agent 核验与整理 -> 文档 + assets
+文字素材 -> Agent 校订 / 按用途成文 -> Markdown 正文
 ```
 
 `CAMPFIRE_HOME` 默认是各平台用户目录下的 `.campfire`，统一相对布局而非绝对路径；显式 `--model` 可覆盖模型位置。模型权重是用户级本地资源，Python 依赖属于 Campfire 安装环境，两者都不随 Vault 同步。公开模型下载不需要 Hugging Face Token，转写不调用云端模型；Agent 整理内容仍使用宿主自身的模型服务，不能把整条链路称为完全离线。

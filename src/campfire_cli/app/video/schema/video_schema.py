@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, str_strip_whitespace=True)
+
+
+SegmentId = Annotated[int, Field(strict=True, ge=0)]
 
 
 class Segment(Contract):
@@ -21,15 +24,8 @@ class Segment(Contract):
         return self
 
 
-class Frame(Contract):
-    id: str
-    path: str
-    seconds: float = Field(ge=0)
-    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-
 class Material(Contract):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     source_name: str
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     duration: float = Field(gt=0)
@@ -37,7 +33,6 @@ class Material(Contract):
     height: int = Field(gt=0)
     transcript_source: str
     segments: list[Segment]
-    frames: list[Frame]
     warnings: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -46,23 +41,26 @@ class Material(Contract):
             raise ValueError("转写超出媒体时长")
         if any(a.start > b.start for a, b in zip(self.segments, self.segments[1:], strict=False)):
             raise ValueError("转写必须按时间排序")
-        if any(f.seconds > self.duration + 0.5 for f in self.frames):
-            raise ValueError("截图超出媒体时长")
-        if len({f.id for f in self.frames}) != len(self.frames):
-            raise ValueError("截图 ID 重复")
         return self
 
 
 class Section(Contract):
     title: str = Field(min_length=1)
     body: str = Field(min_length=1)
-    segment_ids: list[int] = Field(default_factory=list)
-    frame_ids: list[str] = Field(default_factory=list)
+    segment_ids: list[SegmentId] = Field(min_length=1)
+
+
+class Omission(Contract):
+    segment_ids: list[SegmentId] = Field(min_length=1)
+    reason: str = Field(min_length=1)
 
 
 class Draft(Contract):
+    schema_version: Literal[2]
+    output_kind: Literal["transcript", "article"]
     title: str = Field(min_length=1)
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     sections: list[Section] = Field(min_length=1)
     limitations: list[str] = Field(default_factory=list)
-    visual_reviewed: bool = False
+    purpose: str = Field(min_length=1)
+    omissions: list[Omission] = Field(default_factory=list)

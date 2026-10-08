@@ -17,22 +17,12 @@ class FakeMedia:
     def run(self, request, timeout):
         if request.get("operation") == "validate-model":
             return {"status": "ready"}
-        frame = Path(request["output"]) / "frame-0000000000.jpg"
-        frame.write_bytes(b"fixed-test-image")
         return {
             "duration": 2,
             "width": 16,
             "height": 16,
             "transcript_source": "user-provided",
             "segments": [{"start": 0, "end": 1, "text": "example"}],
-            "frames": [
-                {
-                    "id": "frame-0000000000",
-                    "path": frame.name,
-                    "seconds": 0,
-                    "sha256": digest(frame),
-                }
-            ],
         }
 
 
@@ -63,13 +53,14 @@ def draft_file(tmp_path, source):
             {
                 "title": "Sample",
                 "source_sha256": digest(source),
-                "visual_reviewed": True,
+                "schema_version": 2,
+                "output_kind": "transcript",
+                "purpose": "保留原话记录",
                 "sections": [
                     {
                         "title": "Section",
                         "body": "Full explanation.",
                         "segment_ids": [0],
-                        "frame_ids": ["frame-0000000000"],
                     }
                 ],
             }
@@ -166,27 +157,7 @@ def test_input_and_workspace_boundary(media, tmp_path):
         service.prepare(source, output, transcript=transcript)
 
 
-@pytest.mark.parametrize("path", ["../outside.jpg", "subdir/image.jpg"])
-def test_manifest_rejects_frame_escape(media, path):
-    service, _, _, output = media
-    prepare(media)
-    manifest = output / "material.json"
-    data = json.loads(manifest.read_text(encoding="utf-8"))
-    data["frames"][0]["path"] = path
-    manifest.write_text(json.dumps(data), encoding="utf-8")
-    with pytest.raises(InputError):
-        service.inspect(output)
-
-
-def test_frame_tamper(media):
-    service, _, _, output = media
-    prepare(media)
-    (output / "frame-0000000000.jpg").write_bytes(b"changed")
-    with pytest.raises(GovernanceBlockedError):
-        service.inspect(output)
-
-
-def test_draft_requires_full_coverage_and_visual_review(media, tmp_path):
+def test_transcript_requires_full_coverage_and_order(media, tmp_path):
     service, source, _, output = media
     prepare(media)
     draft = draft_file(tmp_path, source)
@@ -197,13 +168,13 @@ def test_draft_requires_full_coverage_and_visual_review(media, tmp_path):
     with pytest.raises(InputError):
         service.validate(output, draft)
     content["sections"][0]["segment_ids"] = [0]
-    content["visual_reviewed"] = False
+    content["sections"][0]["segment_ids"] = [0, 0]
     draft.write_text(json.dumps(content))
     with pytest.raises(InputError):
         service.validate(output, draft)
 
 
-def test_delivery_atomic_images_and_preserved_frontmatter(media, tmp_path):
+def test_delivery_text_and_preserved_frontmatter(media, tmp_path):
     service, source, _, output = media
     prepare(media)
     draft = draft_file(tmp_path, source)
@@ -225,7 +196,7 @@ def test_delivery_atomic_images_and_preserved_frontmatter(media, tmp_path):
     )
     assert result["status"] == "applied"
     assert target.read_text(encoding="utf-8").startswith(original)
-    assert len(list(root.rglob("*.jpg"))) == 1
+    assert not list(root.rglob("*.jpg"))
     assert not list(root.rglob("*.mp4"))
     with pytest.raises(GovernanceBlockedError):
         service.deliver(output, draft, target, root, tmp_path / "state")
@@ -234,7 +205,6 @@ def test_delivery_atomic_images_and_preserved_frontmatter(media, tmp_path):
         material_file.unlink()
     output.rmdir()
     assert target.read_text(encoding="utf-8") == delivered
-    assert next(root.rglob("*.jpg")).read_bytes() == b"fixed-test-image"
     assert str(output) not in delivered
 
 
@@ -285,7 +255,6 @@ def test_timestamp_schema_rejects_invalid():
             width=16,
             height=16,
             transcript_source="test",
-            frames=[],
             segments=[{"start": 0, "end": 10, "text": "bad"}],
         )
 
@@ -346,14 +315,9 @@ def test_real_video_decode(tmp_path):
     result = service.prepare(
         source, output, transcript=transcript, confirm=True, expected_plan=plan["expected_plan"]
     )
-    assert result["frames"] == 1
-    before = digest(source)
-    plan = service.frames(source, output, [1.0])
-    service.frames(source, output, [1.0], confirm=True, expected_plan=plan["expected_plan"])
-    _, material = service.load(output)
-    assert len(material.frames) == 2
-    assert 1 <= material.frames[1].seconds < 1.2
-    assert digest(source) == before
+    assert result["segments"] == 1
+    assert not list(output.glob("*.jpg"))
+    assert service.load(output)[1].schema_version == 2
 
 
 def test_deliver_cli_reuses_document_governance(media, tmp_path):
@@ -417,7 +381,7 @@ def test_deliver_cli_reuses_document_governance(media, tmp_path):
     ]
     inspection = command(prefix + ["document", "inspect", "--path", created["target"]])
     assert not inspection["issues"]
-    assert len(list(root.rglob("*.jpg"))) == 1
+    assert not list(root.rglob("*.jpg"))
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -442,15 +406,29 @@ def test_timeout_kills_and_reaps_worker(monkeypatch, cancel):
     assert process.communicate.call_count == 2
 
 
-def test_duplicate_source_is_blocked(media, tmp_path):
+def test_same_source_different_outputs_allowed(media, tmp_path):
     service, source, _, output = media
     prepare(media)
     draft = draft_file(tmp_path, source)
-    target = tmp_path / "empty.md"
-    target.write_text("<!-- CAMPFIRE:BODY -->\n")
-    (tmp_path / "existing.md").write_text(f"来源 SHA-256：`{digest(source)}`", encoding="utf-8")
-    with pytest.raises(GovernanceBlockedError):
-        service.deliver(output, draft, target, tmp_path, tmp_path / "state")
+    for kind in ("transcript", "article"):
+        data = json.loads(draft.read_text())
+        data["output_kind"] = kind
+        draft.write_text(json.dumps(data))
+        target = tmp_path / f"{kind}.md"
+        target.write_text("<!-- CAMPFIRE:BODY -->\n")
+        plan = service.deliver(output, draft, target, tmp_path, tmp_path / "state")
+        service.deliver(
+            output,
+            draft,
+            target,
+            tmp_path,
+            tmp_path / "state",
+            confirm=True,
+            expected_plan=plan["expected_plan"],
+        )
+        assert kind in target.read_text(encoding="utf-8")
+        with pytest.raises(GovernanceBlockedError):
+            service.deliver(output, draft, target, tmp_path, tmp_path / "state")
 
 
 def test_binary_plan_digest(tmp_path):
@@ -527,7 +505,7 @@ def test_corrupt_media_worker_is_contained(tmp_path):
                 "source": str(source),
                 "output": str(tmp_path),
                 "limits": builtin_section("video"),
-                "frames_only": True,
+                "transcript": None,
             },
             15,
         )
@@ -810,3 +788,102 @@ def test_download_adapter_pins_snapshot_and_wraps_network_failure(tmp_path, monk
     with pytest.raises(AppError) as error:
         download_model("owner/model", "a" * 40, tmp_path)
     assert error.value.code == "video-model-download-failed"
+
+
+def test_article_reorder_and_explained_omission(media, tmp_path):
+    service, source, _, output = media
+    prepare(media)
+    manifest = output / "material.json"
+    data = json.loads(manifest.read_text())
+    data["segments"] += [{"start": 1, "end": 2, "text": "second"}]
+    manifest.write_text(json.dumps(data))
+    draft = draft_file(tmp_path, source)
+    content = json.loads(draft.read_text())
+    content["sections"][0]["segment_ids"] = [1, 0]
+    draft.write_text(json.dumps(content))
+    with pytest.raises(InputError):
+        service.validate(output, draft)
+    content["output_kind"] = "article"
+    draft.write_text(json.dumps(content))
+    service.validate(output, draft)
+    content["sections"][0]["segment_ids"] = [1]
+    draft.write_text(json.dumps(content))
+    with pytest.raises(InputError):
+        service.validate(output, draft)
+    content["omissions"] = [{"segment_ids": [0], "reason": "Opening outside tutorial scope"}]
+    draft.write_text(json.dumps(content))
+    service.validate(output, draft)
+    content["omissions"][0]["segment_ids"] = [1]
+    draft.write_text(json.dumps(content))
+    with pytest.raises(InputError):
+        service.validate(output, draft)
+
+
+def test_alpha_material_readonly_and_draft_rejected(media, tmp_path):
+    service, source, _, output = media
+    prepare(media)
+    manifest = output / "material.json"
+    data = json.loads(manifest.read_text())
+    data["schema_version"] = 1
+    data["frames"] = [{"path": "../missing.jpg"}]
+    original = json.dumps(data).encode()
+    manifest.write_bytes(original)
+    assert "Alpha" in service.load(output)[1].warnings[-1]
+    assert manifest.read_bytes() == original
+    draft = draft_file(tmp_path, source)
+    content = json.loads(draft.read_text())
+    content.pop("schema_version")
+    content["visual_reviewed"] = True
+    draft.write_text(json.dumps(content))
+    with pytest.raises(InputError, match="schema_version=2"):
+        service.validate(output, draft)
+
+
+@pytest.mark.parametrize("bad_id", [-1, True, "0", 0.5, 999])
+def test_segment_ids_are_strict_and_bounded(media, tmp_path, bad_id):
+    service, source, _, output = media
+    prepare(media)
+    draft = draft_file(tmp_path, source)
+    content = json.loads(draft.read_text())
+    content["sections"][0]["segment_ids"] = [bad_id]
+    draft.write_text(json.dumps(content))
+    with pytest.raises(InputError):
+        service.validate(output, draft)
+
+
+def test_delivery_rechecks_inputs_under_lock(media, tmp_path, monkeypatch):
+    from campfire_cli.common.filesystem.change_set import FileChangeExecutor
+
+    service, source, _, output = media
+    prepare(media)
+    draft = draft_file(tmp_path, source)
+    target = tmp_path / "target.md"
+    target.write_text("<!-- CAMPFIRE:BODY -->\n")
+    plan = service.deliver(output, draft, target, tmp_path, tmp_path / "state")
+    execute = FileChangeExecutor.execute
+
+    def race(executor, changes, **kwargs):
+        draft.write_text(draft.read_text().replace("Full explanation.", "Race changed content."))
+        return execute(executor, changes, **kwargs)
+
+    monkeypatch.setattr(FileChangeExecutor, "execute", race)
+    with pytest.raises(GovernanceBlockedError):
+        service.deliver(
+            output,
+            draft,
+            target,
+            tmp_path,
+            tmp_path / "state",
+            confirm=True,
+            expected_plan=plan["expected_plan"],
+        )
+    assert target.read_text() == "<!-- CAMPFIRE:BODY -->\n"
+
+
+def test_legacy_image_limits_reported_and_ignored(media):
+    service, _, _, _ = media
+    config = builtin_section("video")
+    config["max_frames"] = "obsolete"
+    updated = VideoService(service.backend, config, service.state_root)
+    assert updated.ignored_config == ["max_frames"]
+    assert "max_frames" not in updated.limits
