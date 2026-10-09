@@ -457,7 +457,7 @@ class MaintenanceService:
                     field="governance.human_request_root",
                     actual=str(requests),
                     detail=f"Expected configured directory: {requests}",
-                ).model_dump()
+                )
             ]
         return []
 
