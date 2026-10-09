@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -62,8 +63,8 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
                 f"perf-{index}",
                 "--domain",
                 domain_id,
-                "--local-path",
-                str(project_dir),
+                "--repositories",
+                json.dumps([{"id": "source", "local_path": str(project_dir)}]),
             ],
         )
         assert registered.exit_code == 0, registered.output

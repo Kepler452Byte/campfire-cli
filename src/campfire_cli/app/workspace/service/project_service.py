@@ -52,42 +52,7 @@ class ProjectService:
             raise ConfigurationError(
                 f"Project 未注册：{request.project_id}；请使用 campfire workspace project adopt"
             )
-        if request.repositories is None and existing.repositories:
-            if len(existing.repositories) > 1:
-                if any(
-                    value is not None
-                    for value in (
-                        request.local_path,
-                        request.git_remote_url,
-                        request.default_branch,
-                    )
-                ):
-                    raise ConfigurationError(
-                        "Use --repository to change a multi-repository Project",
-                        code="repository-selection-required",
-                        field="repository",
-                        expected_type="string",
-                        allowed=[item.id for item in existing.repositories],
-                    )
-                request.repositories = existing.repositories
-            else:
-                item = existing.repositories[0]
-                request.repositories = [
-                    RepositoryEntry(
-                        **{
-                            **item.model_dump(),
-                            **{
-                                key: str(value)
-                                for key, value in {
-                                    "local_path": request.local_path,
-                                    "git_remote_url": request.git_remote_url,
-                                    "default_branch": request.default_branch,
-                                }.items()
-                                if value is not None
-                            },
-                        }
-                    )
-                ]
+        request.repositories = existing.repositories
         return self._save(request)
 
     def create(
@@ -150,11 +115,11 @@ class ProjectService:
             raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
         return ProjectListResult(projects=self._repository.list_projects(workspace_id))
 
-    def show(self, project_id: str) -> ProjectResult:
+    def show(self, project_id: str) -> ProjectEntry:
         project = self._repository.get_project(project_id)
         if not project:
             raise ConfigurationError(f"Project 未注册：{project_id}")
-        return ProjectResult(**project.model_dump(), operation="none")
+        return project
 
     def resolve(self, path: Path) -> ProjectResolutionResult:
         query = path.expanduser().resolve()
@@ -272,7 +237,6 @@ class ProjectService:
                     "default_branch": branch,
                 }
             )
-        single = observations[0] if len(observations) == 1 else {}
         domain_path = None
         if workspace is not None:
             try:
@@ -294,35 +258,10 @@ class ProjectService:
             project=project,
             observed={
                 "repositories": observations,
-                "local_path_exists": single.get("local_path_exists", False),
-                "git_remote_url": single.get("git_remote_url"),
-                "default_branch": single.get("default_branch"),
                 "document_domain_path": str(domain_path) if domain_path else None,
                 "document_domain_exists": bool(domain_path and domain_path.is_dir()),
             },
             issues=issues,
-        )
-
-    @staticmethod
-    def _select_repository(project: ProjectEntry, repository_id: str | None) -> RepositoryEntry:
-        if repository_id is None:
-            if len(project.repositories) != 1:
-                raise ConfigurationError(
-                    "Specify --repository for a Project with zero or multiple repositories",
-                    code="repository-selection-required",
-                    field="repository",
-                    expected_type="string",
-                    allowed=[item.id for item in project.repositories],
-                )
-            return project.repositories[0]
-        for item in project.repositories:
-            if item.id == repository_id:
-                return item
-        raise ConfigurationError(
-            "Repository is not registered",
-            code="repository-not-found",
-            field="repository",
-            repository_id=repository_id,
         )
 
     def _repository_project(
@@ -439,14 +378,16 @@ class ProjectService:
             self._repository.replace_projects(project.workspace_id, previous)
             raise
 
-    def bind(
-        self, project_id: str, local_path: Path, repository_id: str | None = None
-    ) -> ProjectBindResult:
+    def bind(self, project_id: str, local_path: Path, repository_id: str) -> ProjectBindResult:
         project = self.show(project_id)
-        if not project.repositories and repository_id is None:
-            repository = RepositoryEntry(id="default")
-        else:
-            repository = self._select_repository(project, repository_id)
+        repository = next((item for item in project.repositories if item.id == repository_id), None)
+        if repository is None:
+            raise ConfigurationError(
+                "Repository is not registered",
+                code="repository-not-found",
+                field="repository",
+                repository_id=repository_id,
+            )
         snapshot = self._snapshot_hash(project)
         updated = self._validated_repository(
             RepositoryEntry(**{**repository.model_dump(), "local_path": str(local_path)})
@@ -454,8 +395,6 @@ class ProjectService:
         repositories = [
             updated if item.id == repository.id else item for item in project.repositories
         ]
-        if not project.repositories:
-            repositories.append(updated)
         project = self._repository_project(project, repositories)
         with workspace_write_lock(self._root):
             if self._snapshot_hash(self.show(project_id)) != snapshot:
@@ -528,18 +467,6 @@ class ProjectService:
             domain_path = Path(workspace.path) / relative
         else:
             raise ConfigurationError("创建 Project 必须提供项目根 Domain 路径")
-        repositories = request.repositories
-        if repositories is None:
-            repositories = []
-            if any((request.local_path, request.git_remote_url, request.default_branch)):
-                repositories = [
-                    RepositoryEntry(
-                        id="default",
-                        git_remote_url=request.git_remote_url,
-                        local_path=str(request.local_path) if request.local_path else None,
-                        default_branch=request.default_branch,
-                    )
-                ]
         statuses = set(config_section("project")["statuses"])
         if request.status not in statuses:
             raise ConfigurationError(f"Project status 必须是：{', '.join(sorted(statuses))}")
@@ -550,7 +477,7 @@ class ProjectService:
                 name=request.name.strip(),
                 document_domain_id=request.document_domain_id,
                 status=request.status,
-                repositories=[self._validated_repository(item) for item in repositories],
+                repositories=[self._validated_repository(item) for item in request.repositories],
             )
         except ValidationError as exc:
             duplicate = any(item["type"] == "repository-id-duplicate" for item in exc.errors())

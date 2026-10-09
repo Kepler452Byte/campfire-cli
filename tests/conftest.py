@@ -34,7 +34,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "_收件箱").mkdir()
     (tmp_path / "_待用户确认").mkdir()
     (tmp_path / ".campfire.yaml").write_text(
-        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "schema_version: 2\nworkspace:\n  id: test\n  name: Test\n"
         "  governance_version: 1\nprojects: []\n",
         encoding="utf-8",
     )

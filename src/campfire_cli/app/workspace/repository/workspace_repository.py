@@ -72,9 +72,6 @@ class SqliteWorkspaceRepository:
             row.workspace_id = project.workspace_id
             row.name = project.name
             row.document_domain_id = project.document_domain_id
-            row.git_remote_url = project.git_remote_url
-            row.local_path = project.local_path
-            row.default_branch = project.default_branch
             row.repositories = json.dumps([r.model_dump() for r in project.repositories])
             row.status = project.status
         return operation
@@ -89,9 +86,6 @@ class SqliteWorkspaceRepository:
                 row.workspace_id = project.workspace_id
                 row.name = project.name
                 row.document_domain_id = project.document_domain_id
-                row.git_remote_url = project.git_remote_url
-                row.local_path = project.local_path
-                row.default_branch = project.default_branch
                 row.repositories = json.dumps([r.model_dump() for r in project.repositories])
                 row.status = project.status
 
@@ -105,9 +99,6 @@ class SqliteWorkspaceRepository:
                         workspace_id=project.workspace_id,
                         name=project.name,
                         document_domain_id=project.document_domain_id,
-                        git_remote_url=project.git_remote_url,
-                        local_path=project.local_path,
-                        default_branch=project.default_branch,
                         status=project.status,
                         repositories=json.dumps([r.model_dump() for r in project.repositories]),
                     )
@@ -134,9 +125,6 @@ class SqliteWorkspaceRepository:
                         workspace_id=project.workspace_id,
                         name=project.name,
                         document_domain_id=project.document_domain_id,
-                        git_remote_url=project.git_remote_url,
-                        local_path=project.local_path,
-                        default_branch=project.default_branch,
                         status=project.status,
                         repositories=json.dumps([r.model_dump() for r in project.repositories]),
                     )
@@ -155,9 +143,6 @@ class SqliteWorkspaceRepository:
             workspace_id=row.workspace_id,
             name=row.name,
             document_domain_id=row.document_domain_id,
-            git_remote_url=row.git_remote_url,
-            local_path=row.local_path,
-            default_branch=row.default_branch,
             status=row.status,
             repositories=json.loads(row.repositories),
         )

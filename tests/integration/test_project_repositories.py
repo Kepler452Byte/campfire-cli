@@ -15,6 +15,7 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
 )
 from campfire_cli.app.workspace.service.project_service import ProjectService
 from campfire_cli.common.database import upgrade_database
+from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.config.settings import campfire_home
 from campfire_cli.main import app
 
@@ -74,7 +75,7 @@ def test_multiple_repositories_preserve_identity_and_other_bindings(
             {"id": "api", "role": "backend", "local_path": str(backend)},
         ],
     )["project"]
-    assert project["git_remote_url"] is None and project["local_path"] is None
+    assert "git_remote_url" not in project and "local_path" not in project
     calls = []
     monkeypatch.setattr(ProjectService, "_git_command", lambda *args: calls.append(args))
     match = cli("workspace", "project", "resolve", "--path", str(backend / "src"))
@@ -169,38 +170,27 @@ def test_repository_mutations_reject_concurrent_manifest_and_database_changes(
     assert json.loads(changed.output)["code"] == "project-concurrent-change"
 
 
-def test_legacy_single_repository_aliases_and_explicit_selection(workspace: Path) -> None:
+def test_single_repository_uses_same_explicit_interface(workspace: Path) -> None:
     local = workspace / "code"
     local.mkdir()
-    created = cli(
-        "workspace",
-        "project",
-        "create",
-        "--id",
-        "product",
-        "--name",
-        "Product",
-        "--path",
-        "mywork/product",
-        "--local-path",
-        str(local),
-        "--confirm",
+    created = create_project(workspace, [{"id": "source", "local_path": str(local)}])
+    assert created["project"]["repositories"][0]["id"] == "source"
+    assert "local_path" not in created["project"]
+    without_id = runner.invoke(
+        app, ["workspace", "project", "bind", "--id", "product", "--local-path", str(local)]
     )
-    assert created["project"]["repositories"][0]["id"] == "default"
-    assert created["project"]["local_path"] == str(local)
+    assert without_id.exit_code != 0
+    invalid = runner.invoke(
+        app, ["workspace", "project", "update", "--id", "product", "--default-branch", "main"]
+    )
+    assert json.loads(invalid.output)["code"] == "repository-selection-required"
+    single = update_repository("source", "--default-branch", "trunk")["project"]
+    assert single["repositories"][0]["default_branch"] == "trunk"
+    assert "default_branch" not in single
     update_repository("api", "--git-remote-url", "https://example.org/api.git")
-    for args in (
-        ["workspace", "project", "bind", "--id", "product", "--local-path", str(local)],
-        ["workspace", "project", "update", "--id", "product", "--default-branch", "main"],
-    ):
-        result = runner.invoke(app, args)
-        assert json.loads(result.output)["code"] == "repository-selection-required"
     renamed = cli("workspace", "project", "update", "--id", "product", "--name", "Renamed")
     assert len(renamed["repositories"]) == 2
-    update_repository("default", "--remove-repository")
-    single = cli("workspace", "project", "update", "--id", "product", "--default-branch", "trunk")
-    assert single["repositories"][0]["id"] == "api"
-    assert single["default_branch"] == "trunk"
+    assert renamed["repositories"][0]["default_branch"] == "trunk"
 
 
 def test_validation_and_manifest_path_boundaries(workspace: Path) -> None:
@@ -321,29 +311,49 @@ def test_database_012_migration_is_lossless_and_idempotent(tmp_path: Path) -> No
     upgrade_database(database)
     upgrade_database(database)
     with sqlite3.connect(database) as connection:
-        row = connection.execute(
-            "SELECT git_remote_url, local_path, default_branch, repositories FROM projects"
-        ).fetchone()
-    assert row[:3] == ("git@example.org:api.git", "/old/api", "main")
-    assert json.loads(row[3]) == [
-        {"id": "default", "git_remote_url": row[0], "local_path": row[1], "default_branch": row[2]}
-    ]
-    portable = WorkspaceManifest.model_validate(
+        row = connection.execute("SELECT repositories FROM projects").fetchone()
+        columns = {item[1] for item in connection.execute("PRAGMA table_info(projects)")}
+    assert json.loads(row[0]) == [
         {
-            "schema_version": 1,
-            "workspace": {"id": "test", "name": "Test"},
-            "projects": [
-                {
-                    "id": "product",
-                    "name": "Product",
-                    "document_domain_id": "root",
-                    "git_remote_url": row[0],
-                    "default_branch": row[2],
-                }
-            ],
+            "id": "default",
+            "git_remote_url": "git@example.org:api.git",
+            "local_path": "/old/api",
+            "default_branch": "main",
         }
+    ]
+    assert not columns & {"git_remote_url", "local_path", "default_branch"}
+    from campfire_cli.app.workspace.repository.manifest_repository import (
+        WorkspaceManifestRepository,
     )
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    manifest_path = vault / ".campfire.yaml"
+    manifest_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "workspace": {"id": "test", "name": "Test"},
+                "projects": [
+                    {
+                        "id": "product",
+                        "name": "Product",
+                        "document_domain_id": "root",
+                        "git_remote_url": "git@example.org:api.git",
+                        "default_branch": "main",
+                    }
+                ],
+            }
+        )
+    )
+    repository = WorkspaceManifestRepository()
+    assert repository.upgrade(vault) is True
+    upgraded = manifest_path.read_bytes()
+    assert repository.upgrade(vault) is False
+    assert manifest_path.read_bytes() == upgraded
+    portable = repository.load(vault)
     assert portable.projects[0].repositories[0].id == "default"
+    assert portable.projects[0].repositories[0].git_remote_url == "git@example.org:api.git"
 
 
 def test_equal_depth_paths_are_explicitly_ambiguous(workspace: Path) -> None:
@@ -391,3 +401,32 @@ def test_domain_rekey_keeps_repositories_and_local_bindings(workspace: Path) -> 
     assert manifest["projects"][0]["document_domain_id"] == "product-docs"
     assert {item["id"] for item in manifest["projects"][0]["repositories"]} == {"web", "api"}
     assert "local_path" not in json.dumps(manifest)
+
+
+def test_manifest_upgrade_preserves_local_only_repository_and_rejects_invalid_source(
+    workspace: Path,
+) -> None:
+    from campfire_cli.app.workspace.repository.manifest_repository import (
+        WorkspaceManifestRepository,
+    )
+
+    local = workspace / "source"
+    local.mkdir()
+    create_project(workspace, [{"id": "default", "local_path": str(local)}])
+    manifest_path = workspace / ".campfire.yaml"
+    manifest = yaml.safe_load(manifest_path.read_text())
+    manifest["schema_version"] = 1
+    manifest["projects"][0].pop("repositories")
+    manifest_path.write_text(yaml.safe_dump(manifest))
+    setup = cli("setup", "--path", str(workspace), "--default")
+    assert setup["manifest_operation"] == "migrated"
+    assert setup["unbound_repositories"] == []
+    restored = cli("workspace", "project", "show", "product")
+    assert restored["repositories"][0]["id"] == "default"
+    assert restored["repositories"][0]["local_path"] == str(local)
+    manifest["projects"][0]["local_path"] = str(local)
+    manifest_path.write_text(yaml.safe_dump(manifest))
+    before = manifest_path.read_bytes()
+    with pytest.raises(ConfigurationError):
+        WorkspaceManifestRepository().upgrade(workspace)
+    assert manifest_path.read_bytes() == before

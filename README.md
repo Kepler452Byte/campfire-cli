@@ -138,7 +138,8 @@ campfire workspace space create --id research --name "研究" --path myresearch 
 campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
   --type knowledge-domain --governance knowledge-base --confirm
 campfire --workspace personal workspace project adopt --id example \
-  --name "Example" --domain project-example --local-path /path/to/repo
+  --name "Example" --domain project-example \
+  --repositories '[{"id":"source","local_path":"/path/to/repo"}]'
 campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
 ```
 
@@ -156,15 +157,17 @@ campfire workspace project update --id product --repository api --role server
 # 审查后，对相同 update 命令追加 --expected-hash <预览哈希> --confirm
 ```
 
-`create/adopt --repositories` 接受 JSON 数组，条目包含必填 `id` 以及可选 `git_remote_url`、`default_branch`、`role`、`local_path`，不能与旧单仓库参数混用。`update --repository` 新增或修改一个仓库，默认只预览；`--unbind` 清除本机路径，`--remove-repository` 移除注册项，两者均须预览哈希和确认，均不删除代码文件。角色可传空字符串清空。Project 名称、Domain 和状态仍单独使用旧 update 入口。
+`create/adopt --repositories` 接受 JSON 数组，条目包含必填 `id` 以及可选 `git_remote_url`、`default_branch`、`role`、`local_path`。`update --repository` 新增或修改一个仓库，默认只预览；`--unbind` 清除本机路径，`--remove-repository` 移除注册项，两者均须预览哈希和确认，均不删除代码文件。角色可传空字符串清空。Project 名称、Domain 和状态使用不带 --repository 的 update 入口。
 
-旧单仓库参数继续支持；旧数据自动映射为 `default` 仓库，单仓库 JSON 的顶层 remote、路径和分支仍是该仓库的兼容字段，多仓库时为 null，不默认指向第一项。已有单仓库具有其他 id 时，旧参数保留其 id 与角色。零仓库允许只管理文档；旧 bind 不指定仓库时可为零仓库 Project 创建 `default`，其余显式仓库注册使用 update。
+单仓库和多仓库使用同一套接口：仓库字段只出现在 `repositories` 条目内，bind 始终必填 `--repository`。不提供 Project 顶层 remote、路径或分支字段，也不保留旧 create/adopt 的单仓库参数。零仓库允许只管理文档，需要代码仓库时通过 update 显式新增。
 
 本地 resolve 按最深绑定路径匹配并返回仓库 id，不执行 Git 子进程；相同深度多个绑定返回 ambiguous，包括同一 Project 内的多个仓库。共享 remote 允许登记，但远程匹配只返回候选，不自动认定归属。绑定路径可重叠，调用方需根据结果明确选择。check 逐仓库报告未绑定、路径缺失及 Git 信息漂移。
 
 setup 默认输出资源操作摘要；逐文件路径与哈希使用 `setup --verbose`。健康问题返回 needs-review，健康检查通过但仓库未绑定时返回 needs-input；unbound_repositories 提供仓库身份和绑定参数，实际本机目录须用户提供。重复 setup 按仓库 id 保留已有绑定，不扫描或自动绑定猜测路径。
 
-升级至 0.2.1 自动执行数据库迁移 013，保留原单仓库值；旧 Manifest v1 和注册备份 v1 可读取，新写入使用 v2。Manifest 仅保存便携仓库元数据，本机路径仍在 SQLite；setup 读取旧 Manifest 时不强制改写，后续 Project 或 Domain 元数据写入才采用 v2。含多仓库的 v2 数据不承诺供旧版 CLI 使用，降级前应恢复升级前完整备份，不手工删除数据库或仓库列表。本轮版本号 0.2.1 按用户明确决定采用。
+升级至 0.2.1 自动执行数据库迁移 013，把原单仓库值转为 `default` 仓库并删除旧列。setup/upgrade 将 Manifest v1 一次性迁为 v2；显式导入 v1 备份时也会先转换，新导出只有 v2。业务模型和查询仅使用新结构，不长期维护两套接口。迁移保留 Project id、Domain 绑定及本机路径，Manifest 不含本机绝对路径。
+
+本轮包含明确的接口变化：旧 create/adopt 单仓库参数移除；update 仓库字段须带 --repository；bind 须指定仓库 id；Project JSON 顶层仓库字段移除。旧调用方需按上述命令更新。降级需恢复升级前完整备份，不手工删除数据库或仓库列表。本轮版本号 0.2.1 按用户明确决定采用。
 
 ## 索引统计与检查范围
 

@@ -34,6 +34,6 @@ Project 是 Workspace 连接的外部工作资源，记录稳定 id、显示名�
 
 ## 多仓库注册
 
-Project 可有零到多个仓库，每个仓库使用 Project 内唯一的稳定 id；role、remote、默认分支是便携元数据，local_path 是设备绑定，不进入 Manifest。Manifest v1 单值输入迁为 default 仓库，新写入 v2 只维护 repositories；注册备份 v1 可读、新导出 v2。SQLite 迁移 013 保留旧字段并增加仓库列表，顶层单仓库字段只是兼容投影，多仓库时为 null。
+Project 可有零到多个仓库，每个仓库使用 Project 内唯一的稳定 id；role、remote、默认分支是便携元数据，local_path 是设备绑定，不进入 Manifest。setup/upgrade 一次性把 Manifest v1 转为 v2 的 default 仓库，业务读写仅处理 v2；导入旧备份在边界显式迁移，新导出只用 v2。SQLite 迁移 013 转换数据后删除旧列，Project 没有顶层仓库字段。
 
-create/adopt 的 repositories 是初始列表；update 按 repository id 新增、更新、解绑或移除一项，默认预览，confirm 必须复核 Project 与 Manifest 哈希，不删除源码文件。旧单仓库 CLI 继续兼容，多仓库不隐式选取首项。共享 remote 与嵌套路径允许登记；resolve 保留最深本机路径规则，同深度多绑定返回 ambiguous，remote 仅是候选。setup 按稳定仓库 id 保留本机绑定并逐项报告未绑定入口，不猜测路径。
+create/adopt 的 repositories 是初始列表；update 按 repository id 新增、更新、解绑或移除一项，默认预览，confirm 必须复核 Project 与 Manifest 哈希，不删除源码文件。单仓库与多仓库共用仓库列表接口，bind 必须指定仓库 id，不隐式选取首项。共享 remote 与嵌套路径允许登记；resolve 保留最深本机路径规则，同深度多绑定返回 ambiguous，remote 仅是候选。setup 按稳定仓库 id 保留本机绑定并逐项报告未绑定入口，不猜测路径。

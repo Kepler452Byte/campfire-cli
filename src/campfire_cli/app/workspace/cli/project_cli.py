@@ -33,9 +33,6 @@ def request(
     workspace_id: str,
     name: str,
     document_domain_id: str,
-    local_path: Path | None,
-    git_remote_url: str | None,
-    default_branch: str | None,
     status: str,
     document_domain_path: str | None = None,
     repositories: str | None = None,
@@ -47,19 +44,15 @@ def request(
         name=name,
         document_domain_id=document_domain_id,
         document_domain_path=document_domain_path,
-        local_path=local_path,
-        git_remote_url=git_remote_url,
-        default_branch=default_branch,
         status=status,
     )
 
 
-def parse_repositories(value: str | None) -> list[RepositoryEntry] | None:
+def parse_repositories(value: str | None) -> list[RepositoryEntry]:
     if value is None:
-        return None
+        return []
     try:
-        repositories = TypeAdapter(list[RepositoryEntry]).validate_json(value)
-        return repositories
+        return TypeAdapter(list[RepositoryEntry]).validate_json(value)
     except ValidationError as exc:
         raise ConfigurationError(
             "Invalid repository list",
@@ -77,15 +70,12 @@ def adopt(
     project_id: str = typer.Option(..., "--id", help="稳定 Project id"),
     name: str = typer.Option(..., "--name", help="Project 显示名称"),
     domain_id: str = typer.Option(..., "--domain", help="已有项目根 Domain 的稳定 id"),
-    local_path: Path | None = typer.Option(None, "--local-path"),
-    git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
-    default_branch: str | None = typer.Option(None, "--default-branch"),
     repositories: str | None = typer.Option(
         None,
         "--repositories",
         help=(
             'JSON 仓库数组，例如 [{"id":"backend","git_remote_url":"https://example.org/api.git"}]；'
-            "id 必填，role/default_branch/local_path 可选；禁止与旧单仓库参数混用"
+            "id 必填，role/default_branch/local_path 可选"
         ),
     ),
     status: str = typer.Option("active", "--status"),
@@ -93,19 +83,12 @@ def adopt(
     """把已有 Domain 绑定为 Project 文档中心。"""
 
     def operation():
-        if repositories is not None and any((local_path, git_remote_url, default_branch)):
-            raise ConfigurationError(
-                "Do not combine repositories with legacy fields", code="repository-options-conflict"
-            )
         resolved = resolution(ctx)
         payload = request(
             project_id,
             resolved.workspace_id,
             name,
             domain_id,
-            local_path,
-            git_remote_url,
-            default_branch,
             status,
             repositories=repositories,
         )
@@ -182,15 +165,18 @@ def update(
                 field="repository",
                 expected_type="string",
             )
-        current_local_path = Path(current.local_path) if current.local_path else None
+        if any(value is not None for value in (local_path, git_remote_url, default_branch)):
+            raise ConfigurationError(
+                "Repository fields require --repository",
+                code="repository-selection-required",
+                field="repository",
+                expected_type="string",
+            )
         payload = request(
             project_id,
             current.workspace_id,
             name if name is not None else current.name,
             domain_id or current.document_domain_id,
-            local_path if local_path is not None else current_local_path,
-            git_remote_url if git_remote_url is not None else current.git_remote_url,
-            default_branch if default_branch is not None else current.default_branch,
             status if status is not None else current.status,
         )
         return target.update(payload)
@@ -204,15 +190,12 @@ def create(
     project_id: str = typer.Option(..., "--id", help="稳定 Project id"),
     name: str = typer.Option(..., "--name", help="Project 显示名称"),
     path: str = typer.Option(..., "--path", help="待创建项目根 Domain 的 Workspace 相对路径"),
-    local_path: Path | None = typer.Option(None, "--local-path"),
-    git_remote_url: str | None = typer.Option(None, "--git-remote-url"),
-    default_branch: str | None = typer.Option(None, "--default-branch"),
     repositories: str | None = typer.Option(
         None,
         "--repositories",
         help=(
             'JSON 仓库数组，例如 [{"id":"backend","git_remote_url":"https://example.org/api.git"}]；'
-            "id 必填，role/default_branch/local_path 可选；禁止与旧单仓库参数混用"
+            "id 必填，role/default_branch/local_path 可选"
         ),
     ),
     status: str = typer.Option("active", "--status"),
@@ -221,19 +204,12 @@ def create(
     """预览并初始化新 Project 文档中心；追加 --confirm 后创建并注册。"""
 
     def operation():
-        if repositories is not None and any((local_path, git_remote_url, default_branch)):
-            raise ConfigurationError(
-                "Do not combine repositories with legacy fields", code="repository-options-conflict"
-            )
         workspace_id = resolution(ctx).workspace_id
         payload = request(
             project_id,
             workspace_id,
             name,
             f"project-{project_id}",
-            local_path,
-            git_remote_url,
-            default_branch,
             status,
             path,
             repositories=repositories,
@@ -271,9 +247,7 @@ def check(project_id: str) -> None:
 def bind(
     project_id: str = typer.Option(..., "--id"),
     local_path: Path = typer.Option(..., "--local-path"),
-    repository_id: str | None = typer.Option(
-        None, "--repository", help="仓库稳定 id；多仓库时必填"
-    ),
+    repository_id: str = typer.Option(..., "--repository", help="仓库稳定 id，必填"),
 ) -> None:
     """在当前设备上绑定 Project 源码路径，不把绝对路径写入 Manifest。"""
     emit(invoke(lambda: service().bind(project_id, local_path, repository_id)))

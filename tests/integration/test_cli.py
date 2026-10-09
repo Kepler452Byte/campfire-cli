@@ -234,7 +234,7 @@ def test_first_time_workspace_create_and_existing_directory_setup(tmp_path: Path
     )
     assert demo.exit_code == 0, demo.output
     demo_payload = json.loads(demo.output)
-    assert demo_payload["demo"]["project"]["git_remote_url"] == (
+    assert demo_payload["demo"]["project"]["repositories"][0]["git_remote_url"] == (
         "https://github.com/octocat/Hello-World.git"
     )
     assert "hello-world" in (demo_workspace / ".campfire.yaml").read_text(encoding="utf-8")

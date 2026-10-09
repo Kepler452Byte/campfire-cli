@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
@@ -81,37 +81,7 @@ class RepositoryEntry(ManifestRepository):
     local_path: str | None = None
 
 
-class RepositoryProject(BaseModel):
-    git_remote_url: str | None = None
-    default_branch: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_repository(cls, value: Any) -> Any:
-        if isinstance(value, dict) and "repositories" not in value:
-            value = dict(value)
-            if any(value.get(key) for key in ("git_remote_url", "default_branch", "local_path")):
-                repository = {"id": "default"}
-                for key in ("git_remote_url", "default_branch", "local_path"):
-                    if key != "local_path" or "local_path" in cls.model_fields:
-                        repository[key] = value.get(key)
-                value["repositories"] = [repository]
-        return value
-
-    @model_validator(mode="after")
-    def project_legacy_fields(self):
-        ids = [item.id for item in self.repositories]
-        if len(ids) != len(set(ids)):
-            raise PydanticCustomError("repository-id-duplicate", "Repository ids must be unique")
-        single = self.repositories[0] if len(self.repositories) == 1 else None
-        self.git_remote_url = single.git_remote_url if single else None
-        self.default_branch = single.default_branch if single else None
-        if "local_path" in type(self).model_fields:
-            self.local_path = getattr(single, "local_path", None)
-        return self
-
-
-class ManifestProject(RepositoryProject):
+class ManifestProject(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
@@ -120,11 +90,18 @@ class ManifestProject(RepositoryProject):
     repositories: list[ManifestRepository] = Field(default_factory=list)
     status: str = "active"
 
+    @model_validator(mode="after")
+    def unique_repository_ids(self):
+        ids = [item.id for item in self.repositories]
+        if len(ids) != len(set(ids)):
+            raise PydanticCustomError("repository-id-duplicate", "Repository ids must be unique")
+        return self
+
 
 class WorkspaceManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = Field(default=2, ge=1, le=2)
+    schema_version: Literal[2] = 2
     workspace: ManifestWorkspace
     projects: list[ManifestProject] = Field(default_factory=list)
 
@@ -208,26 +185,18 @@ class WorkspaceConfigCheckResult(BaseModel):
     issues: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class ProjectEntry(RepositoryProject):
-    id: str
+class ProjectEntry(ManifestProject):
     workspace_id: str
-    name: str
-    document_domain_id: str
     repositories: list[RepositoryEntry] = Field(default_factory=list)
-    local_path: str | None = None
-    status: str = "active"
 
 
 class ProjectRegistrationRequest(BaseModel):
-    repositories: list[RepositoryEntry] | None = None
+    repositories: list[RepositoryEntry] = Field(default_factory=list)
     project_id: str
     workspace_id: str
     name: str
     document_domain_id: str
     document_domain_path: str | None = None
-    git_remote_url: str | None = None
-    local_path: Path | None = None
-    default_branch: str | None = None
     status: str = "active"
 
 
@@ -278,7 +247,7 @@ class ProjectCreateResult(BaseModel):
 
 
 class RegistryExport(BaseModel):
-    schema_version: int = Field(default=2, ge=1, le=2)
+    schema_version: Literal[2] = 2
     default_workspace: str | None = None
     workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
     projects: list[ProjectEntry] = Field(default_factory=list)
@@ -293,7 +262,7 @@ class RegistryTransferResult(BaseModel):
 
 def portable_project(project: ProjectEntry) -> ManifestProject:
     """Return portable metadata without device-local repository paths."""
-    payload = project.model_dump(exclude={"workspace_id", "local_path"})
+    payload = project.model_dump(exclude={"workspace_id"})
     payload["repositories"] = [
         item.model_dump(exclude={"local_path"}) for item in project.repositories
     ]

@@ -7,6 +7,7 @@ import typer
 from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectRegistrationRequest,
+    RepositoryEntry,
     WorkspaceCreateRequest,
     WorkspaceCreateResult,
 )
@@ -90,8 +91,13 @@ def _demo_request(demo: str | None, workspace_id: str) -> ProjectRegistrationReq
         name="Hello World",
         document_domain_id="project-hello-world",
         document_domain_path="mywork/【Hello World】文档中心",
-        git_remote_url="https://github.com/octocat/Hello-World.git",
-        default_branch="master",
+        repositories=[
+            RepositoryEntry(
+                id="source",
+                git_remote_url="https://github.com/octocat/Hello-World.git",
+                default_branch="master",
+            )
+        ],
     )
 
 

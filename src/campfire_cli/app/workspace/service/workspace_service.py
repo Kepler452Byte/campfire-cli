@@ -7,6 +7,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
+from campfire_cli.app.workspace.repository.project_migration import migrate_project_records
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ManifestWorkspace,
     RegistryExport,
@@ -93,8 +94,10 @@ class WorkspaceService:
         root = path.expanduser().resolve()
         if not root.is_dir():
             raise ConfigurationError(f"Workspace 不存在：{root}")
+        with workspace_write_lock(self._root):
+            migrated = self._manifests.upgrade(root)
         manifest = self._manifests.load(root)
-        manifest_operation = "preserved"
+        manifest_operation = "migrated" if migrated else "preserved"
         if manifest is not None and workspace_id and workspace_id != manifest.workspace.id:
             raise ConfigurationError(
                 f"--id 与 Workspace Manifest 不一致：{workspace_id} != {manifest.workspace.id}"
@@ -150,6 +153,8 @@ class WorkspaceService:
         if workspace is None:
             raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
         root = Path(workspace.path).expanduser().resolve()
+        with workspace_write_lock(self._root):
+            self._manifests.upgrade(root)
         manifest = self._manifests.load(root)
         if manifest is None:
             raise ConfigurationError(f"Workspace 缺少 .campfire.yaml：{root}")
@@ -214,7 +219,13 @@ class WorkspaceService:
         source = source.expanduser().resolve()
         if not source.is_file():
             raise ConfigurationError(f"导入文件不存在：{source}")
-        payload = RegistryExport.model_validate_json(source.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(source.read_text(encoding="utf-8"))
+            payload = RegistryExport.model_validate(migrate_project_records(raw, portable=False))
+        except (ValueError, TypeError) as exc:
+            raise ConfigurationError(
+                "Invalid registry backup", code="registry-import-invalid", detail=str(exc)
+            ) from exc
         self._validate_import(payload)
         if confirm:
             with workspace_write_lock(self._root):
