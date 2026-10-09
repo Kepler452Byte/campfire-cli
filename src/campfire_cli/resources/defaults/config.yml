@@ -173,6 +173,12 @@ issues:
   - untitled-note
   - undeclared-directory
   catalog:
+    related-docs-missing:
+    - related_docs 指向的受管文档不存在；缺失目标见 detail 和 actual。
+    - 核实目标是否移动或删除；通过 document inspect 查看关系，再按真实意图用 document apply 修正 related_docs，不自动移除关系或创建内容。
+    human-request-root-missing:
+    - 缺少治理契约指定的待用户确认目录，预期路径见 path 和 actual。
+    - 核对 governance.human_request_root 配置；确认后创建对应目录，不创建虚构的待确认内容。
     untitled-note:
     - 文档仍使用临时名称。
     - 理解正文后按文档类型改为有意义的名称；无法判断时保留并请求用户确认。

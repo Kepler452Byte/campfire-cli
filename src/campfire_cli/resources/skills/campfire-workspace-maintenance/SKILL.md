@@ -14,9 +14,10 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 ## 上下文与契约
 
 - 已知 Workspace、目标和契约直接复用，缺失才 bootstrap。根级 `--workspace` 选择环境，路径以 Workspace 根为基准。
-- Manifest 管注册事实，Markdown 管内容与声明，SQLite 和生成视图是派生状态；不直接编辑数据库、Base 或自动生成区域。
+- Vault 根目录 `.campfire.yaml` 管便携项目事实，`~/.campfire/local.yaml` 管本机接入与路径绑定，Markdown 管内容与声明，SQLite 和生成视图是派生状态；不直接编辑数据库、Base 或自动生成区域。
 - 普通文档归属 Domain，系统受管区按配置处理；Project 由 Manifest 的稳定 Domain 绑定推导，不向 Domain 声明重复写入项目字段。
 - list / inspect 自行对账索引；check 用于诊断，不是每次查询或写入的前置步骤。
+- 外部文件或文件夹改名后，查询会对账索引，但不自动改写 related_docs。检查报出失效关系时先核实真实目标，再用 document apply 修正；不猜测改名映射，正文链接另行核对。
 
 ## SOP
 
@@ -68,6 +69,8 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 ## 异常与停止条件
 
 自动生成标记异常、结构断链或并发变化时停止对应写入，按 issue 处理，不手改生成区。业务语义无法唯一确定时询问；缺 CLI 能力则报告，不直接改 Manifest 或数据库。只在核实状态并消除原因后重试。
+
+用户明确要求删除具体文档时，用 rm 或等价文件工具直接删除；CLI 不提供 document delete。索引查询会自动对账，MOC 按需 scoped sync。删除不自动授权改写引用方正文或清理 related_docs；遗留引用另行核实和处理。
 
 ## 完成条件与回报
 

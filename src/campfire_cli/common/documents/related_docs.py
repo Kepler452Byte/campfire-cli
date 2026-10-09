@@ -69,6 +69,7 @@ def relation_issues(value: Any, source: str, candidates: set[str]) -> list[dict[
             "path": source,
             "field": RELATED_DOCS,
             "detail": item.raw,
+            "actual": item.target or item.raw,
             "expected_type": "list",
             "example": ["[[mywork/project/记录-example.md]]"],
         }

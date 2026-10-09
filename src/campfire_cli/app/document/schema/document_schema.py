@@ -101,6 +101,7 @@ class DocumentIndexResult(BaseModel):
     document_count: int
     edge_count: int
     changed_document_count: int
+    content_changed_document_count: int = 0
     full_rebuild: bool
 
 

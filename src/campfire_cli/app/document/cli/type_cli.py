@@ -8,7 +8,7 @@ from campfire_cli.app.document.repository.document_type_repository import (
     DocumentTypeRepository,
 )
 from campfire_cli.app.document.service.rules.document_type_service import DocumentTypeService
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.cli_output import emit, invoke
 from campfire_cli.common.filesystem.cwd import safe_cwd
@@ -23,7 +23,7 @@ type_cli = typer.Typer(
 def service(ctx: typer.Context) -> DocumentTypeService:
     selector = ctx.find_root().params.get("workspace")
     root = campfire_home()
-    resolution = WorkspaceService(root, SqliteWorkspaceRepository(root)).resolve(
+    resolution = WorkspaceService(root, FilesystemWorkspaceRepository(root)).resolve(
         selector, safe_cwd()
     )
     settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))

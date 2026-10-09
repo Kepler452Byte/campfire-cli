@@ -2,156 +2,140 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import delete, select
+import yaml
 
+from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectEntry,
-    WorkspaceEntry,
     WorkspaceRegistry,
+    portable_project,
+    restore_project,
 )
-from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
-from campfire_cli.common.database.models import Project, Workspace
+from campfire_cli.common.exceptions import ConfigurationError
+from campfire_cli.common.filesystem import atomic_write
 
 
-class SqliteWorkspaceRepository:
-    """Persist the user-level Workspace and Project registry in SQLite."""
+class FilesystemWorkspaceRepository:
+    """Read portable projects from their Vaults and device bindings from local.yaml."""
 
     def __init__(self, governance_root: Path) -> None:
-        self._root = governance_root
-        database_path = governance_root / "campfire.db"
-        upgrade_database(database_path)
-        self._engine = create_sqlite_engine(database_path)
+        self._path = governance_root / "local.yaml"
+        self._manifests = WorkspaceManifestRepository()
 
     def load_registry(self) -> WorkspaceRegistry:
-        with open_session(self._engine) as session:
-            rows = session.scalars(select(Workspace).order_by(Workspace.id)).all()
-        default = next((row.id for row in rows if row.is_default), None)
-        return WorkspaceRegistry(
-            default_workspace=default,
-            workspaces={
-                row.id: WorkspaceEntry(path=row.path, status=row.status, default=row.is_default)
-                for row in rows
-            },
-        )
+        if not self._path.exists():
+            return WorkspaceRegistry()
+        try:
+            return WorkspaceRegistry.model_validate(
+                yaml.safe_load(self._path.read_text(encoding="utf-8")) or {}
+            )
+        except (ValueError, yaml.YAMLError) as exc:
+            raise ConfigurationError(
+                f"Invalid local configuration: {self._path}: {exc}", code="local-config-invalid"
+            ) from exc
 
     def save_registry(self, registry: WorkspaceRegistry) -> None:
-        with open_session(self._engine) as session, session.begin():
-            existing = {row.id: row for row in session.scalars(select(Workspace)).all()}
-            for workspace_id, entry in registry.workspaces.items():
-                row = existing.pop(workspace_id, None)
-                if row is None:
-                    row = Workspace(id=workspace_id, path=entry.path)
-                    session.add(row)
-                row.path = entry.path
-                row.status = entry.status
-                row.is_default = workspace_id == registry.default_workspace
-            for row in existing.values():
-                session.delete(row)
+        atomic_write(
+            self._path,
+            yaml.safe_dump(registry.model_dump(mode="json"), allow_unicode=True, sort_keys=False),
+        )
 
     def list_projects(self, workspace_id: str | None = None) -> list[ProjectEntry]:
-        statement = select(Project).order_by(Project.workspace_id, Project.id)
-        if workspace_id is not None:
-            statement = statement.where(Project.workspace_id == workspace_id)
-        with open_session(self._engine) as session:
-            rows = session.scalars(statement).all()
-            return [self._project_entry(row) for row in rows]
+        registry = self.load_registry()
+        result = []
+        for identity, entry in sorted(registry.workspaces.items()):
+            if workspace_id is not None and identity != workspace_id:
+                continue
+            manifest = self._manifests.load(Path(entry.path))
+            if manifest is None:
+                raise ConfigurationError(
+                    f"Workspace Manifest missing: {entry.path}", code="manifest-missing"
+                )
+            if manifest.workspace.id != identity:
+                raise ConfigurationError(
+                    f"Workspace identity mismatch: {entry.path}", code="manifest-workspace-mismatch"
+                )
+            for portable in sorted(manifest.projects, key=lambda item: item.id):
+                project = restore_project(portable, identity, None)
+                bindings = entry.repository_bindings.get(project.id, {})
+                for repository in project.repositories:
+                    repository.local_path = bindings.get(repository.id)
+                result.append(project)
+        return result
 
     def get_project(self, project_id: str) -> ProjectEntry | None:
-        with open_session(self._engine) as session:
-            row = session.get(Project, project_id)
-            return self._project_entry(row) if row else None
+        matches = [item for item in self.list_projects() if item.id == project_id]
+        if len(matches) > 1:
+            raise ConfigurationError(
+                f"Project id occurs in multiple Workspaces: {project_id}", code="project-ambiguous"
+            )
+        return matches[0] if matches else None
 
     def save_project(self, project: ProjectEntry) -> str:
-        with open_session(self._engine) as session, session.begin():
-            row = session.get(Project, project.id)
-            operation = "updated" if row else "created"
-            if row is None:
-                row = Project(id=project.id, workspace_id=project.workspace_id)
-                session.add(row)
-            row.workspace_id = project.workspace_id
-            row.name = project.name
-            row.document_domain_id = project.document_domain_id
-            row.git_remote_url = project.git_remote_url
-            row.local_path = project.local_path
-            row.default_branch = project.default_branch
-            row.status = project.status
-        return operation
-
-    def save_projects(self, projects: list[ProjectEntry]) -> None:
-        with open_session(self._engine) as session, session.begin():
-            for project in projects:
-                row = session.get(Project, project.id)
-                if row is None:
-                    row = Project(id=project.id, workspace_id=project.workspace_id)
-                    session.add(row)
-                row.workspace_id = project.workspace_id
-                row.name = project.name
-                row.document_domain_id = project.document_domain_id
-                row.git_remote_url = project.git_remote_url
-                row.local_path = project.local_path
-                row.default_branch = project.default_branch
-                row.status = project.status
+        existing = self.list_projects(project.workspace_id)
+        found = any(item.id == project.id for item in existing)
+        projects = [project if item.id == project.id else item for item in existing]
+        if not found:
+            projects.append(project)
+        self.replace_projects(project.workspace_id, projects)
+        return "updated" if found else "created"
 
     def replace_projects(self, workspace_id: str, projects: list[ProjectEntry]) -> None:
-        with open_session(self._engine) as session, session.begin():
-            session.execute(delete(Project).where(Project.workspace_id == workspace_id))
-            for project in projects:
-                session.add(
-                    Project(
-                        id=project.id,
-                        workspace_id=project.workspace_id,
-                        name=project.name,
-                        document_domain_id=project.document_domain_id,
-                        git_remote_url=project.git_remote_url,
-                        local_path=project.local_path,
-                        default_branch=project.default_branch,
-                        status=project.status,
-                    )
-                )
+        registry = self.load_registry()
+        previous_registry = registry.model_copy(deep=True)
+        entry = registry.workspaces[workspace_id]
+        root = Path(entry.path)
+        manifest = self._manifests.load(root)
+        if manifest is None:
+            raise ConfigurationError(f"Workspace Manifest missing: {root}", code="manifest-missing")
+        portable = [portable_project(item) for item in projects]
+        metadata_changed = manifest.projects != portable
+        manifest.projects = portable
+        for project in projects:
+            bindings = {
+                item.id: item.local_path for item in project.repositories if item.local_path
+            }
+            if bindings:
+                entry.repository_bindings[project.id] = bindings
+            else:
+                entry.repository_bindings.pop(project.id, None)
+        target = self._manifests.path(root)
+        original = target.read_text(encoding="utf-8")
+        try:
+            if metadata_changed:
+                self._manifests.save(root, manifest)
+            if registry != previous_registry:
+                self.save_registry(registry)
+        except Exception:
+            if metadata_changed:
+                atomic_write(target, original)
+            raise
 
     def replace_registry(self, registry: WorkspaceRegistry, projects: list[ProjectEntry]) -> None:
-        with open_session(self._engine) as session, session.begin():
-            session.execute(delete(Project))
-            session.execute(delete(Workspace))
-            for workspace_id, entry in registry.workspaces.items():
-                session.add(
-                    Workspace(
-                        id=workspace_id,
-                        path=entry.path,
-                        status=entry.status,
-                        is_default=workspace_id == registry.default_workspace,
-                    )
+        originals = {
+            self._manifests.path(Path(entry.path)): self._manifests.path(
+                Path(entry.path)
+            ).read_text(encoding="utf-8")
+            for entry in registry.workspaces.values()
+        }
+        local = self._path.read_text(encoding="utf-8") if self._path.exists() else None
+        try:
+            self.save_registry(registry)
+            for workspace_id in registry.workspaces:
+                self.replace_projects(
+                    workspace_id, [item for item in projects if item.workspace_id == workspace_id]
                 )
-            session.flush()
-            for project in projects:
-                session.add(
-                    Project(
-                        id=project.id,
-                        workspace_id=project.workspace_id,
-                        name=project.name,
-                        document_domain_id=project.document_domain_id,
-                        git_remote_url=project.git_remote_url,
-                        local_path=project.local_path,
-                        default_branch=project.default_branch,
-                        status=project.status,
-                    )
-                )
+        except Exception:
+            for path, content in originals.items():
+                atomic_write(path, content)
+            if local is None:
+                self._path.unlink(missing_ok=True)
+            else:
+                atomic_write(self._path, local)
+            raise
 
     @staticmethod
     def create_scaffold(root: Path, directories: tuple[str, ...]) -> list[str]:
         for relative in directories:
             (root / relative).mkdir(parents=True, exist_ok=True)
         return list(directories)
-
-    @staticmethod
-    def _project_entry(row: Project) -> ProjectEntry:
-        return ProjectEntry(
-            id=row.id,
-            workspace_id=row.workspace_id,
-            name=row.name,
-            document_domain_id=row.document_domain_id,
-            git_remote_url=row.git_remote_url,
-            local_path=row.local_path,
-            default_branch=row.default_branch,
-            status=row.status,
-        )

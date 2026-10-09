@@ -17,27 +17,6 @@ def utc_now() -> datetime:
 class Workspace(Base):
     __tablename__ = "workspaces"
     id: Mapped[str] = mapped_column(String(63), primary_key=True)
-    path: Mapped[str] = mapped_column(Text, unique=True)
-    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    status: Mapped[str] = mapped_column(String(24), default="active")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
-
-
-class Project(Base):
-    __tablename__ = "projects"
-    id: Mapped[str] = mapped_column(String(63), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
-    )
-    name: Mapped[str] = mapped_column(String(160))
-    document_domain_id: Mapped[str] = mapped_column(String(128))
-    git_remote_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    local_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    default_branch: Mapped[str | None] = mapped_column(String(160), nullable=True)
-    status: Mapped[str] = mapped_column(String(24), default="active")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class WorkspaceSpace(Base):

@@ -15,8 +15,8 @@ from campfire_cli.app.workspace.schema.restructure_schema import (
 )
 from campfire_cli.app.workspace.schema.workspace_schema import (
     Domain,
-    ManifestProject,
     ProjectEntry,
+    portable_project,
 )
 from campfire_cli.app.workspace.service.structure_service import (
     DOMAIN_MARKER,
@@ -269,16 +269,9 @@ class DomainRestructureService:
         current_target = self._domain(target.id)
         if current_source.path != source.path or current_target.path != target.path:
             raise ConfigurationError("Domain 在预览后发生变化，请重新执行")
-        try:
-            with self._executor.transaction(change_set):
-                if updated_projects:
-                    self._workspaces.save_projects(updated_projects)
-                if source.path.exists():
-                    raise ConfigurationError("Domain 合并后源目录仍然存在")
-        except Exception:
-            if projects:
-                self._workspaces.save_projects(projects)
-            raise
+        with self._executor.transaction(change_set):
+            if source.path.exists():
+                raise ConfigurationError("Domain 合并后源目录仍然存在")
         return DomainMergeResult(
             status="applied",
             source_domain=source.id,
@@ -482,12 +475,8 @@ class DomainRestructureService:
                 raise GovernanceBlockedError("领域内容或引用在提交前发生变化", code="plan-changed")
 
         try:
-            with self._executor.transaction(change_set, before_write=verify_plan):
-                if updated_projects:
-                    self._workspaces.save_projects(updated_projects)
+            self._executor.execute(change_set, before_write=verify_plan)
         except Exception as exc:
-            if projects:
-                self._workspaces.save_projects(projects)
             if isinstance(exc, OSError):
                 raise AppError(
                     "领域写入失败，文件变更已回滚",
@@ -835,12 +824,7 @@ class DomainRestructureService:
             replacements.get(project.id, project)
             for project in self._workspaces.list_projects(self._settings.workspace_id)
         ]
-        manifest.projects = [
-            ManifestProject.model_validate(
-                project.model_dump(exclude={"workspace_id", "local_path"})
-            )
-            for project in projects
-        ]
+        manifest.projects = [portable_project(project) for project in projects]
         return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
     def _reference_files(self) -> list[Path]:

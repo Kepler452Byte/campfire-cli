@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from campfire_cli.app.workspace.repository.workspace_repository import (
-    SqliteWorkspaceRepository,
+    FilesystemWorkspaceRepository,
 )
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.documents.markdown import render_document
@@ -30,7 +30,7 @@ def write_project_domain(workspace: Path) -> Path:
         "---\n",
         encoding="utf-8",
     )
-    SqliteWorkspaceRepository(campfire_home()).save_project(
+    FilesystemWorkspaceRepository(campfire_home()).save_project(
         ProjectEntry(
             id="example",
             workspace_id="test",
@@ -192,7 +192,7 @@ def test_project_registry_root_supplies_legacy_domain_context(workspace: Path) -
         encoding="utf-8",
     )
     write_task(domain / "任务-Todo.md", "Todo", "todo")
-    registry = SqliteWorkspaceRepository(workspace / "_campfire")
+    registry = FilesystemWorkspaceRepository(workspace / "_campfire")
     registry.save_project(
         ProjectEntry(
             id="legacy",

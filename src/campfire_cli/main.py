@@ -109,6 +109,9 @@ def setup(
     workspace_id: str | None = typer.Option(
         None, "--id", help="缺少 .campfire.yaml 时使用的稳定 Workspace id"
     ),
+    verbose: bool = typer.Option(
+        False, "--verbose", help="输出逐文件资源路径与哈希；默认仅输出摘要"
+    ),
     make_default: bool = typer.Option(False, "--default", help="设为默认 Workspace"),
 ) -> None:
     """从 .campfire.yaml 配置本机，或为已注册 Workspace 创建首份 Manifest。"""
@@ -116,11 +119,28 @@ def setup(
     def operation() -> dict[str, object]:
         if path is None and workspace_id is not None:
             raise ConfigurationError("--id 只能与 --path 一起使用", code="invalid-option")
-        return (
+        result = (
             AppContainer.setup_global_resources()
             if path is None
             else AppContainer.setup(path, make_default, workspace_id)
         )
+        if not verbose:
+            resources = result.get("resources", {})
+            result["resources"] = {
+                key: (
+                    {
+                        **{field: value for field, value in item.items() if field != "operations"},
+                        "operation_count": len(item.get("operations", [])),
+                    }
+                    if isinstance(item, dict)
+                    else item
+                )
+                for key, item in resources.items()
+            }
+            result["details_hint"] = (
+                "Repeat setup with --verbose to obtain resource operations and hashes."
+            )
+        return result
 
     emit(invoke(operation))
 

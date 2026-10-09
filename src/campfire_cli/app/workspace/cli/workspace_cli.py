@@ -4,9 +4,10 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectRegistrationRequest,
+    RepositoryEntry,
     WorkspaceCreateRequest,
     WorkspaceCreateResult,
 )
@@ -26,7 +27,7 @@ workspace_cli = typer.Typer(
 
 def service() -> WorkspaceService:
     root = campfire_home()
-    return WorkspaceService(root, SqliteWorkspaceRepository(root))
+    return WorkspaceService(root, FilesystemWorkspaceRepository(root))
 
 
 def selector(ctx: typer.Context) -> str | None:
@@ -54,7 +55,7 @@ def create(
     demo_result = (
         invoke(
             lambda: ProjectService(
-                campfire_home(), SqliteWorkspaceRepository(campfire_home())
+                campfire_home(), FilesystemWorkspaceRepository(campfire_home())
             ).create(demo_request, confirm=True)
         )
         if demo_request
@@ -90,8 +91,13 @@ def _demo_request(demo: str | None, workspace_id: str) -> ProjectRegistrationReq
         name="Hello World",
         document_domain_id="project-hello-world",
         document_domain_path="mywork/【Hello World】文档中心",
-        git_remote_url="https://github.com/octocat/Hello-World.git",
-        default_branch="master",
+        repositories=[
+            RepositoryEntry(
+                id="source",
+                git_remote_url="https://github.com/octocat/Hello-World.git",
+                default_branch="master",
+            )
+        ],
     )
 
 
@@ -136,7 +142,7 @@ def rebuild(
         return
     from campfire_cli.container import AppContainer
 
-    emit(invoke(lambda: AppContainer.build(selector(ctx)).maintenance.check(summary=True)))
+    emit(invoke(lambda: AppContainer.build(selector(ctx)).maintenance.check()))
 
 
 @workspace_cli.command("export")

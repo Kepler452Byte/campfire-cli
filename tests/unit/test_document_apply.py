@@ -7,7 +7,7 @@ from campfire_cli.app.document.repository.document_profile_repository import (
 )
 from campfire_cli.app.document.schema import DocumentApplyRequest
 from campfire_cli.app.document.service.rules.document_profile_service import DocumentProfileService
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.common.documents.markdown import BODY_ANCHOR, parse_document
 from campfire_cli.config.settings import campfire_home
@@ -23,12 +23,12 @@ def project_domain(workspace: Path) -> Path:
         encoding="utf-8",
     )
     (workspace / ".campfire.yaml").write_text(
-        "schema_version: 1\nworkspace:\n  id: test\n  name: Test\n"
+        "workspace:\n  id: test\n  name: Test\n"
         "  governance_version: 1\nprojects:\n- id: example\n  name: Example\n"
         "  document_domain_id: project-example\n  status: active\n",
         encoding="utf-8",
     )
-    SqliteWorkspaceRepository(campfire_home()).save_project(
+    FilesystemWorkspaceRepository(campfire_home()).save_project(
         ProjectEntry(
             id="example", workspace_id="test", name="Example", document_domain_id="project-example"
         )

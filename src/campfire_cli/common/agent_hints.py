@@ -30,8 +30,11 @@ HINT_BODY = """## Campfire 文档治理
    `document inspect` 后 apply，不从 `tree` 开始逐层探索。创建或唯一更新时
    `--path` 可省略 `.md`，创建时可省略类型前缀，由 CLI 返回最终 target。
    相对路径以 Workspace 根为基准，不是 cwd；创建成功后按 target 用 Edit
-   补正文，不传 title 或不存在的 --body 参数。新建契约未知时只查询目标
-   `document profile resolve --type <type>`，用户已明确授权就不重复询问是否创建。
+   补正文，不传 title 或不存在的 --body 参数。类型不确定或需了解全部支持类型时，
+   运行 `campfire --workspace <id> document type list` 获取当前有效类型、名称和前缀，
+   不猜 type，不把目录名或 Profile 名当作 type。选定类型后，字段契约未知才查询
+   `document profile resolve --type <type>`；类型和契约已明确时直接 apply。
+   用户已明确授权就不重复询问是否创建。
 7. 只改一篇文档标题时使用 `campfire document rename --path <source> --name <标题>`；
    它保留原目录并同步标题、规范文件名和受管引用。跨 Domain 移动才使用
    `campfire document move`。

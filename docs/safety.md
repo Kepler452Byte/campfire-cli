@@ -11,7 +11,7 @@ Campfire 不提供独立备份系统。先明确写入边界，再使用已有 G
 | maintenance check / list / inspect | 本机索引和检查状态；不是完全无副作用的文件读取 |
 | maintenance sync | MOC 自动区域和本机投影，不写人工正文或历史关系页 |
 | base sync | `_治理视图` 中的内置 Base 定义，可能补回已删除的内置视图 |
-| upgrade | Python 包、数据库迁移、已注册 Workspace 的 Base、全局 Skill 和提示词 |
+| upgrade | Python 包、当前派生数据库初始化、已注册 Workspace 的 Base、全局 Skill 和提示词 |
 
 默认本机状态在 `~/.campfire`；`CAMPFIRE_HOME` 可覆盖。提示词默认位于 `~/.claude/CLAUDE.md`、`~/.agents/AGENTS.md`，Skill 默认位于两者的 skills 目录。`CAMPFIRE_AGENT_HINT_PATH` 和 `CAMPFIRE_SKILL_TARGETS` 可覆盖，多个目标按操作系统路径分隔符分开。
 
@@ -30,9 +30,9 @@ Campfire 不提供独立备份系统。先明确写入边界，再使用已有 G
 ## 内容与本机状态分开恢复
 
 Markdown、`_空间.md`、`_领域.md` 和 `.campfire.yaml` 是可移植事实。新设备通过 setup 接入已有目录，再显式绑定无法恢复的源码本机路径。
-文档/拓扑索引可以重建；同一 SQLite 中还有注册、路径绑定和运行记录，不能把整个 `campfire.db` 当作可随意删除的缓存。`workspace rebuild` 不是“恢复删除笔记”。
+`~/.campfire/local.yaml` 保存 Vault 注册、默认选择和仓库本机绑定；remote 和项目元数据只保存在 Vault 根目录 `.campfire.yaml`。停止所有 Campfire 操作后可删除 `campfire.db`、`campfire.db-wal` 与 `campfire.db-shm`，通过查询或 setup 重建；未执行计划重新生成并重新审批。文件操作失败恢复未完成时先核对与恢复文件，不清理证据。`workspace rebuild` 不是“恢复删除笔记”。
 
-需要备份本机状态时，先退出所有 Campfire 进程并暂停写入，再复制整个实际 CAMPFIRE_HOME 目录；不要在写入中只复制 SQLite 主文件而漏掉 WAL。恢复前保留当前状态，停止进程，使用一致快照恢复，并核对 CLI/数据库版本；不承诺跨版本直接降级。
+需要备份本机状态时，先退出所有 Campfire 进程并暂停写入，再复制整个实际 CAMPFIRE_HOME 目录；不要在写入中只复制 SQLite 主文件而漏掉 WAL。恢复前保留当前状态，停止进程，使用一致快照恢复，并核对 CLI 和当前配置结构；产品不读取旧格式或运行历史迁移。
 
 ## 卸载与停止治理
 

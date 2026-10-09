@@ -10,7 +10,7 @@ from sqlalchemy.exc import OperationalError
 from typer.testing import CliRunner
 
 from campfire_cli.app.document.schema import DocumentApplyRequest
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import ProjectEntry
 from campfire_cli.app.workspace.service.structure_service import DomainService
 from campfire_cli.common.database.models import WorkspaceDomain
@@ -352,7 +352,7 @@ def test_project_binding_survives_folder_rename(workspace: Path) -> None:
         ),
         encoding="utf-8",
     )
-    repository = SqliteWorkspaceRepository(campfire_home())
+    repository = FilesystemWorkspaceRepository(campfire_home())
     repository.save_project(
         ProjectEntry(
             id="example", workspace_id="test", name="Example", document_domain_id="project-root"

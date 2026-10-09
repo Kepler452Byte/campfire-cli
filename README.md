@@ -3,7 +3,7 @@
 `campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕同一份持久共享上下文协作：把口头要求、临时笔记、任务进度、项目资料和长期知识沉淀进可检索、可交接、可审计的 Workspace。
 
 - **人类和 Agent 同一条链路**：同一套 CLI 契约 + 全局 Agent Skill，没有两套规则。
-- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；SQLite 保存可重建索引，也保存本机注册与运行状态，不能整体当作缓存删除。
+- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；`.campfire.yaml` 保存便携项目事实，`~/.campfire/local.yaml` 保存本机注册与绑定；SQLite 全部是可重建状态。
 - **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，检测到输入变化时拒绝覆盖；不承诺外部编辑器遵守锁或跨介质崩溃原子性。
 - **本地优先**：不绑定云服务、不内置账号；Obsidian 是推荐阅读工具而非强依赖；CLI 可独立治理 Markdown Workspace。
 
@@ -59,7 +59,7 @@ uv tool install campfire-cli
 campfire version
 ```
 
-升级：`campfire upgrade` 是一条幂等命令——检测 PyPI 新版本并按安装方式（uv tool / pipx）更新包本身（更新器在独立进程中等待当前进程退出后执行，完成后自动用新版代码对齐治理资源），随后对齐 SQLite Schema、全局 Skill、Base 与提示词路标。离线、已是最新、editable 源码安装或无法识别安装方式时跳过包更新仅对齐资源。
+升级：`campfire upgrade` 是一条幂等命令——检测 PyPI 新版本并按安装方式（uv tool / pipx）更新包本身（更新器在独立进程中等待当前进程退出后执行，完成后自动用新版代码对齐治理资源），随后按当前模型初始化 SQLite、对齐全局 Skill、Base 与提示词路标。离线、已是最新、editable 源码安装或无法识别安装方式时跳过包更新仅对齐资源。
 
 开发机安装（跟随本地源码）：
 
@@ -98,7 +98,7 @@ Workspace ── Space ── Domain 树 ── 文档
 
 | 对象 | 说明 | 事实源 |
 |------|------|--------|
-| Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/campfire.db`（注册）+ `.campfire.yaml`（便携 Manifest） |
+| Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/local.yaml`（本机接入）+ Vault 根目录 `.campfire.yaml`（便携配置） |
 | Space / Domain | 顶级容器 / 可嵌套内容边界，声明式 + 自动 MOC | Vault 内 `_空间.md`、`_领域.md` |
 | Document | 知识、计划、问题、决策、记录等持久内容 | Markdown 正文 + Frontmatter |
 | Human request | Agent 需要人类回答的待确认事项 | `_待用户确认/` 中的 `human-request` 文档 |
@@ -138,9 +138,60 @@ campfire workspace space create --id research --name "研究" --path myresearch 
 campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
   --type knowledge-domain --governance knowledge-base --confirm
 campfire --workspace personal workspace project adopt --id example \
-  --name "Example" --domain project-example --local-path /path/to/repo
+  --name "Example" --domain project-example \
+  --repositories '[{"id":"source","local_path":"/path/to/repo"}]'
 campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
 ```
+
+## Project 多仓库与新设备接入
+
+一个业务 Project 绑定一个文档根 Domain，可登记零个或多个仓库。仓库由 Project 内唯一的稳定 `id` 标识，`role` 只是描述；角色修改或列表重排不改变本机路径绑定。
+
+```bash
+campfire workspace project create --id product --name "Product" --path mywork/Product \
+  --repositories '[{"id":"web","role":"frontend","git_remote_url":"https://example.org/web.git"},{"id":"api","role":"backend","git_remote_url":"https://example.org/api.git"}]'
+# 审查后对同一条 create 命令追加 --confirm
+campfire workspace project bind --id product --repository web --local-path /path/to/web
+campfire workspace project bind --id product --repository api --local-path /path/to/api
+campfire workspace project update --id product --repository api --role server
+# 审查后，对相同 update 命令追加 --expected-hash <预览哈希> --confirm
+```
+
+`create/adopt --repositories` 接受 JSON 数组，条目包含必填 `id` 以及可选 `git_remote_url`、`default_branch`、`role`、`local_path`。`update --repository` 新增或修改一个仓库，默认只预览；`--unbind` 清除本机路径，`--remove-repository` 移除注册项，两者均须预览哈希和确认，均不删除代码文件。角色可传空字符串清空。Project 名称、Domain 和状态使用不带 --repository 的 update 入口。
+
+单仓库和多仓库使用同一套接口：仓库字段只出现在 `repositories` 条目内，bind 始终必填 `--repository`。不提供 Project 顶层 remote、路径或分支字段，也不保留旧 create/adopt 的单仓库参数。零仓库允许只管理文档，需要代码仓库时通过 update 显式新增。
+
+本地 resolve 按最深绑定路径匹配并返回仓库 id，不执行 Git 子进程；相同深度多个绑定返回 ambiguous，包括同一 Project 内的多个仓库。共享 remote 允许登记，但远程匹配只返回候选，不自动认定归属。绑定路径可重叠，调用方需根据结果明确选择。check 逐仓库报告未绑定、路径缺失及 Git 信息漂移。
+
+setup 默认输出资源操作摘要；逐文件路径与哈希使用 `setup --verbose`。健康问题返回 needs-review，健康检查通过但仓库未绑定时返回 needs-input；unbound_repositories 提供仓库身份和绑定参数，实际本机目录须用户提供。重复 setup 按仓库 id 保留已有绑定，不扫描或自动绑定猜测路径。
+
+0.2.1 只支持当前结构，不包含旧格式转换和数据库迁移链。已有用户先备份 Vault 的 `.campfire.yaml` 和本机状态，由本地 Agent 将项目整理为仓库列表，把 Vault 路径、默认选择及仓库本机路径记入 `~/.campfire/local.yaml`；确认保留身份与绑定后，停止 Campfire 进程并删除旧数据库，运行 setup 重新接入。新用户直接 setup。旧格式备份不直接导入，升级准备不删除 Markdown 或代码目录。
+
+`~/.campfire/local.yaml` 按 Workspace id 保存设备配置，不重复保存 remote、分支和项目名称：
+
+```yaml
+default_workspace: personal
+workspaces:
+  personal:
+    path: /path/to/vault
+    repository_bindings:
+      campfire-cli:
+        source: /path/to/campfire-cli
+```
+
+Vault 根目录 `.campfire.yaml` 保存稳定 Project/repository id、文档领域、remote、默认分支和 role，不保存本机路径。`project list/show/resolve/check` 按稳定 id 合并两份文件；元数据操作写 `.campfire.yaml`，路径绑定写 `local.yaml`。SQLite 删除后项目查询不依赖数据库，文档查询自动重建索引；先停止运行中的操作，再删除 `campfire.db`、`campfire.db-wal` 与 `campfire.db-shm`。报告和未执行计划可重新生成，重新生成的计划需要重新审批。
+
+本轮包含明确的接口变化：旧 create/adopt 单仓库参数移除；update 仓库字段须带 --repository；bind 须指定仓库 id；Project JSON 顶层仓库字段移除。旧调用方需按上述命令更新。降级需恢复升级前完整备份，不手工删除数据库或仓库列表。本轮版本号 0.2.1 按用户明确决定采用。
+
+## 索引统计与检查范围
+
+`maintenance check` 和 `workspace rebuild --confirm` 完整重建索引；治理问题不等于索引不可用。`indexed_document_count` 是当前整个 Workspace 的索引总量；`index_processed_document_count` 是本次索引处理的文档数量，完整重建时包括内容未改变的文档；`index_content_changed_document_count` 是内容哈希发生变化或新增、删除的文档数量。`index_generation` 标识快照，`index_available` 为 true 表示本次确认可用，null 表示当前步骤未评估。`document_count` 仍表示本次治理扫描范围的数量。
+
+`write_performed` 只表示 Markdown 文件变更，不包含 SQLite 或运行报告写入，范围由 write_performed_scope 明示。无文件变化与索引可用可以同时成立。scoped sync 的索引总量仍按 Workspace 统计，其文件维护范围由 scope 限定。
+
+关系检查仅覆盖 Frontmatter 的 `related_docs`，正文链接不参与索引、治理检查或自动改写。零治理问题不代表正文全部链接有效。用户要求删除具体文档时直接使用 rm 或文件工具；Campfire 不提供 document delete。查询会自动对账索引，MOC 按需 scoped sync，遗留引用另行核实和处理。
+
+类型未知时使用 `campfire --workspace <id> document type list` 查询当前有效类型、名称与前缀，再对选定类型查询 Profile；已知类型不重复列举，不猜测 type 或按目录名推断。
 
 ## 存量接管与结构重构
 
@@ -167,6 +218,8 @@ campfire workspace restructure verify --batch move-001
 ## 治理模型
 
 - **本地查询投影**：`document list` 按 Project、Domain、类型、`document_status` 和 `task_status` 精确筛选；`document inspect` 返回显式关联、出链、反向链接和失效/歧义引用。两者在查询前自动 reconcile，Agent 无需先运行 Maintenance。SQLite 不复制正文，正文仍由 Agent 按返回路径读取。
+
+外部编辑器或文件工具重命名文档、文件夹后，下一次 list/inspect/check 自动对账索引；related_docs 是 Markdown 中的事实，不凭路径变化猜测并改写。maintenance check 报告失效关系，Agent 核实目标后通过 document apply 修正。正文链接不在该检查范围；通过 CLI 的 rename/move 则按既有契约定向更新受管引用。
 - **校验分工**：`maintenance check` 汇总 Space/Domain 结构与正式文档问题，并刷新可重建索引；`workspace space/domain check` 提供结构声明的专项诊断。`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
 - **Frontmatter Profile**：声明式一层继承（`base` 或 `base → task/human-request/board`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
 - **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，可捕获失败尝试补偿；若报告恢复失败，停止重试并核对实际文件。

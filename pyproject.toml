@@ -1,12 +1,11 @@
 [project]
 name = "campfire-cli"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-  "alembic>=1.13",
   "packaging>=24",
   "psutil>=7.2.2",
   "pydantic>=2.7",

@@ -50,6 +50,7 @@ class SqliteRestructureRepository:
             "items": [item.model_dump() for item in items],
         }
         self._write(batch, "inventory.json", payload)
+        self._path(batch, "plan.json").unlink(missing_ok=True)
 
     def load_inventory(self, batch: str) -> tuple[str, str, list[InventoryItem]]:
         row = self._session.scalar(

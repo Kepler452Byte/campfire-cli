@@ -23,7 +23,7 @@ SQLite / Filesystem Implementation
 - 纯技术机制放 `common/`，例如网络查询、版本比较与进程编排；不得包含治理业务语义，也不得反向依赖 `app/`。
 - `resources/defaults/config.yml` 是产品默认规则的唯一 SSOT；Service 不得重复声明可演进的目录、类型、状态、归档或 Issue 规则。
 - CLI 通过用户级 registry 管理多个 Workspace，不依赖任何 Workspace 内的工具目录。
-- Markdown 是内容事实来源；包内 `config.yml` 与可选的 `~/.campfire/config.yml` 覆盖共同形成有效治理契约；`~/.campfire/campfire.db` 是唯一数据库，保存 Workspace/Project 注册数据、按 Workspace 隔离的可重建索引和工作流状态。
+- Markdown 是内容事实来源；包内 `config.yml` 与可选的 `~/.campfire/config.yml` 覆盖共同形成有效治理契约；Vault 根目录 `.campfire.yaml` 保存便携身份与仓库元数据；`~/.campfire/local.yaml` 按 Workspace id 保存 Vault 本机路径、默认选择和按 Project/repository id 关联的本机仓库路径；`~/.campfire/campfire.db` 只保存可重建投影、检查和未执行计划，不保存唯一事实。
 - YAML 只承载人类可维护的配置和可移植 Manifest；JSON 只用于报告、计划交换和有限的最近变更。
 - Workspace Restructure 与 Maintenance 不共享含义模糊的业务入口。
 - CLI 不直接实现业务规则；Service 不依赖 Typer。
@@ -48,7 +48,7 @@ SQLite / Filesystem Implementation
 
 ## 升级语义
 
-- `campfire upgrade` 是唯一的幂等升级入口：先更新 Python 包本身，再对齐本机治理资源，覆盖 Schema 迁移、全局 Skill、Base 与提示词路标。
+- `campfire upgrade` 是唯一的幂等升级入口：先更新 Python 包本身，再对齐本机治理资源，覆盖当前表结构初始化、全局 Skill、Base 与提示词路标；不维护历史迁移链或旧格式转换。
 - 包自更新按检测到的安装方式在独立进程中执行，当前支持 uv tool 与 pipx。更新脚本必须等待当前进程退出后再运行，因为 Windows 会锁定运行中的解释器与可执行文件，包管理器无法原地替换；成功后由新版代码完成资源对齐。
 - editable 源码安装、离线、无法识别安装方式时跳过包更新仅对齐资源，结果中以 `action` 与 `hint` 显式说明原因。
 - 自更新链使用的内部参数必须 `hidden=True`，`--skip-package` 是当前实例，不进入公共 CLI 契约。
@@ -120,7 +120,7 @@ Campfire 使用语义化版本：
 - Markdown Frontmatter 的 `related_docs` 是文档关系唯一 SSOT，采用 `[[Workspace相对路径.md]]`。不解析、索引或自动改写正文链接；历史正文保留，SQLite 关系投影可从该字段重建；不再生成 Markdown 关系页，Agent 通过 document inspect 查询关系。
 - 改名、移动与类型联动改名只定向更新 `related_docs` 引用方；预览输出 `expected_plan`，确认复核整个变更集摘要和文件哈希。文件提交后的索引失败必须报告已写入事实，并使索引可在下次查询恢复。
 
-- SQLite `spaces`、`domains`、`documents` 只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
+- SQLite 全部表只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
 - Document App 拥有文档记录、确定关系、集合查询和单篇关系查询；Repository 只持久化投影，不解释 Profile、Domain 或链接语义。
 - 文档索引保存 schema version、parser version、有效配置 hash、拓扑 hash 和 generation；Domain 声明、Project 文档根映射等任一解释输入变化都必须自动完整重建。
 - `document list` 与 `document inspect` 查询前必须轻量 reconcile。文件 stat 只筛选变化候选，content hash 表示内容版本；调用方不需要先运行 Maintenance。
@@ -139,3 +139,10 @@ Campfire 使用语义化版本：
 - 接管计划一次建立一个粗粒度 Domain；CLI 不得自行推断文档语义或子领域。
 - `workspace domain adopt` 默认只预览，显式 `--confirm` 后在一个 ChangeSet 中移动或复制内容并创建领域声明。
 - 提交成功前必须核对接管文件、哈希和领域声明；接管后的细分治理继续使用 Restructure。
+
+## 本机配置与重建
+
+- `.campfire.yaml` 与 `local.yaml` 各有唯一事实，不双向复制 remote、分支、名称和文档领域。项目查询按稳定 id 合并两者，元数据写入 Vault 文件，路径绑定写入本机文件。
+- 只支持当前文件结构，无 schema_version 分支或旧格式读取。已有用户由 Agent 在备份后一次性整理文件；转换逻辑不进入产品。
+- 停止正在执行的操作后，可删除 campfire.db 及其 WAL/SHM，再由正常查询、setup 或 rebuild 从文件恢复派生状态；重新生成的计划重新确认，旧审批不沿用。
+- SQLite 不承载唯一的文件回滚材料；结构变更继续通过文件变更集执行与补偿，不承诺断电原子性，恢复未完成时停止清理并核对文件。

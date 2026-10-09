@@ -1,10 +1,10 @@
 # Workspace App SPEC
 
-本模块管理 Workspace、Space、Domain、Project 注册表和 Workspace 初始化。`.campfire.yaml` 保存可移植的 Workspace、Project 身份和 Project 到根 Domain 的稳定绑定；`CAMPFIRE_HOME/campfire.db` 保存本机路径及其查询投影，不得反向覆盖 Manifest。路径只是可变定位信息。每个 Workspace 只保留配置与人类可审阅的运行产物，不拥有独立数据库。所有工具状态均位于 `CAMPFIRE_HOME`，不得向目标 Workspace 创建工具状态目录。
+本模块管理 Workspace、Space、Domain、Project 注册表和 Workspace 初始化。`.campfire.yaml` 保存可移植的 Workspace、Project 身份和 Project 到根 Domain 的稳定绑定；`CAMPFIRE_HOME/local.yaml` 保存本机 Vault 路径、默认选择与仓库路径绑定；SQLite 只保存可重建投影，不得反向覆盖 `.campfire.yaml` 或 `local.yaml`。路径只是可变定位信息。每个 Workspace 只保留配置与人类可审阅的运行产物，不拥有独立数据库。所有工具状态均位于 `CAMPFIRE_HOME`，不得向目标 Workspace 创建工具状态目录。
 
 解析优先级为根级显式 `--workspace <id>`、当前目录所属的已注册 Workspace、默认 Workspace。显式值只接受稳定 Workspace id，不接受路径；叶命令不得重复暴露 Workspace 选择器。写操作仍由具体业务模块执行。
 
-`campfire setup --path <path>` 根据 Manifest 接入已有 Workspace；缺少 Manifest 时必须提供 `--id` 以创建首份 Manifest。`workspace create` 要求目标路径不存在，并创建全局收件箱、带 `_空间.md` 的知识/工作 Space 和治理视图基础目录。两者写入全局 SQLite 注册表，不向 Workspace 写工具状态。
+`campfire setup --path <path>` 根据 Manifest 接入已有 Workspace；缺少 Manifest 时必须提供 `--id` 以创建首份 Manifest。`workspace create` 要求目标路径不存在，并创建全局收件箱、带 `_空间.md` 的知识/工作 Space 和治理视图基础目录。两者写入 `CAMPFIRE_HOME/local.yaml` 的本机注册，不向 Workspace 写工具状态。
 
 `workspace create` 从包内 `resources/workspace/` 一次性写入 `_模板/README.md`、任务与版本发布清单模板；日期取创建当天，模板内容仍属于 template，不生成实际任务或发布计划。落地后由用户维护，setup、upgrade 和资源同步均不补写或覆盖。模板不是持续托管的 Base/Skill，不增加同步命令、注册表或正文校验。
 
@@ -30,4 +30,10 @@ Project 是 Workspace 连接的外部工作资源，记录稳定 id、显示名�
 
 `project create --path` 用于新 Project onboarding，默认只返回计划，追加 `--confirm` 后通过 Domain Service 创建工作 Space 内的项目根 Domain 并注册 Project。初始化不虚构业务子领域；已存在文档中心使用 `project adopt --domain <id>` 接入，更新只提交显式给出的字段。
 
-注册数据只通过 CLI 和 SQLite 维护。JSON 仅用于显式 export/import；import 默认只预检，必须使用 `--confirm` 才替换当前注册数据。不读取旧 JSON 注册表，不维护双事实源。
+注册数据由 CLI 写入 `.campfire.yaml` 和 `local.yaml`，查询按稳定 id 合并两者；不在 SQLite 维护注册事实。JSON 仅用于显式 export/import；import 默认只预检，必须使用 `--confirm` 才替换当前注册数据。不读取旧 JSON 注册表，不维护双事实源。
+
+## 多仓库注册
+
+Project 可有零到多个仓库，每个仓库使用 Project 内唯一的稳定 id；role、remote、默认分支是便携元数据，local_path 是设备绑定，不进入 Manifest。`.campfire.yaml`、`local.yaml` 和注册备份只支持当前结构，不带 schema_version、不读取旧单仓库字段；无格式转换和数据库迁移链。Project 没有顶层仓库字段。
+
+create/adopt 的 repositories 是初始列表；update 按 repository id 新增、更新、解绑或移除一项，默认预览，confirm 必须复核 Project 与 Manifest 哈希，不删除源码文件。单仓库与多仓库共用仓库列表接口，bind 必须指定仓库 id，不隐式选取首项。共享 remote 与嵌套路径允许登记；resolve 保留最深本机路径规则，同深度多绑定返回 ambiguous，remote 仅是候选。setup 按稳定仓库 id 保留本机绑定并逐项报告未绑定入口，不猜测路径。

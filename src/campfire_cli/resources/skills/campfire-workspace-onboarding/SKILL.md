@@ -13,7 +13,7 @@ description: "首次创建或接入 Campfire Workspace；适用于用户给出�
 
 ## 上下文与契约
 
-先读取目标目录是否存在及 Manifest 状态，不手写或覆盖 `.campfire.yaml`。新建目录用 create，接入已有目录用 setup。显式 Workspace 选择是根参数 `--workspace <id>`。
+先读取目标目录是否存在及 `.campfire.yaml` 状态，不手写或覆盖 `.campfire.yaml`。新建目录用 create，接入已有目录用 setup。显式 Workspace 选择是根参数 `--workspace <id>`。
 
 ## SOP
 
@@ -23,9 +23,9 @@ description: "首次创建或接入 Campfire Workspace；适用于用户给出�
 目标路径与意图
 |-- 不明确 -> 询问，暂不写入
 |-- 路径不存在 -> 已授权新建 -> workspace create
-|-- 已有合法 Manifest -> 已授权接入 -> setup
-|-- 已有目录无 Manifest -> 确认身份与接入 -> setup --id
-`-- Manifest 损坏或身份冲突 -> 报告错误，停止，不覆盖
+|-- 已有合法 `.campfire.yaml` -> 已授权接入 -> setup
+|-- 已有目录无 `.campfire.yaml` -> 确认身份与接入 -> setup --id
+`-- `.campfire.yaml` 损坏或身份冲突 -> 报告错误，停止，不覆盖
                                      |
 入口成功 -> 查看返回的资源与健康结果 -> 回报
              `-- 存量内容未受管 -> 明确剩余范围，按授权转 Adoption
@@ -34,8 +34,8 @@ description: "首次创建或接入 Campfire Workspace；适用于用户给出�
 ### 执行步骤
 
 1. 复用已知路径与身份，缺稳定 id 才提出候选并询问；不把默认 Workspace 当成用户选择。
-2. 新目录通过 create 生成基础布局、Manifest、本机资源及根 `_模板/` 的 README、任务和发布清单模板；不要先手工复制受管文件。模板只是写作示例，落地后由用户维护，setup/upgrade 不覆盖或补回。
-3. 已有目录通过 setup 接入，保留已有内容；无 Manifest 时提供已确认的 id。接入不代表全部内容已成为受管 Domain。
+2. 新目录通过 create 生成基础布局、`.campfire.yaml`、本机资源及根 `_模板/` 的 README、任务和发布清单模板；不要先手工复制受管文件。模板只是写作示例，落地后由用户维护，setup/upgrade 不覆盖或补回。
+3. 已有目录通过 setup 接入，保留已有内容；无 `.campfire.yaml` 时提供已确认的 id。接入不代表全部内容已成为受管 Domain。
 4. 消费命令返回的 config、resources、health 等结果，已返回的检查不重复跑；某项缺失或发现问题时才执行对应检查。
 5. 用户要求标准布局或公开 demo 时按需读取蓝图。除新建自带模板外，新增业务 Domain、模板和文档仍需明确组织意图，不把示例变成真实任务或发布计划。
 
@@ -46,9 +46,9 @@ description: "首次创建或接入 Campfire Workspace；适用于用户给出�
 ```bash
 # 全新目录
 campfire workspace create --id notes --path "/absolute/path/to/new-vault"
-# 已有合法 Manifest 的目录
+# 已有合法 `.campfire.yaml` 的目录
 campfire setup --path "/absolute/path/to/existing-vault"
-# 已有目录且没有 Manifest
+# 已有目录且没有 `.campfire.yaml`
 campfire setup --path "/absolute/path/to/existing-folder" --id notes
 ```
 
@@ -56,7 +56,10 @@ campfire setup --path "/absolute/path/to/existing-folder" --id notes
 
 ## 异常与停止条件
 
-Manifest 解析失败、身份或目录冲突时原样报告，停止；不删除配置或手动改成“合法”。缺专用修复入口时说明能力边界，不能以新建覆盖旧目录。
+`.campfire.yaml` 解析失败、身份或目录冲突时原样报告，停止；不删除配置或手动改成“合法”。缺专用修复入口时说明能力边界，不能以新建覆盖旧目录。
+
+
+Project 可有多个仓库。setup 的 unbound_repositories 逐项给出 Project/仓库 id 与绑定入口，local-path 需用户提供；绑定使用 workspace project bind --id <project-id> --repository <repository-id> --local-path <path>。remote 只作候选，不自动猜测路径；单仓库也必须显式指定仓库 id，不猜首项。
 
 ## 完成条件与回报
 
@@ -65,3 +68,5 @@ Manifest 解析失败、身份或目录冲突时原样报告，停止；不删�
 ## 按需参考
 
 用户要求标准布局或公开项目演示时，读取[标准 Workspace 蓝图](references/标准工作区结构.md)。
+
+本机 Vault 注册、默认选择与代码路径绑定保存在 `~/.campfire/local.yaml`；远端地址、分支和 Project/仓库身份只保存在 Vault 根目录 `.campfire.yaml`。SQLite 是可重建状态；不提供旧格式转换，遇到不受支持的旧结构先备份并按当前命令帮助整理持久文件，不删除文档或代码目录。

@@ -12,7 +12,10 @@ from campfire_cli.app.workspace.schema.adoption_schema import (
     AdoptionInventoryItem,
     AdoptionResult,
 )
-from campfire_cli.app.workspace.schema.workspace_schema import Domain, ManifestProject
+from campfire_cli.app.workspace.schema.workspace_schema import (
+    Domain,
+    portable_project,
+)
 from campfire_cli.app.workspace.service.structure_service import (
     DOMAIN_MARKER,
     ID_RE,
@@ -153,14 +156,8 @@ class AdoptionService:
                     expected=expected,
                 )
             ):
-                if updated_project:
-                    self._workspaces.save_project(updated_project)
                 if self._verify_files(target, inventory):
                     raise ConfigurationError("接管后文件验证失败")
-        except Exception:
-            if original_project:
-                self._workspaces.save_project(original_project)
-            raise
         finally:
             if staging and staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)
@@ -288,12 +285,7 @@ class AdoptionService:
             updated_project if project.id == updated_project.id else project
             for project in self._workspaces.list_projects(self._settings.workspace_id)
         ]
-        manifest.projects = [
-            ManifestProject.model_validate(
-                project.model_dump(exclude={"workspace_id", "local_path"})
-            )
-            for project in projects
-        ]
+        manifest.projects = [portable_project(project) for project in projects]
         return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
     @staticmethod

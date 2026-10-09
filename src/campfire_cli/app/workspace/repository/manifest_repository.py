@@ -25,7 +25,10 @@ class WorkspaceManifestRepository:
             payload = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
             return WorkspaceManifest.model_validate(payload)
         except (yaml.YAMLError, ValueError) as exc:
-            raise ConfigurationError(f"Manifest 无效：{target}：{exc}") from exc
+            raise ConfigurationError(
+                f"Manifest 无效：{target}：{exc}；请核对当前 Manifest 结构",
+                code="manifest-invalid",
+            ) from exc
 
     def save(self, workspace: Path, manifest: WorkspaceManifest) -> Path:
         target = self.path(workspace)
