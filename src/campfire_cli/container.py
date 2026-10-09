@@ -107,6 +107,7 @@ class AppContainer:
         ).setup(workspace, make_default, workspace_id)
         container = cls.build(setup_result.workspace_id)
         settings = container.settings
+        health = container.maintenance.check().model_dump(mode="json")
         return {
             **setup_result.model_dump(mode="json"),
             "resources": {
@@ -115,7 +116,14 @@ class AppContainer:
                 "bases": container.base.sync(dry_run=False).model_dump(mode="json"),
                 "agent_hints": cls._inject_hints(),
             },
-            "health": container.maintenance.check(summary=True).model_dump(mode="json"),
+            "health": health,
+            "status": (
+                health["status"]
+                if health["status"] != "ok"
+                else "needs-input"
+                if setup_result.unbound_repositories
+                else "ok"
+            ),
         }
 
     @classmethod

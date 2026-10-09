@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 from pathlib import Path, PurePosixPath
 
+from pydantic import ValidationError
+
 from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
-    ManifestProject,
     ProjectBindResult,
     ProjectCheckResult,
     ProjectCreateResult,
@@ -16,6 +18,8 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectRegistrationRequest,
     ProjectResolutionResult,
     ProjectResult,
+    RepositoryEntry,
+    portable_project,
 )
 from campfire_cli.app.workspace.service.structure_service import DomainService, SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
@@ -43,10 +47,47 @@ class ProjectService:
         return self._save(request)
 
     def update(self, request: ProjectRegistrationRequest) -> ProjectResult:
-        if not self._repository.get_project(request.project_id):
+        existing = self._repository.get_project(request.project_id)
+        if not existing:
             raise ConfigurationError(
                 f"Project 未注册：{request.project_id}；请使用 campfire workspace project adopt"
             )
+        if request.repositories is None and existing.repositories:
+            if len(existing.repositories) > 1:
+                if any(
+                    value is not None
+                    for value in (
+                        request.local_path,
+                        request.git_remote_url,
+                        request.default_branch,
+                    )
+                ):
+                    raise ConfigurationError(
+                        "Use --repository to change a multi-repository Project",
+                        code="repository-selection-required",
+                        field="repository",
+                        expected_type="string",
+                        allowed=[item.id for item in existing.repositories],
+                    )
+                request.repositories = existing.repositories
+            else:
+                item = existing.repositories[0]
+                request.repositories = [
+                    RepositoryEntry(
+                        **{
+                            **item.model_dump(),
+                            **{
+                                key: str(value)
+                                for key, value in {
+                                    "local_path": request.local_path,
+                                    "git_remote_url": request.git_remote_url,
+                                    "default_branch": request.default_branch,
+                                }.items()
+                                if value is not None
+                            },
+                        }
+                    )
+                ]
         return self._save(request)
 
     def create(
@@ -117,83 +158,58 @@ class ProjectService:
 
     def resolve(self, path: Path) -> ProjectResolutionResult:
         query = path.expanduser().resolve()
-        # 先做零成本的 local_path 匹配；有命中时注册信息足以应答，跳过 git 子进程
-        # （每次会话冷启动必经路径，两个 git 探测只为富化字段，属纯延迟开销）。
-        # 无 local_path 命中才跑 git 探测走 remote 兜底；此时 git_root/git_remote_url
-        # 输出实测值，local 命中路径输出 None 与注册 remote。
-        local_matches: list[ProjectMatch] = []
-        for project in self._repository.list_projects():
-            if not project.local_path:
-                continue
-            registered = Path(project.local_path).expanduser().resolve()
-            if query == registered or registered in query.parents:
-                local_matches.append(ProjectMatch(project=project, match_basis=["local-path"]))
-        if local_matches:
-            deepest = max(len(Path(item.project.local_path or "/").parts) for item in local_matches)
-            local_matches = [
-                item
-                for item in local_matches
-                if len(Path(item.project.local_path or "/").parts) == deepest
-            ]
+        projects = self._repository.list_projects()
+        candidates = []
+        for project in projects:
+            for repository in project.repositories:
+                if not repository.local_path:
+                    continue
+                registered = Path(repository.local_path).expanduser().resolve()
+                if query == registered or registered in query.parents:
+                    candidates.append(
+                        (
+                            len(registered.parts),
+                            ProjectMatch(
+                                project=project,
+                                repository_id=repository.id,
+                                repository=repository,
+                                match_basis=["local-path"],
+                            ),
+                        )
+                    )
+        if candidates:
+            depth = max(item[0] for item in candidates)
+            matches = [item[1] for item in candidates if item[0] == depth]
             return ProjectResolutionResult(
-                status="matched" if len(local_matches) == 1 else "ambiguous",
+                status="matched" if len(matches) == 1 else "ambiguous",
                 query_path=str(query),
-                git_root=None,
-                git_remote_url=local_matches[0].project.git_remote_url,
-                matches=local_matches,
+                matches=matches,
+                git_remote_url=matches[0].repository.git_remote_url if len(matches) == 1 else None,
             )
         git_root_value = self._git_command(query, "rev-parse", "--show-toplevel")
         git_root = Path(git_root_value).resolve() if git_root_value else None
         remote = self._git_command(git_root or query, "remote", "get-url", "origin")
-        normalized_remote = self._normalize_remote(remote)
-        matches: list[ProjectMatch] = []
-        for project in self._repository.list_projects():
-            basis: list[str] = []
-            if (
-                normalized_remote
-                and project.git_remote_url
-                and normalized_remote == self._normalize_remote(project.git_remote_url)
-            ):
-                basis.append("git-remote")
-            if basis:
-                matches.append(ProjectMatch(project=project, match_basis=basis))
-        remote_only = matches
-        if local_matches:
-            deepest = max(len(Path(item.project.local_path or "/").parts) for item in local_matches)
-            local_matches = [
-                item
-                for item in local_matches
-                if len(Path(item.project.local_path or "/").parts) == deepest
-            ]
-            status = "matched" if len(local_matches) == 1 else "ambiguous"
-            return ProjectResolutionResult(
-                status=status,
-                query_path=str(query),
-                git_root=str(git_root) if git_root else None,
-                git_remote_url=remote,
-                matches=local_matches,
+        normalized = self._normalize_remote(remote)
+        matches = [
+            ProjectMatch(
+                project=project, repository_id=item.id, repository=item, match_basis=["git-remote"]
             )
-        if remote_only:
-            # 查询目录本身未注册（常见于 monorepo 子目录或未绑定 local_path 的新机器），
-            # 仅共享 Git remote 不足以断言"当前目录属于该项目"，不返回 matched 终态。
-            candidates = "、".join(item.project.id for item in remote_only)
-            return ProjectResolutionResult(
-                status="unmatched",
-                query_path=str(query),
-                git_root=str(git_root) if git_root else None,
-                git_remote_url=remote,
-                remote_matches=remote_only,
-                hint=(
-                    f"查询目录未注册为任何项目的 local_path，仅与 {candidates} 共享 Git remote；"
-                    "若确属其中之一请运行 campfire workspace project bind "
-                    "--id <id> --local-path <path>，若是新项目（如 monorepo 子目录）请走注册流程"
-                ),
-            )
+            for project in projects
+            for item in project.repositories
+            if normalized and normalized == self._normalize_remote(item.git_remote_url)
+        ]
         return ProjectResolutionResult(
             status="unmatched",
             query_path=str(query),
             git_root=str(git_root) if git_root else None,
             git_remote_url=remote,
+            remote_matches=matches,
+            hint=(
+                "Remote matches are candidates only. Use workspace project bind "
+                "--id <project-id> --repository <repository-id> --local-path <path>."
+                if matches
+                else None
+            ),
         )
 
     def check(self, project_id: str) -> ProjectCheckResult:
@@ -203,36 +219,60 @@ class ProjectService:
         registry = self._repository.load_registry()
         workspace = registry.workspaces.get(project.workspace_id)
         issues: list[dict[str, str | None]] = []
-        local_path = Path(project.local_path).expanduser().resolve() if project.local_path else None
-        local_exists = bool(local_path and local_path.is_dir())
-        if project.local_path and not local_exists:
-            issues.append({"code": "project-local-path-missing", "path": project.local_path})
-        observed_remote = (
-            self._git_command(local_path, "remote", "get-url", "origin") if local_exists else None
-        )
-
-        if (
-            observed_remote
-            and project.git_remote_url
-            and self._normalize_remote(observed_remote)
-            != self._normalize_remote(project.git_remote_url)
-        ):
-            issues.append(
+        observations = []
+        for repository in project.repositories:
+            path = (
+                Path(repository.local_path).expanduser().resolve()
+                if repository.local_path
+                else None
+            )
+            exists = bool(path and path.is_dir())
+            if not repository.local_path:
+                issues.append(
+                    {"code": "project-repository-unbound", "repository_id": repository.id}
+                )
+            elif not exists:
+                issues.append(
+                    {
+                        "code": "project-local-path-missing",
+                        "path": repository.local_path,
+                        "repository_id": repository.id,
+                    }
+                )
+            remote = self._git_command(path, "remote", "get-url", "origin") if exists else None
+            branch = self._detect_default_branch(path) if exists else None
+            if (
+                remote
+                and repository.git_remote_url
+                and self._normalize_remote(remote)
+                != self._normalize_remote(repository.git_remote_url)
+            ):
+                issues.append(
+                    {
+                        "code": "project-git-remote-changed",
+                        "repository_id": repository.id,
+                        "expected": repository.git_remote_url,
+                        "actual": remote,
+                    }
+                )
+            if branch and repository.default_branch and branch != repository.default_branch:
+                issues.append(
+                    {
+                        "code": "project-default-branch-changed",
+                        "repository_id": repository.id,
+                        "expected": repository.default_branch,
+                        "actual": branch,
+                    }
+                )
+            observations.append(
                 {
-                    "code": "project-git-remote-changed",
-                    "expected": project.git_remote_url,
-                    "actual": observed_remote,
+                    "repository_id": repository.id,
+                    "local_path_exists": exists,
+                    "git_remote_url": remote,
+                    "default_branch": branch,
                 }
             )
-        observed_branch = self._detect_default_branch(local_path) if local_exists else None
-        if observed_branch and project.default_branch and observed_branch != project.default_branch:
-            issues.append(
-                {
-                    "code": "project-default-branch-changed",
-                    "expected": project.default_branch,
-                    "actual": observed_branch,
-                }
-            )
+        single = observations[0] if len(observations) == 1 else {}
         domain_path = None
         if workspace is not None:
             try:
@@ -253,48 +293,195 @@ class ProjectService:
             status="ok" if not issues else "needs-review",
             project=project,
             observed={
-                "local_path_exists": local_exists,
-                "git_remote_url": observed_remote,
-                "default_branch": observed_branch,
+                "repositories": observations,
+                "local_path_exists": single.get("local_path_exists", False),
+                "git_remote_url": single.get("git_remote_url"),
+                "default_branch": single.get("default_branch"),
                 "document_domain_path": str(domain_path) if domain_path else None,
                 "document_domain_exists": bool(domain_path and domain_path.is_dir()),
             },
             issues=issues,
         )
 
-    def bind(self, project_id: str, local_path: Path) -> ProjectBindResult:
-        project = self._repository.get_project(project_id)
-        if not project:
-            raise ConfigurationError(f"Project 未注册：{project_id}")
-        path = local_path.expanduser().resolve()
-        if not path.is_dir():
-            raise ConfigurationError(f"项目本地路径不存在：{path}")
-        observed_remote = self._git_value(path, "remote", "get-url", "origin")
-        if (
-            project.git_remote_url
-            and observed_remote
-            and self._normalize_remote(project.git_remote_url)
-            != self._normalize_remote(observed_remote)
-        ):
-            raise ConfigurationError("本地项目的 Git remote 与 Manifest 元数据不一致")
-        updated = project.model_copy(
-            update={
-                "local_path": str(path),
-                "git_remote_url": project.git_remote_url or observed_remote,
-                "default_branch": project.default_branch or self._detect_default_branch(path),
-            }
+    @staticmethod
+    def _select_repository(project: ProjectEntry, repository_id: str | None) -> RepositoryEntry:
+        if repository_id is None:
+            if len(project.repositories) != 1:
+                raise ConfigurationError(
+                    "Specify --repository for a Project with zero or multiple repositories",
+                    code="repository-selection-required",
+                    field="repository",
+                    expected_type="string",
+                    allowed=[item.id for item in project.repositories],
+                )
+            return project.repositories[0]
+        for item in project.repositories:
+            if item.id == repository_id:
+                return item
+        raise ConfigurationError(
+            "Repository is not registered",
+            code="repository-not-found",
+            field="repository",
+            repository_id=repository_id,
         )
+
+    def _repository_project(
+        self, project: ProjectEntry, repositories: list[RepositoryEntry]
+    ) -> ProjectEntry:
+        payload = project.model_dump()
+        payload["repositories"] = [item.model_dump() for item in repositories]
+        return ProjectEntry.model_validate(payload)
+
+    def _validated_repository(self, repository: RepositoryEntry) -> RepositoryEntry:
+        payload = repository.model_dump()
+        path = Path(repository.local_path).expanduser().resolve() if repository.local_path else None
+        if path and not path.is_dir():
+            raise ConfigurationError(
+                f"Repository directory does not exist: {path}",
+                code="repository-local-path-missing",
+                field="local_path",
+            )
+        if path:
+            remote = self._git_value(path, "remote", "get-url", "origin")
+            if (
+                remote
+                and repository.git_remote_url
+                and self._normalize_remote(remote)
+                != self._normalize_remote(repository.git_remote_url)
+            ):
+                raise ConfigurationError(
+                    "Local remote differs from portable repository metadata",
+                    code="repository-remote-mismatch",
+                    repository_id=repository.id,
+                )
+            payload.update(
+                local_path=str(path),
+                git_remote_url=repository.git_remote_url or remote,
+                default_branch=repository.default_branch or self._detect_default_branch(path),
+            )
+        return RepositoryEntry.model_validate(payload)
+
+    def _snapshot_hash(self, project: ProjectEntry) -> str:
+        workspace = self._repository.load_registry().workspaces[project.workspace_id]
+        manifest = self._manifests.path(Path(workspace.path)).read_bytes()
+        return hashlib.sha256(project.model_dump_json().encode() + manifest).hexdigest()
+
+    def update_repository(
+        self,
+        project_id: str,
+        repository_id: str,
+        *,
+        changes: dict,
+        remove: bool = False,
+        unbind: bool = False,
+        confirm: bool = False,
+        expected_hash: str | None = None,
+    ) -> dict:
+        self._validate_id(repository_id, field="repository")
+        project = self.show(project_id)
+        existing = next((item for item in project.repositories if item.id == repository_id), None)
+        if remove and (changes or unbind):
+            raise ConfigurationError(
+                "Removal cannot be combined with repository changes",
+                code="repository-options-conflict",
+            )
+        if (remove or unbind) and existing is None:
+            raise ConfigurationError("Repository is not registered", code="repository-not-found")
+        if unbind and "local_path" in changes:
+            raise ConfigurationError(
+                "Unbind cannot be combined with local-path", code="repository-options-conflict"
+            )
+        repositories = list(project.repositories)
+        if remove:
+            repositories = [item for item in repositories if item.id != repository_id]
+        else:
+            payload = existing.model_dump() if existing else {"id": repository_id}
+            payload.update(changes)
+            if unbind:
+                payload["local_path"] = None
+            repository = self._validated_repository(RepositoryEntry.model_validate(payload))
+            if existing:
+                repositories = [
+                    repository if item.id == repository_id else item for item in repositories
+                ]
+            else:
+                repositories.append(repository)
+        updated = self._repository_project(project, repositories)
+        snapshot = self._snapshot_hash(project)
+        if not confirm:
+            return {
+                "status": "planned",
+                "project": updated.model_dump(mode="json"),
+                "expected_hash": snapshot,
+                "write_performed": False,
+                "follow_up": [],
+            }
         with workspace_write_lock(self._root):
-            self._repository.save_project(updated)
-            self._sync_manifest(updated.workspace_id)
-        return ProjectBindResult(project=updated)
+            current = self.show(project_id)
+            if not expected_hash or expected_hash != self._snapshot_hash(current):
+                raise ConfigurationError(
+                    "Project or Manifest changed; preview again", code="project-concurrent-change"
+                )
+            self._persist(updated)
+        return {
+            "status": "applied",
+            "project": updated.model_dump(mode="json"),
+            "write_performed": True,
+            "follow_up": [],
+        }
+
+    def _persist(self, project: ProjectEntry) -> None:
+        previous = self._repository.list_projects(project.workspace_id)
+        self._repository.save_project(project)
+        try:
+            self._sync_manifest(project.workspace_id)
+        except Exception:
+            self._repository.replace_projects(project.workspace_id, previous)
+            raise
+
+    def bind(
+        self, project_id: str, local_path: Path, repository_id: str | None = None
+    ) -> ProjectBindResult:
+        project = self.show(project_id)
+        if not project.repositories and repository_id is None:
+            repository = RepositoryEntry(id="default")
+        else:
+            repository = self._select_repository(project, repository_id)
+        snapshot = self._snapshot_hash(project)
+        updated = self._validated_repository(
+            RepositoryEntry(**{**repository.model_dump(), "local_path": str(local_path)})
+        )
+        repositories = [
+            updated if item.id == repository.id else item for item in project.repositories
+        ]
+        if not project.repositories:
+            repositories.append(updated)
+        project = self._repository_project(project, repositories)
+        with workspace_write_lock(self._root):
+            if self._snapshot_hash(self.show(project_id)) != snapshot:
+                raise ConfigurationError(
+                    "Project or Manifest changed; retry bind", code="project-concurrent-change"
+                )
+            self._persist(project)
+        return ProjectBindResult(project=project)
 
     def _save(self, request: ProjectRegistrationRequest) -> ProjectResult:
+        before = self._repository.get_project(request.project_id)
+        manifest_path = self._manifests.path(
+            Path(self._repository.load_registry().workspaces[request.workspace_id].path)
+        )
+        manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         project, _domain_path = self._prepare(request, require_domain=True)
         with workspace_write_lock(self._root):
-            operation = self._repository.save_project(project)
-            self._sync_manifest(project.workspace_id)
-        return ProjectResult(**project.model_dump(), operation=operation)
+            if (
+                self._repository.get_project(request.project_id) != before
+                or hashlib.sha256(manifest_path.read_bytes()).hexdigest() != manifest_hash
+            ):
+                raise ConfigurationError(
+                    "Project or Manifest changed; retry update", code="project-concurrent-change"
+                )
+            self._persist(project)
+        return ProjectResult(**project.model_dump(), operation="updated" if before else "created")
 
     def _sync_manifest(self, workspace_id: str) -> None:
         registry = self._repository.load_registry()
@@ -308,10 +495,7 @@ class ProjectService:
                 f"Workspace 缺少 .campfire.yaml；请先运行 campfire setup --path {root}"
             )
         manifest.projects = [
-            ManifestProject.model_validate(
-                project.model_dump(exclude={"workspace_id", "local_path"})
-            )
-            for project in self._repository.list_projects(workspace_id)
+            portable_project(project) for project in self._repository.list_projects(workspace_id)
         ]
         self._manifests.save(root, manifest)
 
@@ -344,26 +528,40 @@ class ProjectService:
             domain_path = Path(workspace.path) / relative
         else:
             raise ConfigurationError("创建 Project 必须提供项目根 Domain 路径")
-        local_path = request.local_path.expanduser().resolve() if request.local_path else None
-        if local_path and not local_path.is_dir():
-            raise ConfigurationError(f"项目本地路径不存在：{local_path}")
-        remote = request.git_remote_url or self._git_value(
-            local_path, "remote", "get-url", "origin"
-        )
-        branch = request.default_branch or self._detect_default_branch(local_path)
+        repositories = request.repositories
+        if repositories is None:
+            repositories = []
+            if any((request.local_path, request.git_remote_url, request.default_branch)):
+                repositories = [
+                    RepositoryEntry(
+                        id="default",
+                        git_remote_url=request.git_remote_url,
+                        local_path=str(request.local_path) if request.local_path else None,
+                        default_branch=request.default_branch,
+                    )
+                ]
         statuses = set(config_section("project")["statuses"])
         if request.status not in statuses:
             raise ConfigurationError(f"Project status 必须是：{', '.join(sorted(statuses))}")
-        project = ProjectEntry(
-            id=request.project_id,
-            workspace_id=request.workspace_id,
-            name=request.name.strip(),
-            document_domain_id=request.document_domain_id,
-            git_remote_url=remote,
-            local_path=str(local_path) if local_path else None,
-            default_branch=branch,
-            status=request.status,
-        )
+        try:
+            project = ProjectEntry(
+                id=request.project_id,
+                workspace_id=request.workspace_id,
+                name=request.name.strip(),
+                document_domain_id=request.document_domain_id,
+                status=request.status,
+                repositories=[self._validated_repository(item) for item in repositories],
+            )
+        except ValidationError as exc:
+            duplicate = any(item["type"] == "repository-id-duplicate" for item in exc.errors())
+            raise ConfigurationError(
+                "Invalid repository configuration",
+                code="repository-id-duplicate" if duplicate else "invalid-repositories",
+                field="repositories",
+                expected_type="array[repository]",
+                hint="Use unique stable repository ids and declared repository fields",
+                detail=str(exc),
+            ) from exc
         if not project.name:
             raise ConfigurationError("Project name 不能为空")
         return project, domain_path
@@ -384,9 +582,15 @@ class ProjectService:
         return matches[0].id
 
     @staticmethod
-    def _validate_id(project_id: str) -> None:
+    def _validate_id(project_id: str, *, field: str = "id") -> None:
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", project_id):
-            raise ConfigurationError("Project id 只能使用小写字母、数字和连字符")
+            raise ConfigurationError(
+                "id 只能使用小写字母、数字和连字符，最多 63 字符",
+                code="invalid-id",
+                field=field,
+                expected_type="string",
+                example="backend",
+            )
 
     @staticmethod
     def _validate_domain(value: str) -> str:

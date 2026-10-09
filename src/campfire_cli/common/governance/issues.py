@@ -15,8 +15,10 @@ def enrich_issue(issue: dict[str, Any]) -> dict[str, Any]:
         (policy["default"]["message"], policy["default"]["suggestion"]),
     )
     message, suggestion = policy["catalog"].get(code, fallback)
-    result.setdefault("message", message)
-    result.setdefault("suggestion", suggestion)
+    if not result.get("message"):
+        result["message"] = message
+    if not result.get("suggestion"):
+        result["suggestion"] = suggestion
     result.setdefault("severity", "warning" if code in policy["warning_codes"] else "error")
     return result
 

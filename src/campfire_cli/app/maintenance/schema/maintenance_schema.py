@@ -56,7 +56,17 @@ class MaintenanceResult(BaseModel):
     total_issue_count: int = 0
     issues: list[Issue] = Field(default_factory=list)
     changed_document_count: int = 0
-    indexed_document_count: int = 0
+    indexed_document_count: int = Field(
+        default=0, description="Current Workspace index total, not this run's count"
+    )
+    index_available: bool | None = None
+    index_generation: int | None = None
+    index_processed_document_count: int = 0
+    index_content_changed_document_count: int = 0
+    index_full_rebuild: bool = False
+    write_performed_scope: str = "markdown-files"
+    checked_relations: str = "related_docs"
+    body_links_checked: bool = False
     generated_file_count: int = 0
     write_performed: bool = False
     blocked_phase: str | None = None

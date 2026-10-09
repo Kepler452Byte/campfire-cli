@@ -69,6 +69,8 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 
 自动生成标记异常、结构断链或并发变化时停止对应写入，按 issue 处理，不手改生成区。业务语义无法唯一确定时询问；缺 CLI 能力则报告，不直接改 Manifest 或数据库。只在核实状态并消除原因后重试。
 
+用户明确要求删除具体文档时，用 rm 或等价文件工具直接删除；CLI 不提供 document delete。索引查询会自动对账，MOC 按需 scoped sync。删除不自动授权改写引用方正文或清理 related_docs；遗留引用另行核实和处理。
+
 ## 完成条件与回报
 
 报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。关系唯一事实源是 `related_docs`，纯正文编辑不改变受管关系，无需同步。

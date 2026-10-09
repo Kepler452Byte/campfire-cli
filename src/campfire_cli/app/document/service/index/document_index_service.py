@@ -243,6 +243,12 @@ class DocumentIndexService:
             document_count=document_count,
             edge_count=edge_count,
             changed_document_count=len(changed) + len(deleted),
+            content_changed_document_count=sum(
+                relative not in existing
+                or records[relative].content_hash != existing[relative].content_hash
+                for relative in changed
+            )
+            + len(deleted),
             full_rebuild=full,
         )
 

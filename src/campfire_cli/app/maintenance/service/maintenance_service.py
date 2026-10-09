@@ -123,7 +123,13 @@ class MaintenanceService:
             if changed:
                 return self._concurrent_result(changed)
             self._repository.replace_current_state(issues, spaces, domains)
-            self._document_index.rebuild()
+            index = self._document_index.rebuild()
+            result.index_available = True
+            result.indexed_document_count = index.document_count
+            result.index_generation = index.generation
+            result.index_processed_document_count = index.changed_document_count
+            result.index_content_changed_document_count = index.content_changed_document_count
+            result.index_full_rebuild = index.full_rebuild
             self._repository.save_run(run)
             self._export_current_report(result, completed_at)
         selected = filter_issues(
@@ -141,6 +147,12 @@ class MaintenanceService:
             issue_count=len(selected_issues),
             total_issue_count=len(issues),
             issues=[] if summary else selected_issues,
+            index_available=True,
+            indexed_document_count=index.document_count,
+            index_generation=index.generation,
+            index_processed_document_count=index.changed_document_count,
+            index_content_changed_document_count=index.content_changed_document_count,
+            index_full_rebuild=index.full_rebuild,
             issue_counts=self._issue_counts(selected_issues),
             scope=scope,
             workspace_status=result.status,
@@ -195,10 +207,7 @@ class MaintenanceService:
                 for issue in issues
                 if scope == "."
                 or self._path_matches_scope(issue["path"], scope)
-                or (
-                    issue["code"] == "duplicate-domain-id"
-                    and issue.get("actual") in scoped_ids
-                )
+                or (issue["code"] == "duplicate-domain-id" and issue.get("actual") in scoped_ids)
             ]
         if issues:
             return MaintenanceResult(
@@ -227,7 +236,8 @@ class MaintenanceService:
             domain.id: governance_sync.direct_templates(domain) for domain in domains
         }
         try:
-            indexed_document_count = self._document_index.reconcile().document_count
+            index = self._document_index.reconcile()
+            indexed_document_count = index.document_count
         except AppError as exc:
             return self._sync_failure(exc, "document-index", scope)
         for domain in sorted(domains, key=lambda item: item.id):
@@ -314,6 +324,11 @@ class MaintenanceService:
             document_count=note_count,
             issue_count=0,
             indexed_document_count=indexed_document_count,
+            index_available=True,
+            index_generation=index.generation,
+            index_processed_document_count=index.changed_document_count,
+            index_content_changed_document_count=index.content_changed_document_count,
+            index_full_rebuild=index.full_rebuild,
             generated_file_count=len(changes),
             write_performed=bool(changes and not dry_run),
             operations=operations,
@@ -435,7 +450,15 @@ class MaintenanceService:
             return [Issue(code="inbox-missing", path=inbox.name)]
         requests = self._settings.vault_root / self._settings.governance["human_request_root"]
         if not requests.is_dir():
-            return [Issue(code="human-request-root-missing", path=requests.name)]
+            return [
+                Issue(
+                    code="human-request-root-missing",
+                    path=requests.relative_to(self._settings.vault_root).as_posix(),
+                    field="governance.human_request_root",
+                    actual=str(requests),
+                    detail=f"Expected configured directory: {requests}",
+                ).model_dump()
+            ]
         return []
 
     @staticmethod

@@ -8,6 +8,7 @@
 
 - Skill 负责加载时机、事实门禁、业务语义和工作流程。
 - CLI Profile 负责字段、枚举、类型、顺序和条件必填；Skill 不复制这些契约。
+- 类型未知时使用 `document type list` 获取当前有效类型，不猜枚举或目录名；已知类型不固定重复查询。
 - 新建契约未知时使用 `document profile resolve --type <type>`，已有文档使用 inspect；`profile show <name>` 只接受 Profile 名，不假定 type 与 Profile 同名。
 - 已知唯一存在路径的正文读取和小改直接使用文件工具，不启动 bootstrap。
 - 创建正式文档、修改 Frontmatter 或显式变更类型使用 `document apply`。Frontmatter 契约已知时直接 apply；现有文档的字段类型或合法值未知时先执行一次 `document inspect`，不从 `tree`、逐层 help 或全量 Profile 探索开始。新建文档只在 CLI 返回的 `<!-- CAMPFIRE:BODY -->` 锚点后补正文，不用 Frontmatter 分隔符定位；无锚点存量文档仍按解析后的正文范围最小编辑。

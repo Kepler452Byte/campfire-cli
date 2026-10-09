@@ -38,7 +38,14 @@ class WorkspaceManifestRepository:
             [
                 "# Managed by Campfire CLI. Use `campfire workspace ...`; do not edit directly.\n",
                 yaml.safe_dump(
-                    manifest.model_dump(mode="json", exclude_none=True),
+                    {
+                        **manifest.model_dump(
+                            mode="json",
+                            exclude_none=True,
+                            exclude={"projects": {"__all__": {"git_remote_url", "default_branch"}}},
+                        ),
+                        "schema_version": 2,
+                    },
                     allow_unicode=True,
                     sort_keys=False,
                 ),

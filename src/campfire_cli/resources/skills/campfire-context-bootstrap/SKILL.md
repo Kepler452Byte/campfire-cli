@@ -23,7 +23,7 @@ Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路�
 |-- Workspace -> resolve
 |-- 目标领域 -> domain list，已知项目则缩小范围
 |-- 代码项目 -> project resolve / show，事实核验需要时才 check
-`-- 字段契约 -> 新建查 profile resolve --type；已有文档 inspect
+`-- 类型或字段契约 -> 类型未知查 document type list；选定后查 profile / inspect
                   |
                   +-- 唯一明确 -> 返回所需上下文
                   `-- 缺失或冲突 -> 说明问题并询问，不猜测或顺手修复
@@ -33,9 +33,9 @@ Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路�
 
 1. Workspace 不明确才运行 `workspace resolve`；无法唯一确定时询问，首次接入交给 onboarding。
 2. 目录未知才查 `workspace domain list`；项目已知使用 `--project <id>`。普通知识与个人任务不强制搜索代码项目。
-3. 确实依赖当前代码项目时才运行 `workspace project resolve --path <cwd>`。只有 `matched` 是唯一匹配，`remote_matches` 只是候选，不能替代本机路径绑定。
+3. 确实依赖当前代码项目时才运行 `workspace project resolve --path <cwd>`。命中结果同时包含仓库稳定 id；只有 `matched` 是唯一匹配，`remote_matches` 只是候选，不能替代本机路径绑定。
 4. 写项目当前事实或诊断漂移时按需 `project show <id>` / `project check <id>`，读取相关证据。不因无关漂移阻断普通文档操作。
-5. 契约未知才查目标 Profile 或 inspect；list / inspect 自动对账索引，不先跑 Maintenance。
+5. 类型未知时用 `document type list` 查询当前有效类型、名称和前缀，不猜 type；类型已明确则跳过。字段契约未知才查目标 Profile 或 inspect；list / inspect 自动对账索引，不先跑 Maintenance。
 
 ### 命令示例
 

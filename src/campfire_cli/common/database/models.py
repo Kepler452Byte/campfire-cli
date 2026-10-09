@@ -30,6 +30,7 @@ class Project(Base):
     workspace_id: Mapped[str] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
     )
+    repositories: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
     name: Mapped[str] = mapped_column(String(160))
     document_domain_id: Mapped[str] = mapped_column(String(128))
     git_remote_url: Mapped[str | None] = mapped_column(Text, nullable=True)

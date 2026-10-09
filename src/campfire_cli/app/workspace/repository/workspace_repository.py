@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -74,6 +75,7 @@ class SqliteWorkspaceRepository:
             row.git_remote_url = project.git_remote_url
             row.local_path = project.local_path
             row.default_branch = project.default_branch
+            row.repositories = json.dumps([r.model_dump() for r in project.repositories])
             row.status = project.status
         return operation
 
@@ -90,6 +92,7 @@ class SqliteWorkspaceRepository:
                 row.git_remote_url = project.git_remote_url
                 row.local_path = project.local_path
                 row.default_branch = project.default_branch
+                row.repositories = json.dumps([r.model_dump() for r in project.repositories])
                 row.status = project.status
 
     def replace_projects(self, workspace_id: str, projects: list[ProjectEntry]) -> None:
@@ -106,6 +109,7 @@ class SqliteWorkspaceRepository:
                         local_path=project.local_path,
                         default_branch=project.default_branch,
                         status=project.status,
+                        repositories=json.dumps([r.model_dump() for r in project.repositories]),
                     )
                 )
 
@@ -134,6 +138,7 @@ class SqliteWorkspaceRepository:
                         local_path=project.local_path,
                         default_branch=project.default_branch,
                         status=project.status,
+                        repositories=json.dumps([r.model_dump() for r in project.repositories]),
                     )
                 )
 
@@ -154,4 +159,5 @@ class SqliteWorkspaceRepository:
             local_path=row.local_path,
             default_branch=row.default_branch,
             status=row.status,
+            repositories=json.loads(row.repositories),
         )

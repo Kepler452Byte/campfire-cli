@@ -12,6 +12,8 @@ def render_maintenance_report(payload: dict[str, Any]) -> str:
         f"- 问题数：{payload['issue_count']}",
         f"- 生成时间：{payload['exported_at']}",
         "",
+        "检查覆盖 related_docs 受管关系；不检查正文链接。",
+        "",
         "## 待处理问题",
         "",
     ]
@@ -22,6 +24,8 @@ def render_maintenance_report(payload: dict[str, Any]) -> str:
                 f"- `{issue['severity']}` `{issue['code']}` `{issue['path']}`："
                 f"{issue.get('message') or issue.get('detail', '')}"
             )
+            if issue.get("detail"):
+                lines.append(f"  - 详情：{issue['detail']}")
             if issue.get("suggestion"):
                 lines.append(f"  - 建议：{issue['suggestion']}")
     else:

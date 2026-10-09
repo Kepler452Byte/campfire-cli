@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 
 class WorkspaceEntry(BaseModel):
@@ -67,21 +68,63 @@ class ManifestWorkspace(BaseModel):
     governance_version: int = 1
 
 
-class ManifestProject(BaseModel):
+class ManifestRepository(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
+    git_remote_url: str | None = None
+    default_branch: str | None = None
+    role: str | None = None
+
+
+class RepositoryEntry(ManifestRepository):
+    local_path: str | None = None
+
+
+class RepositoryProject(BaseModel):
+    git_remote_url: str | None = None
+    default_branch: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_repository(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "repositories" not in value:
+            value = dict(value)
+            if any(value.get(key) for key in ("git_remote_url", "default_branch", "local_path")):
+                repository = {"id": "default"}
+                for key in ("git_remote_url", "default_branch", "local_path"):
+                    if key != "local_path" or "local_path" in cls.model_fields:
+                        repository[key] = value.get(key)
+                value["repositories"] = [repository]
+        return value
+
+    @model_validator(mode="after")
+    def project_legacy_fields(self):
+        ids = [item.id for item in self.repositories]
+        if len(ids) != len(set(ids)):
+            raise PydanticCustomError("repository-id-duplicate", "Repository ids must be unique")
+        single = self.repositories[0] if len(self.repositories) == 1 else None
+        self.git_remote_url = single.git_remote_url if single else None
+        self.default_branch = single.default_branch if single else None
+        if "local_path" in type(self).model_fields:
+            self.local_path = getattr(single, "local_path", None)
+        return self
+
+
+class ManifestProject(RepositoryProject):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     name: str
     document_domain_id: str
-    git_remote_url: str | None = None
-    default_branch: str | None = None
+    repositories: list[ManifestRepository] = Field(default_factory=list)
     status: str = "active"
 
 
 class WorkspaceManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = 1
+    schema_version: int = Field(default=2, ge=1, le=2)
     workspace: ManifestWorkspace
     projects: list[ManifestProject] = Field(default_factory=list)
 
@@ -91,6 +134,7 @@ class WorkspaceSetupResult(WorkspaceResult):
     manifest_operation: str
     imported_projects: list[str] = Field(default_factory=list)
     unbound_projects: list[str] = Field(default_factory=list)
+    unbound_repositories: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Space(BaseModel):
@@ -164,18 +208,18 @@ class WorkspaceConfigCheckResult(BaseModel):
     issues: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class ProjectEntry(BaseModel):
+class ProjectEntry(RepositoryProject):
     id: str
     workspace_id: str
     name: str
     document_domain_id: str
-    git_remote_url: str | None = None
+    repositories: list[RepositoryEntry] = Field(default_factory=list)
     local_path: str | None = None
-    default_branch: str | None = None
     status: str = "active"
 
 
 class ProjectRegistrationRequest(BaseModel):
+    repositories: list[RepositoryEntry] | None = None
     project_id: str
     workspace_id: str
     name: str
@@ -202,6 +246,8 @@ class ProjectListResult(BaseModel):
 
 
 class ProjectMatch(BaseModel):
+    repository_id: str | None = None
+    repository: RepositoryEntry | None = None
     project: ProjectEntry
     match_basis: list[str] = Field(default_factory=list)
 
@@ -232,7 +278,7 @@ class ProjectCreateResult(BaseModel):
 
 
 class RegistryExport(BaseModel):
-    schema_version: int = 1
+    schema_version: int = Field(default=2, ge=1, le=2)
     default_workspace: str | None = None
     workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
     projects: list[ProjectEntry] = Field(default_factory=list)
@@ -243,3 +289,24 @@ class RegistryTransferResult(BaseModel):
     path: str
     workspace_count: int
     project_count: int
+
+
+def portable_project(project: ProjectEntry) -> ManifestProject:
+    """Return portable metadata without device-local repository paths."""
+    payload = project.model_dump(exclude={"workspace_id", "local_path"})
+    payload["repositories"] = [
+        item.model_dump(exclude={"local_path"}) for item in project.repositories
+    ]
+    return ManifestProject.model_validate(payload)
+
+
+def restore_project(
+    portable: ManifestProject, workspace_id: str, existing: ProjectEntry | None
+) -> ProjectEntry:
+    """Restore portable identity while retaining local bindings by repository id."""
+    bindings = {item.id: item.local_path for item in existing.repositories} if existing else {}
+    payload = portable.model_dump()
+    payload["repositories"] = [
+        {**item.model_dump(), "local_path": bindings.get(item.id)} for item in portable.repositories
+    ]
+    return ProjectEntry(**payload, workspace_id=workspace_id)

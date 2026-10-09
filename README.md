@@ -142,6 +142,40 @@ campfire --workspace personal workspace project adopt --id example \
 campfire workspace rebuild --confirm             # 索引损坏时从 SSOT 完整恢复
 ```
 
+## Project 多仓库与新设备接入
+
+一个业务 Project 绑定一个文档根 Domain，可登记零个或多个仓库。仓库由 Project 内唯一的稳定 `id` 标识，`role` 只是描述；角色修改或列表重排不改变本机路径绑定。
+
+```bash
+campfire workspace project create --id product --name "Product" --path mywork/Product \
+  --repositories '[{"id":"web","role":"frontend","git_remote_url":"https://example.org/web.git"},{"id":"api","role":"backend","git_remote_url":"https://example.org/api.git"}]'
+# 审查后对同一条 create 命令追加 --confirm
+campfire workspace project bind --id product --repository web --local-path /path/to/web
+campfire workspace project bind --id product --repository api --local-path /path/to/api
+campfire workspace project update --id product --repository api --role server
+# 审查后，对相同 update 命令追加 --expected-hash <预览哈希> --confirm
+```
+
+`create/adopt --repositories` 接受 JSON 数组，条目包含必填 `id` 以及可选 `git_remote_url`、`default_branch`、`role`、`local_path`，不能与旧单仓库参数混用。`update --repository` 新增或修改一个仓库，默认只预览；`--unbind` 清除本机路径，`--remove-repository` 移除注册项，两者均须预览哈希和确认，均不删除代码文件。角色可传空字符串清空。Project 名称、Domain 和状态仍单独使用旧 update 入口。
+
+旧单仓库参数继续支持；旧数据自动映射为 `default` 仓库，单仓库 JSON 的顶层 remote、路径和分支仍是该仓库的兼容字段，多仓库时为 null，不默认指向第一项。已有单仓库具有其他 id 时，旧参数保留其 id 与角色。零仓库允许只管理文档；旧 bind 不指定仓库时可为零仓库 Project 创建 `default`，其余显式仓库注册使用 update。
+
+本地 resolve 按最深绑定路径匹配并返回仓库 id，不执行 Git 子进程；相同深度多个绑定返回 ambiguous，包括同一 Project 内的多个仓库。共享 remote 允许登记，但远程匹配只返回候选，不自动认定归属。绑定路径可重叠，调用方需根据结果明确选择。check 逐仓库报告未绑定、路径缺失及 Git 信息漂移。
+
+setup 默认输出资源操作摘要；逐文件路径与哈希使用 `setup --verbose`。健康问题返回 needs-review，健康检查通过但仓库未绑定时返回 needs-input；unbound_repositories 提供仓库身份和绑定参数，实际本机目录须用户提供。重复 setup 按仓库 id 保留已有绑定，不扫描或自动绑定猜测路径。
+
+升级至 0.2.1 自动执行数据库迁移 013，保留原单仓库值；旧 Manifest v1 和注册备份 v1 可读取，新写入使用 v2。Manifest 仅保存便携仓库元数据，本机路径仍在 SQLite；setup 读取旧 Manifest 时不强制改写，后续 Project 或 Domain 元数据写入才采用 v2。含多仓库的 v2 数据不承诺供旧版 CLI 使用，降级前应恢复升级前完整备份，不手工删除数据库或仓库列表。本轮版本号 0.2.1 按用户明确决定采用。
+
+## 索引统计与检查范围
+
+`maintenance check` 和 `workspace rebuild --confirm` 完整重建索引；治理问题不等于索引不可用。`indexed_document_count` 是当前整个 Workspace 的索引总量；`index_processed_document_count` 是本次索引处理的文档数量，完整重建时包括内容未改变的文档；`index_content_changed_document_count` 是内容哈希发生变化或新增、删除的文档数量。`index_generation` 标识快照，`index_available` 为 true 表示本次确认可用，null 表示当前步骤未评估。`document_count` 仍表示本次治理扫描范围的数量。
+
+`write_performed` 只表示 Markdown 文件变更，不包含 SQLite 或运行报告写入，范围由 write_performed_scope 明示。无文件变化与索引可用可以同时成立。scoped sync 的索引总量仍按 Workspace 统计，其文件维护范围由 scope 限定。
+
+关系检查仅覆盖 Frontmatter 的 `related_docs`，正文链接不参与索引、治理检查或自动改写。零治理问题不代表正文全部链接有效。用户要求删除具体文档时直接使用 rm 或文件工具；Campfire 不提供 document delete。查询会自动对账索引，MOC 按需 scoped sync，遗留引用另行核实和处理。
+
+类型未知时使用 `campfire --workspace <id> document type list` 查询当前有效类型、名称与前缀，再对选定类型查询 Profile；已知类型不重复列举，不猜测 type 或按目录名推断。
+
 ## 存量接管与结构重构
 
 `workspace domain adopt` 用一条命令接管一个已有文件夹。Vault 外来源经临时暂存和哈希校验复制到目标 Domain，原目录始终保留；Vault 内来源原地声明或移动到明确目标。命令一次建立一个粗粒度 Domain，语义细分交给后续 Restructure。

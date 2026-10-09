@@ -15,8 +15,8 @@ from campfire_cli.app.workspace.schema.restructure_schema import (
 )
 from campfire_cli.app.workspace.schema.workspace_schema import (
     Domain,
-    ManifestProject,
     ProjectEntry,
+    portable_project,
 )
 from campfire_cli.app.workspace.service.structure_service import (
     DOMAIN_MARKER,
@@ -835,12 +835,7 @@ class DomainRestructureService:
             replacements.get(project.id, project)
             for project in self._workspaces.list_projects(self._settings.workspace_id)
         ]
-        manifest.projects = [
-            ManifestProject.model_validate(
-                project.model_dump(exclude={"workspace_id", "local_path"})
-            )
-            for project in projects
-        ]
+        manifest.projects = [portable_project(project) for project in projects]
         return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
     def _reference_files(self) -> list[Path]:

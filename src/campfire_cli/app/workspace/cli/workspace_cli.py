@@ -136,7 +136,7 @@ def rebuild(
         return
     from campfire_cli.container import AppContainer
 
-    emit(invoke(lambda: AppContainer.build(selector(ctx)).maintenance.check(summary=True)))
+    emit(invoke(lambda: AppContainer.build(selector(ctx)).maintenance.check()))
 
 
 @workspace_cli.command("export")

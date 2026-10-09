@@ -58,6 +58,9 @@ campfire setup --path "/absolute/path/to/existing-folder" --id notes
 
 Manifest 解析失败、身份或目录冲突时原样报告，停止；不删除配置或手动改成“合法”。缺专用修复入口时说明能力边界，不能以新建覆盖旧目录。
 
+
+Project 可有多个仓库。setup 的 unbound_repositories 逐项给出 Project/仓库 id 与绑定入口，local-path 需用户提供；绑定使用 workspace project bind --id <project-id> --repository <repository-id> --local-path <path>。remote 只作候选，不自动猜测路径；单仓库旧参数仍兼容。
+
 ## 完成条件与回报
 
 注册目标身份和路径符合预期，初始化资源与健康结果已核对。报告仍未受管的目录，不宣称已完成 Adoption；说明是否改变默认 Workspace 以及下一步。

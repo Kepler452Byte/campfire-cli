@@ -8,9 +8,7 @@ from pathlib import Path
 
 from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
-    ManifestProject,
     ManifestWorkspace,
-    ProjectEntry,
     RegistryExport,
     RegistryTransferResult,
     Space,
@@ -23,6 +21,8 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     WorkspaceResolution,
     WorkspaceResult,
     WorkspaceSetupResult,
+    portable_project,
+    restore_project,
 )
 from campfire_cli.app.workspace.service.structure_service import SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
@@ -106,37 +106,42 @@ class WorkspaceService:
             projects = self._repository.list_projects(resolved_id)
             manifest = WorkspaceManifest(
                 workspace=ManifestWorkspace(id=resolved_id, name=resolved_id),
-                projects=[
-                    ManifestProject.model_validate(
-                        project.model_dump(exclude={"workspace_id", "local_path"})
-                    )
-                    for project in projects
-                ],
+                projects=[portable_project(project) for project in projects],
             )
             self._manifests.save(root, manifest)
             manifest_operation = "created"
         result = self._initialize(manifest.workspace.id, root, make_default)
         imported: list[str] = []
         unbound: list[str] = []
+        unbound_repositories = []
         for portable in manifest.projects:
             existing = self._repository.get_project(portable.id)
             if existing and existing.workspace_id != manifest.workspace.id:
                 raise ConfigurationError(f"Project id 已由其他 Workspace 使用：{portable.id}")
-            project = ProjectEntry(
-                **portable.model_dump(),
-                workspace_id=manifest.workspace.id,
-                local_path=existing.local_path if existing else None,
-            )
+            project = restore_project(portable, manifest.workspace.id, existing)
             self._repository.save_project(project)
             imported.append(project.id)
-            if not project.local_path:
+            missing = [item for item in project.repositories if not item.local_path]
+            if missing:
                 unbound.append(project.id)
+            for item in missing:
+                unbound_repositories.append(
+                    {
+                        "project_id": project.id,
+                        "repository_id": item.id,
+                        "command": "workspace project bind",
+                        "parameters": {"id": project.id, "repository": item.id},
+                        "required_input": {"local-path": "existing local directory path"},
+                        "hint": "Provide a local directory; remote matches are candidates only.",
+                    }
+                )
         return WorkspaceSetupResult(
             **result.model_dump(),
             manifest=str(self._manifests.path(root)),
             manifest_operation=manifest_operation,
             imported_projects=imported,
             unbound_projects=unbound,
+            unbound_repositories=unbound_repositories,
         )
 
     def sync_projects_from_manifest(self, workspace_id: str) -> dict[str, object]:
@@ -150,11 +155,7 @@ class WorkspaceService:
             raise ConfigurationError(f"Workspace 缺少 .campfire.yaml：{root}")
         current = {item.id: item for item in self._repository.list_projects(workspace_id)}
         projects = [
-            ProjectEntry(
-                **portable.model_dump(),
-                workspace_id=workspace_id,
-                local_path=current.get(portable.id).local_path if portable.id in current else None,
-            )
+            restore_project(portable, workspace_id, current.get(portable.id))
             for portable in manifest.projects
         ]
         self._repository.replace_projects(workspace_id, projects)
