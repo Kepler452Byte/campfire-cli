@@ -176,3 +176,67 @@ def test_regenerated_inventory_invalidates_old_approval(workspace: Path) -> None
         Path(str(database) + suffix).unlink(missing_ok=True)
     cli("workspace", "restructure", "inventory", "--scope", "mywork/Product", "--batch", "reset")
     assert not plan.exists(), "Fresh inventory must not reuse previous approval"
+
+
+def test_external_file_and_folder_rename_refreshes_index_and_reports_stale_relations(
+    workspace: Path,
+) -> None:
+    create(workspace)
+
+    def apply(path: str, *fields: str) -> dict:
+        args = ["document", "apply", "--path", path]
+        for field in fields:
+            args.extend(["--set", field])
+        preview = cli(*args)
+        return cli(*args, "--expected-hash", preview["expected_hash"], "--confirm")
+
+    target_args = [
+        "document",
+        "apply",
+        "--path",
+        "mywork/Product/sub/Target",
+        "--type",
+        "knowledge",
+        "--set",
+        "description=Target",
+    ]
+    preview = cli(*target_args)
+    target = cli(*target_args, "--expected-hash", preview["expected_hash"], "--confirm")["target"]
+    source_args = [
+        "document",
+        "apply",
+        "--path",
+        "mywork/Product/Source",
+        "--type",
+        "knowledge",
+        "--set",
+        "description=Source",
+        "--set",
+        "related_docs=" + json.dumps([f"[[{target}]]"]),
+    ]
+    preview = cli(*source_args)
+    source = cli(*source_args, "--expected-hash", preview["expected_hash"], "--confirm")["target"]
+    cli("document", "list")
+    original_source = (workspace / source).read_bytes()
+    renamed = str(Path(target).with_name("知识-Renamed.md"))
+    (workspace / target).rename(workspace / renamed)
+
+    for stale, current in [(target, renamed), (renamed, renamed.replace("/sub/", "/renamed-sub/"))]:
+        if stale == renamed:
+            (workspace / "mywork/Product/sub").rename(workspace / "mywork/Product/renamed-sub")
+        listed = {item["path"] for item in cli("document", "list", "--project", "product")["items"]}
+        assert stale not in listed and current in listed
+        inspected = cli("document", "inspect", "--path", source)
+        assert inspected["relations"]["unresolved"][0]["resolution"] == "missing"
+        checked = cli("maintenance", "check", "--scope", "mywork/Product")
+        assert any(
+            issue["code"] == "related-docs-missing" and issue["path"] == source
+            for issue in checked["issues"]
+        )
+        assert (workspace / source).read_bytes() == original_source
+        apply(source, "related_docs=" + json.dumps([f"[[{current}]]"]))
+        original_source = (workspace / source).read_bytes()
+        assert cli("document", "inspect", "--path", source)["relations"]["unresolved"] == []
+
+    checked = cli("maintenance", "check", "--scope", "mywork/Product")
+    assert not any(issue["code"] == "related-docs-missing" for issue in checked["issues"])

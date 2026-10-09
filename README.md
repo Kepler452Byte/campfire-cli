@@ -218,6 +218,8 @@ campfire workspace restructure verify --batch move-001
 ## 治理模型
 
 - **本地查询投影**：`document list` 按 Project、Domain、类型、`document_status` 和 `task_status` 精确筛选；`document inspect` 返回显式关联、出链、反向链接和失效/歧义引用。两者在查询前自动 reconcile，Agent 无需先运行 Maintenance。SQLite 不复制正文，正文仍由 Agent 按返回路径读取。
+
+外部编辑器或文件工具重命名文档、文件夹后，下一次 list/inspect/check 自动对账索引；related_docs 是 Markdown 中的事实，不凭路径变化猜测并改写。maintenance check 报告失效关系，Agent 核实目标后通过 document apply 修正。正文链接不在该检查范围；通过 CLI 的 rename/move 则按既有契约定向更新受管引用。
 - **校验分工**：`maintenance check` 汇总 Space/Domain 结构与正式文档问题，并刷新可重建索引；`workspace space/domain check` 提供结构声明的专项诊断。`maintenance sync` 只因结构、MOC、路径或并发安全问题阻塞，单篇文档问题不阻止其他领域刷新。
 - **Frontmatter Profile**：声明式一层继承（`base` 或 `base → task/human-request/board`），`document profile show` 展示编译后的完整规则；Formatter 只按有效 Profile 排序并保留值，不允许字段由 Validator 报告、不自动删除。
 - **并发与提交安全**：写入前在治理锁内复核内容哈希，外部变化返回 `concurrent-change` / `source-hash-changed`，拒绝覆盖；多文件写入和路径移动经同一 ChangeSet 提交，可捕获失败尝试补偿；若报告恢复失败，停止重试并核对实际文件。
