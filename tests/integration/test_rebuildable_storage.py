@@ -218,7 +218,7 @@ def test_external_file_and_folder_rename_refreshes_index_and_reports_stale_relat
     source = cli(*source_args, "--expected-hash", preview["expected_hash"], "--confirm")["target"]
     cli("document", "list")
     original_source = (workspace / source).read_bytes()
-    renamed = str(Path(target).with_name("知识-Renamed.md"))
+    renamed = Path(target).with_name("知识-Renamed.md").as_posix()
     (workspace / target).rename(workspace / renamed)
 
     for stale, current in [(target, renamed), (renamed, renamed.replace("/sub/", "/renamed-sub/"))]:
