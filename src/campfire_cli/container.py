@@ -20,7 +20,7 @@ from campfire_cli.app.skill.service.skill_service import SkillService
 from campfire_cli.app.workspace.repository.restructure_repository import (
     SqliteRestructureRepository,
 )
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.service.adoption_service import AdoptionService
 from campfire_cli.app.workspace.service.config_service import WorkspaceConfigService
 from campfire_cli.app.workspace.service.domain_restructure_service import (
@@ -29,7 +29,8 @@ from campfire_cli.app.workspace.service.domain_restructure_service import (
 from campfire_cli.app.workspace.service.restructure_service import RestructureService
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.agent_hints import default_hint_paths, inject_agent_hint
-from campfire_cli.common.database import create_sqlite_engine, open_session, upgrade_database
+from campfire_cli.common.database import create_sqlite_engine, initialize_database, open_session
+from campfire_cli.common.database.models import Workspace
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem.cwd import safe_cwd
 from campfire_cli.common.package_version import (
@@ -103,7 +104,7 @@ class AppContainer:
         """Bootstrap one device from the portable Workspace Manifest."""
         governance_root = campfire_home()
         setup_result = WorkspaceService(
-            governance_root, SqliteWorkspaceRepository(governance_root)
+            governance_root, FilesystemWorkspaceRepository(governance_root)
         ).setup(workspace, make_default, workspace_id)
         container = cls.build(setup_result.workspace_id)
         settings = container.settings
@@ -120,6 +121,8 @@ class AppContainer:
             "status": (
                 health["status"]
                 if health["status"] != "ok"
+                else "needs-review"
+                if setup_result.binding_issues
                 else "needs-input"
                 if setup_result.unbound_repositories
                 else "ok"
@@ -172,7 +175,6 @@ class AppContainer:
         仅对齐本机资源。
         """
         home = campfire_home()
-        upgrade_database(home / "campfire.db")
         package = cls._plan_package_update(skip_package)
         if package["action"] == "updater-spawned":
             return {
@@ -186,10 +188,12 @@ class AppContainer:
                 ),
             }
         workspaces = []
-        workspace_repository = SqliteWorkspaceRepository(home)
-        workspace_service = WorkspaceService(home, workspace_repository)
+        workspace_repository = FilesystemWorkspaceRepository(home)
         for workspace_id in workspace_repository.load_registry().workspaces:
-            project_sync = workspace_service.sync_projects_from_manifest(workspace_id)
+            project_sync = {
+                "status": "ok",
+                "project_count": len(workspace_repository.list_projects(workspace_id)),
+            }
             container = cls.build(workspace_id)
             workspaces.append(
                 {
@@ -264,15 +268,17 @@ class AppContainer:
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:
         governance_root = campfire_home()
-        workspace_repository = SqliteWorkspaceRepository(governance_root)
+        workspace_repository = FilesystemWorkspaceRepository(governance_root)
         resolution = WorkspaceService(governance_root, workspace_repository).resolve(
             str(workspace) if workspace is not None else None, safe_cwd()
         )
         settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
         database_path = governance_root / "campfire.db"
-        upgrade_database(database_path)
         engine = create_sqlite_engine(database_path)
+        initialize_database(engine)
         session = open_session(engine)
+        with session.begin():
+            session.merge(Workspace(id=resolution.workspace_id))
         project_roots = {
             project.document_domain_id: project.id
             for project in workspace_repository.list_projects(resolution.workspace_id)

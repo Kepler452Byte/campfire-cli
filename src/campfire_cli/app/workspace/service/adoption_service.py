@@ -156,14 +156,8 @@ class AdoptionService:
                     expected=expected,
                 )
             ):
-                if updated_project:
-                    self._workspaces.save_project(updated_project)
                 if self._verify_files(target, inventory):
                     raise ConfigurationError("接管后文件验证失败")
-        except Exception:
-            if original_project:
-                self._workspaces.save_project(original_project)
-            raise
         finally:
             if staging and staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)

@@ -14,7 +14,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 ## 上下文与契约
 
 - 已知 Workspace、目标和契约直接复用，缺失才 bootstrap。根级 `--workspace` 选择环境，路径以 Workspace 根为基准。
-- Manifest 管注册事实，Markdown 管内容与声明，SQLite 和生成视图是派生状态；不直接编辑数据库、Base 或自动生成区域。
+- Vault 根目录 `.campfire.yaml` 管便携项目事实，`~/.campfire/local.yaml` 管本机接入与路径绑定，Markdown 管内容与声明，SQLite 和生成视图是派生状态；不直接编辑数据库、Base 或自动生成区域。
 - 普通文档归属 Domain，系统受管区按配置处理；Project 由 Manifest 的稳定 Domain 绑定推导，不向 Domain 声明重复写入项目字段。
 - list / inspect 自行对账索引；check 用于诊断，不是每次查询或写入的前置步骤。
 

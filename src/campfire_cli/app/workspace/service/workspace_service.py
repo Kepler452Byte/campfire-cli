@@ -7,7 +7,6 @@ from importlib.resources import files
 from pathlib import Path
 
 from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
-from campfire_cli.app.workspace.repository.project_migration import migrate_project_records
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ManifestWorkspace,
     RegistryExport,
@@ -94,10 +93,8 @@ class WorkspaceService:
         root = path.expanduser().resolve()
         if not root.is_dir():
             raise ConfigurationError(f"Workspace 不存在：{root}")
-        with workspace_write_lock(self._root):
-            migrated = self._manifests.upgrade(root)
         manifest = self._manifests.load(root)
-        manifest_operation = "migrated" if migrated else "preserved"
+        manifest_operation = "preserved"
         if manifest is not None and workspace_id and workspace_id != manifest.workspace.id:
             raise ConfigurationError(
                 f"--id 与 Workspace Manifest 不一致：{workspace_id} != {manifest.workspace.id}"
@@ -122,7 +119,6 @@ class WorkspaceService:
             if existing and existing.workspace_id != manifest.workspace.id:
                 raise ConfigurationError(f"Project id 已由其他 Workspace 使用：{portable.id}")
             project = restore_project(portable, manifest.workspace.id, existing)
-            self._repository.save_project(project)
             imported.append(project.id)
             missing = [item for item in project.repositories if not item.local_path]
             if missing:
@@ -138,6 +134,25 @@ class WorkspaceService:
                         "hint": "Provide a local directory; remote matches are candidates only.",
                     }
                 )
+        valid_bindings = {
+            (project.id, repository.id)
+            for project in manifest.projects
+            for repository in project.repositories
+        }
+        bindings = (
+            self._repository.load_registry().workspaces[manifest.workspace.id].repository_bindings
+        )
+        binding_issues = [
+            {
+                "code": "repository-binding-orphaned",
+                "project_id": project_id,
+                "repository_id": repository_id,
+                "path": local_path,
+            }
+            for project_id, repositories in bindings.items()
+            for repository_id, local_path in repositories.items()
+            if (project_id, repository_id) not in valid_bindings
+        ]
         return WorkspaceSetupResult(
             **result.model_dump(),
             manifest=str(self._manifests.path(root)),
@@ -145,26 +160,8 @@ class WorkspaceService:
             imported_projects=imported,
             unbound_projects=unbound,
             unbound_repositories=unbound_repositories,
+            binding_issues=binding_issues,
         )
-
-    def sync_projects_from_manifest(self, workspace_id: str) -> dict[str, object]:
-        registry = self._repository.load_registry()
-        workspace = registry.workspaces.get(workspace_id)
-        if workspace is None:
-            raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
-        root = Path(workspace.path).expanduser().resolve()
-        with workspace_write_lock(self._root):
-            self._manifests.upgrade(root)
-        manifest = self._manifests.load(root)
-        if manifest is None:
-            raise ConfigurationError(f"Workspace 缺少 .campfire.yaml：{root}")
-        current = {item.id: item for item in self._repository.list_projects(workspace_id)}
-        projects = [
-            restore_project(portable, workspace_id, current.get(portable.id))
-            for portable in manifest.projects
-        ]
-        self._repository.replace_projects(workspace_id, projects)
-        return {"status": "synced", "project_count": len(projects)}
 
     def list(self) -> WorkspaceListResult:
         registry = self._repository.load_registry()
@@ -221,7 +218,7 @@ class WorkspaceService:
             raise ConfigurationError(f"导入文件不存在：{source}")
         try:
             raw = json.loads(source.read_text(encoding="utf-8"))
-            payload = RegistryExport.model_validate(migrate_project_records(raw, portable=False))
+            payload = RegistryExport.model_validate(raw)
         except (ValueError, TypeError) as exc:
             raise ConfigurationError(
                 "Invalid registry backup", code="registry-import-invalid", detail=str(exc)
@@ -231,7 +228,6 @@ class WorkspaceService:
             with workspace_write_lock(self._root):
                 self._repository.replace_registry(
                     WorkspaceRegistry(
-                        schema_version=payload.schema_version,
                         default_workspace=payload.default_workspace,
                         workspaces=payload.workspaces,
                     ),
@@ -269,7 +265,7 @@ class WorkspaceService:
             )
             if duplicate:
                 raise ConfigurationError(f"Workspace 路径已由其他 id 注册：{duplicate}")
-            registry.workspaces[workspace_id] = WorkspaceEntry(path=str(root))
+            registry.workspaces[workspace_id] = existing or WorkspaceEntry(path=str(root))
             if make_default or not registry.default_workspace:
                 registry.default_workspace = workspace_id
             self._repository.save_registry(registry)

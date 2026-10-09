@@ -19,7 +19,6 @@ from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectResolutionResult,
     ProjectResult,
     RepositoryEntry,
-    portable_project,
 )
 from campfire_cli.app.workspace.service.structure_service import DomainService, SpaceService
 from campfire_cli.app.workspace.service.workspace_protocol import WorkspaceRepositoryProtocol
@@ -101,7 +100,6 @@ class ProjectService:
             if self._repository.get_project(request.project_id):
                 raise ConfigurationError("Project 在确认后已被注册")
             self._repository.save_project(project)
-            self._sync_manifest(project.workspace_id)
         return ProjectCreateResult(
             status="created",
             project=project,
@@ -303,7 +301,8 @@ class ProjectService:
     def _snapshot_hash(self, project: ProjectEntry) -> str:
         workspace = self._repository.load_registry().workspaces[project.workspace_id]
         manifest = self._manifests.path(Path(workspace.path)).read_bytes()
-        return hashlib.sha256(project.model_dump_json().encode() + manifest).hexdigest()
+        local = (self._root / "local.yaml").read_bytes()
+        return hashlib.sha256(project.model_dump_json().encode() + manifest + local).hexdigest()
 
     def update_repository(
         self,
@@ -361,22 +360,13 @@ class ProjectService:
                 raise ConfigurationError(
                     "Project or Manifest changed; preview again", code="project-concurrent-change"
                 )
-            self._persist(updated)
+            self._repository.save_project(updated)
         return {
             "status": "applied",
             "project": updated.model_dump(mode="json"),
             "write_performed": True,
             "follow_up": [],
         }
-
-    def _persist(self, project: ProjectEntry) -> None:
-        previous = self._repository.list_projects(project.workspace_id)
-        self._repository.save_project(project)
-        try:
-            self._sync_manifest(project.workspace_id)
-        except Exception:
-            self._repository.replace_projects(project.workspace_id, previous)
-            raise
 
     def bind(self, project_id: str, local_path: Path, repository_id: str) -> ProjectBindResult:
         project = self.show(project_id)
@@ -401,7 +391,7 @@ class ProjectService:
                 raise ConfigurationError(
                     "Project or Manifest changed; retry bind", code="project-concurrent-change"
                 )
-            self._persist(project)
+            self._repository.save_project(project)
         return ProjectBindResult(project=project)
 
     def _save(self, request: ProjectRegistrationRequest) -> ProjectResult:
@@ -410,33 +400,20 @@ class ProjectService:
             Path(self._repository.load_registry().workspaces[request.workspace_id].path)
         )
         manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        local_hash = hashlib.sha256((self._root / "local.yaml").read_bytes()).hexdigest()
         project, _domain_path = self._prepare(request, require_domain=True)
         with workspace_write_lock(self._root):
             if (
                 self._repository.get_project(request.project_id) != before
                 or hashlib.sha256(manifest_path.read_bytes()).hexdigest() != manifest_hash
+                or hashlib.sha256((self._root / "local.yaml").read_bytes()).hexdigest()
+                != local_hash
             ):
                 raise ConfigurationError(
                     "Project or Manifest changed; retry update", code="project-concurrent-change"
                 )
-            self._persist(project)
+            self._repository.save_project(project)
         return ProjectResult(**project.model_dump(), operation="updated" if before else "created")
-
-    def _sync_manifest(self, workspace_id: str) -> None:
-        registry = self._repository.load_registry()
-        workspace = registry.workspaces.get(workspace_id)
-        if not workspace:
-            raise ConfigurationError(f"Workspace 未注册：{workspace_id}")
-        root = Path(workspace.path).expanduser().resolve()
-        manifest = self._manifests.load(root)
-        if manifest is None:
-            raise ConfigurationError(
-                f"Workspace 缺少 .campfire.yaml；请先运行 campfire setup --path {root}"
-            )
-        manifest.projects = [
-            portable_project(project) for project in self._repository.list_projects(workspace_id)
-        ]
-        self._manifests.save(root, manifest)
 
     def _prepare(
         self, request: ProjectRegistrationRequest, *, require_domain: bool

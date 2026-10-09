@@ -3,7 +3,7 @@
 `campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕同一份持久共享上下文协作：把口头要求、临时笔记、任务进度、项目资料和长期知识沉淀进可检索、可交接、可审计的 Workspace。
 
 - **人类和 Agent 同一条链路**：同一套 CLI 契约 + 全局 Agent Skill，没有两套规则。
-- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；SQLite 保存可重建索引，也保存本机注册与运行状态，不能整体当作缓存删除。
+- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；`.campfire.yaml` 保存便携项目事实，`~/.campfire/local.yaml` 保存本机注册与绑定；SQLite 全部是可重建状态。
 - **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，检测到输入变化时拒绝覆盖；不承诺外部编辑器遵守锁或跨介质崩溃原子性。
 - **本地优先**：不绑定云服务、不内置账号；Obsidian 是推荐阅读工具而非强依赖；CLI 可独立治理 Markdown Workspace。
 
@@ -59,7 +59,7 @@ uv tool install campfire-cli
 campfire version
 ```
 
-升级：`campfire upgrade` 是一条幂等命令——检测 PyPI 新版本并按安装方式（uv tool / pipx）更新包本身（更新器在独立进程中等待当前进程退出后执行，完成后自动用新版代码对齐治理资源），随后对齐 SQLite Schema、全局 Skill、Base 与提示词路标。离线、已是最新、editable 源码安装或无法识别安装方式时跳过包更新仅对齐资源。
+升级：`campfire upgrade` 是一条幂等命令——检测 PyPI 新版本并按安装方式（uv tool / pipx）更新包本身（更新器在独立进程中等待当前进程退出后执行，完成后自动用新版代码对齐治理资源），随后按当前模型初始化 SQLite、对齐全局 Skill、Base 与提示词路标。离线、已是最新、editable 源码安装或无法识别安装方式时跳过包更新仅对齐资源。
 
 开发机安装（跟随本地源码）：
 
@@ -98,7 +98,7 @@ Workspace ── Space ── Domain 树 ── 文档
 
 | 对象 | 说明 | 事实源 |
 |------|------|--------|
-| Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/campfire.db`（注册）+ `.campfire.yaml`（便携 Manifest） |
+| Workspace | 人与 Agent 共享的上下文边界，可对应一个 Vault | `~/.campfire/local.yaml`（本机接入）+ Vault 根目录 `.campfire.yaml`（便携配置） |
 | Space / Domain | 顶级容器 / 可嵌套内容边界，声明式 + 自动 MOC | Vault 内 `_空间.md`、`_领域.md` |
 | Document | 知识、计划、问题、决策、记录等持久内容 | Markdown 正文 + Frontmatter |
 | Human request | Agent 需要人类回答的待确认事项 | `_待用户确认/` 中的 `human-request` 文档 |
@@ -165,7 +165,21 @@ campfire workspace project update --id product --repository api --role server
 
 setup 默认输出资源操作摘要；逐文件路径与哈希使用 `setup --verbose`。健康问题返回 needs-review，健康检查通过但仓库未绑定时返回 needs-input；unbound_repositories 提供仓库身份和绑定参数，实际本机目录须用户提供。重复 setup 按仓库 id 保留已有绑定，不扫描或自动绑定猜测路径。
 
-升级至 0.2.1 自动执行数据库迁移 013，把原单仓库值转为 `default` 仓库并删除旧列。setup/upgrade 将 Manifest v1 一次性迁为 v2；显式导入 v1 备份时也会先转换，新导出只有 v2。业务模型和查询仅使用新结构，不长期维护两套接口。迁移保留 Project id、Domain 绑定及本机路径，Manifest 不含本机绝对路径。
+0.2.1 只支持当前结构，不包含旧格式转换和数据库迁移链。已有用户先备份 Vault 的 `.campfire.yaml` 和本机状态，由本地 Agent 将项目整理为仓库列表，把 Vault 路径、默认选择及仓库本机路径记入 `~/.campfire/local.yaml`；确认保留身份与绑定后，停止 Campfire 进程并删除旧数据库，运行 setup 重新接入。新用户直接 setup。旧格式备份不直接导入，升级准备不删除 Markdown 或代码目录。
+
+`~/.campfire/local.yaml` 按 Workspace id 保存设备配置，不重复保存 remote、分支和项目名称：
+
+```yaml
+default_workspace: personal
+workspaces:
+  personal:
+    path: /path/to/vault
+    repository_bindings:
+      campfire-cli:
+        source: /path/to/campfire-cli
+```
+
+Vault 根目录 `.campfire.yaml` 保存稳定 Project/repository id、文档领域、remote、默认分支和 role，不保存本机路径。`project list/show/resolve/check` 按稳定 id 合并两份文件；元数据操作写 `.campfire.yaml`，路径绑定写 `local.yaml`。SQLite 删除后项目查询不依赖数据库，文档查询自动重建索引；先停止运行中的操作，再删除 `campfire.db`、`campfire.db-wal` 与 `campfire.db-shm`。报告和未执行计划可重新生成，重新生成的计划需要重新审批。
 
 本轮包含明确的接口变化：旧 create/adopt 单仓库参数移除；update 仓库字段须带 --repository；bind 须指定仓库 id；Project JSON 顶层仓库字段移除。旧调用方需按上述命令更新。降级需恢复升级前完整备份，不手工删除数据库或仓库列表。本轮版本号 0.2.1 按用户明确决定采用。
 

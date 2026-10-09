@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
 
 
 class WorkspaceEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     path: str
-    status: str = "active"
-    default: bool = False
+    repository_bindings: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class WorkspaceRegistry(BaseModel):
-    schema_version: int = 1
+    model_config = ConfigDict(extra="forbid")
+
     default_workspace: str | None = None
     workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
 
@@ -46,7 +48,6 @@ class WorkspaceResolution(BaseModel):
 
 class WorkspaceListResult(BaseModel):
     status: str = "ok"
-    schema_version: int = 1
     default_workspace: str | None = None
     workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
 
@@ -101,7 +102,6 @@ class ManifestProject(BaseModel):
 class WorkspaceManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[2] = 2
     workspace: ManifestWorkspace
     projects: list[ManifestProject] = Field(default_factory=list)
 
@@ -112,6 +112,7 @@ class WorkspaceSetupResult(WorkspaceResult):
     imported_projects: list[str] = Field(default_factory=list)
     unbound_projects: list[str] = Field(default_factory=list)
     unbound_repositories: list[dict[str, Any]] = Field(default_factory=list)
+    binding_issues: list[dict[str, str]] = Field(default_factory=list)
 
 
 class Space(BaseModel):
@@ -247,7 +248,8 @@ class ProjectCreateResult(BaseModel):
 
 
 class RegistryExport(BaseModel):
-    schema_version: Literal[2] = 2
+    model_config = ConfigDict(extra="forbid")
+
     default_workspace: str | None = None
     workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
     projects: list[ProjectEntry] = Field(default_factory=list)

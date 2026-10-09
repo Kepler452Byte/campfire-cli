@@ -6,7 +6,7 @@ import typer
 from pydantic import TypeAdapter, ValidationError
 
 from campfire_cli.app.workspace.cli.workspace_cli import resolution
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectRegistrationRequest,
     RepositoryEntry,
@@ -25,7 +25,7 @@ project_cli = typer.Typer(
 
 def service() -> ProjectService:
     root = campfire_home()
-    return ProjectService(root, SqliteWorkspaceRepository(root))
+    return ProjectService(root, FilesystemWorkspaceRepository(root))
 
 
 def request(

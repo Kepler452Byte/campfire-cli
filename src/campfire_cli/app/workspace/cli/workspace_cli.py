@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from campfire_cli.app.workspace.repository.workspace_repository import SqliteWorkspaceRepository
+from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.schema.workspace_schema import (
     ProjectRegistrationRequest,
     RepositoryEntry,
@@ -27,7 +27,7 @@ workspace_cli = typer.Typer(
 
 def service() -> WorkspaceService:
     root = campfire_home()
-    return WorkspaceService(root, SqliteWorkspaceRepository(root))
+    return WorkspaceService(root, FilesystemWorkspaceRepository(root))
 
 
 def selector(ctx: typer.Context) -> str | None:
@@ -55,7 +55,7 @@ def create(
     demo_result = (
         invoke(
             lambda: ProjectService(
-                campfire_home(), SqliteWorkspaceRepository(campfire_home())
+                campfire_home(), FilesystemWorkspaceRepository(campfire_home())
             ).create(demo_request, confirm=True)
         )
         if demo_request
