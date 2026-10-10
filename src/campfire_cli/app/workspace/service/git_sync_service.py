@@ -177,7 +177,7 @@ class GitSyncService:
         paths = sorted(
             set(
                 self._paths("ls-files", "-z")
-                + self._paths("diff", "HEAD", "--name-only", "-z")
+                + self._paths("diff", "HEAD", "--no-renames", "--name-only", "-z")
                 + self._paths("ls-files", "--others", "--exclude-standard", "-z")
             )
         )

@@ -245,3 +245,24 @@ def test_sync_rejects_push_race_without_overwriting_remote(repositories, tmp_pat
     monkeypatch.setattr(module, "run_git", original)
     assert service.sync(confirm=True)["status"] == "synced"
     assert (first / "race.md").read_text() == "concurrent remote"
+
+
+@pytest.mark.parametrize("rename_detection", ["true", "copies"])
+def test_sync_rename_snapshot_does_not_change_when_staged(repositories, tmp_path, rename_detection):
+    _, first, second = repositories
+    git(first, "config", "diff.renames", rename_detection)
+    target = first / "renamed 中文 folder" / "new note.md"
+    target.parent.mkdir()
+    (first / "note.md").rename(target)
+    service = GitSyncService(first, tmp_path / "state")
+    preview = service.sync()
+    done = service.sync(confirm=True, expected_plan=preview["expected_plan"])
+    assert done["status"] == "synced", done
+    assert done["remote_synced"]
+    assert not git(first, "status", "--porcelain")
+    git(second, "pull", "--ff-only")
+    assert (second / "renamed 中文 folder" / "new note.md").read_text(
+        encoding="utf-8"
+    ) == "original\n"
+    assert not (second / "note.md").exists()
+    assert git(first, "config", "diff.renames") == rename_detection
