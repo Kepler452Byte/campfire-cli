@@ -1,5 +1,11 @@
 # 版本记录
 
+## 0.2.3 — 待发布
+
+- 补齐 Linux systemd、macOS LaunchAgent、Windows Task Scheduler 的 Vault Git 定时同步管理 SOP：检查、创建、调频、暂停、恢复、删除与排障。
+- 维护 Skill 与 Agent Hint 增加定时任务入口，参考文档随包安装；升级只对齐资源，不自动启用或修改系统任务。
+- 沿用既有同步命令，不新增 CLI 命令、调度服务或配置字段。
+
 ## 0.2.2 — 2026-10-10
 
 - 新增可选 workspace git sync：默认预览，确认后 fetch、提交、合并与 push；失败保留本地提交，冲突停止并报告，定时运行交给系统调度。

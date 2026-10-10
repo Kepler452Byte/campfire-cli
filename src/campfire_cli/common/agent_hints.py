@@ -61,6 +61,9 @@ HINT_BODY = """## Campfire 文档治理
     仅编辑文档不自动同步；定时运行须主动配置，setup/upgrade 不开启同步。
     只有 remote_synced=true 才报告远端已同步；冲突或失败保留本地提交并处理提示，
     不强推、不自动选择本地或远端版本。没有 Git 的 Vault 照常使用。
+14. 配置、调整、暂停、恢复、删除或排查 Vault 定时同步，使用
+    campfire-workspace-maintenance 的 references/git-sync-scheduling.md 当前平台 SOP；
+    先核对已有任务、Workspace、可执行路径和授权，不重复创建，不因升级重新启用。
 
 `.campfire.yaml`、声明 Frontmatter、自动生成区域、Base 和 SQLite
 是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；缺少

@@ -1,6 +1,6 @@
 ---
 name: campfire-workspace-maintenance
-description: "持续维护 Campfire Workspace 的结构与文档合规；适用于 Space/Domain 声明、文档检查与格式化、MOC 同步、归档和日常维护，不用于跨领域批量重构。"
+description: "持续维护 Campfire Workspace 的结构与文档合规；适用于 Space/Domain 声明、文档检查与格式化、MOC 同步、归档、Vault Git 同步及其系统定时任务管理，不用于跨领域批量重构。"
 ---
 
 # Campfire Workspace 日常维护
@@ -33,6 +33,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 |-- 单篇改名 / 跨领域移动 -> rename / move
 |-- 接管目录 -> workspace-adoption
 |-- 领域或批量重构 -> workspace-restructure
+|-- 管理定时同步 -> 读取 references/git-sync-scheduling.md 对应平台 -> 核对已有任务 -> 按授权操作
 |-- 同步 Vault Git 远端 -> git sync 预览 -> 按授权确认 -> 核对 remote_synced
 `-- 刷新派生物 -> 明确 scope 后 maintenance sync
 
@@ -82,4 +83,6 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 
 只有用户要求提交并同步 Vault，或已明确授权定时同步时才执行；编辑文档不自动授权推送整个 Vault。先执行 `campfire --workspace <id> workspace git sync`，核对改动范围与 upstream；确认后执行同一命令加 `--expected-plan <返回摘要> --confirm`。定时任务按用户授权调用 `--confirm`，不携带固定的旧摘要。
 
-同步包含整个 Vault 可提交的新增、修改和删除，遵守 `.gitignore`；不同步 Project 源码仓库。无 Git 的 Vault 仍可正常使用。只完成本地提交时不得报告远端同步成功，必须核对 `remote_synced`；失败返回阶段、提示与冲突路径，非零退出。不自动选一方、不强推、不改写提交历史；处理明确授权范围内的问题后重新预览。定时运行参照产品 Git 同步说明，同一工作树关闭插件自动同步。
+同步包含整个 Vault 可提交的新增、修改和删除，遵守 `.gitignore`；不同步 Project 源码仓库。无 Git 的 Vault 仍可正常使用。只完成本地提交时不得报告远端同步成功，必须核对 `remote_synced`；失败返回阶段、提示与冲突路径，非零退出。不自动选一方、不强推、不改写提交历史；处理明确授权范围内的问题后重新预览。同一工作树启用前关闭插件等其他 Git 自动同步。
+
+用户要求配置定时同步、调整间隔、暂停、恢复、删除任务或排查定时失败时，读取 [系统定时同步 SOP](references/git-sync-scheduling.md) 的通用步骤及当前平台章节。任务是本机系统调度配置，不写入 Vault 根 `.campfire.yaml`，不随 setup/upgrade 自动启用；保留已有停用状态。任务已注册不代表同步成功，需区分调度状态、执行退出码和 `remote_synced`。
