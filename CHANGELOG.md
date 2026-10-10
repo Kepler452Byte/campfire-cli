@@ -2,6 +2,8 @@
 
 ## 0.2.4 — 2026-10-10
 
+[PyPI 安装包](https://pypi.org/project/campfire-cli/0.2.4/) · [GitHub Release](https://github.com/Kepler452Byte/campfire-cli/releases/tag/v0.2.4) · [三平台发布与公开安装验证](https://github.com/Kepler452Byte/campfire-cli/actions/runs/38039812256)
+
 - Vault 定时同步通过 Tickwork CLI 管理，维护 Skill 与 Agent Hint 路由到 Tickwork Skill；删除重复的三平台定时任务注册脚本。
 - 补齐 Tickwork 缺失时从 PyPI 安装、接入 Agent Hint 和 Skill 的入口。
 - Bootstrap 保持上下文查询职责；其他本机定时命令直接使用 Tickwork，不新增 Campfire 命令或依赖，不自动启用任务。
