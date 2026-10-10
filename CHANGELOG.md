@@ -1,5 +1,10 @@
 # 版本记录
 
+## 0.2.4 — 2026-10-10
+
+- Vault 定时同步通过 Tickwork CLI 管理，维护 Skill 与 Agent Hint 路由到 Tickwork Skill；删除重复的三平台定时任务注册脚本。
+- Bootstrap 保持上下文查询职责；其他本机定时命令直接使用 Tickwork，不新增 Campfire 命令或依赖，不自动启用任务。
+
 ## 0.2.3 — 2026-10-10
 
 - 补齐 Linux systemd、macOS LaunchAgent、Windows Task Scheduler 的 Vault Git 定时同步管理 SOP：检查、创建、调频、暂停、恢复、删除与排障。
