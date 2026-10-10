@@ -1,5 +1,10 @@
 # 版本记录
 
+## 0.2.5 — 2026-10-10
+
+- Bootstrap 增加 Tickwork 本机定时任务入口，缺少 CLI 或 Skill 时提供安装与接入指引；具体任务管理仍由 Tickwork Skill 负责。
+- 修复文件改名暂存后 Git 重命名识别导致的同步快照误变化，不修改用户 Git 配置，仍保留实际并发变化检查。
+
 ## 0.2.4 — 2026-10-10
 
 [PyPI 安装包](https://pypi.org/project/campfire-cli/0.2.4/) · [GitHub Release](https://github.com/Kepler452Byte/campfire-cli/releases/tag/v0.2.4) · [三平台发布与公开安装验证](https://github.com/Kepler452Byte/campfire-cli/actions/runs/38039812256)
