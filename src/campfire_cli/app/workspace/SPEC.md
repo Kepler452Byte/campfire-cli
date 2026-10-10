@@ -20,7 +20,7 @@ Adoption、文档批量 Restructure 与 Domain Restructure 均使用共享 Chang
 
 `domain rename --name` 只改显示名称；`--folder-name` 只改原父级下目录名称，可显式同时提供。目录改名使用共享计划摘要，确认必须提供 `--expected-plan`，保护附件、声明和受管引用；Domain id、子领域身份与 Project 绑定不变。大小写不敏感文件系统的纯大小写改名明确阻止，提示先预览中间名迁移，不静默覆盖。不承诺断电原子性，回滚失败报告需要人工核对的路径。
 
-Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space 并继承 governance。`_收件箱`、`_待用户确认` 与 `_治理视图` 是系统区域，不是 Space；其中 `_待用户确认/` 是受管文档范围，但没有虚构的 Domain 或 Project。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
+Space 是 Workspace 根下以 `_空间.md` 声明的顶级内容容器；Domain 位于 Space 内，以 `_领域.md` 声明并可任意嵌套。子 Domain 必须处于父 Domain 路径下、属于同一 Space。`_收件箱`、`_待用户确认` 与 `_治理视图` 是系统区域，不是 Space；其中 `_待用户确认/` 是受管文档范围，但没有虚构的 Domain 或 Project。Maintenance 只消费本模块发现的结构，不维护第二套领域规则。
 
 Space 与 Domain 声明 Frontmatter 只由本模块解释、格式化和修改；Document App 对其返回 `not-applicable`。`workspace space/domain format` 只规范化 Frontmatter 并逐字节保留 Markdown 正文。声明文件中 `AUTO-GENERATED` 标记区域由 CLI 独占，标记外正文允许人和 Agent 编辑。`workspace space check --space <id>` 支持对单个 Space 做局部复检。
 
@@ -37,3 +37,11 @@ Project 是 Workspace 连接的外部工作资源，记录稳定 id、显示名�
 Project 可有零到多个仓库，每个仓库使用 Project 内唯一的稳定 id；role、remote、默认分支是便携元数据，local_path 是设备绑定，不进入 Manifest。`.campfire.yaml`、`local.yaml` 和注册备份只支持当前结构，不带 schema_version、不读取旧单仓库字段；无格式转换和数据库迁移链。Project 没有顶层仓库字段。
 
 create/adopt 的 repositories 是初始列表；update 按 repository id 新增、更新、解绑或移除一项，默认预览，confirm 必须复核 Project 与 Manifest 哈希，不删除源码文件。单仓库与多仓库共用仓库列表接口，bind 必须指定仓库 id，不隐式选取首项。共享 remote 与嵌套路径允许登记；resolve 保留最深本机路径规则，同深度多绑定返回 ambiguous，remote 仅是候选。setup 按稳定仓库 id 保留本机绑定并逐项报告未绑定入口，不猜测路径。
+
+## 统一领域与可选 Git 同步
+
+Domain 声明不保存 governance，旧字段报告为禁止字段而非解释旧格式。领域分类不决定治理方式；所有 Domain 共用父子结构、检查与 MOC 生成规则，Project 归属仅用于资源定位和结构化查询。不引入替代策略字段。全局 config.yml 的 governance 系统目录设置继续有效。
+
+`workspace git sync` 默认只预览本地 Git 状态；已有 upstream 的 ahead/behind 在预览中只代表本机跟踪信息。confirm 在 Workspace 写锁内 fetch、复核本地快照、提交全部可提交新增/修改/删除、快进或普通合并并推送 upstream。可选 expected_plan 校验预览范围，定时任务不绑定陈旧计划。手动暂存、未完成 Git 操作、非 Vault 根工作树或缺少 upstream 时停止；不初始化仓库或替用户选分支。失败保留本地提交，冲突尝试中止本次合并并报告路径，不自动选择一方、强推、rebase 或 stash。JSON 明确阶段、local_commit 与 remote_synced；未同步非零退出，Git 原始输出和凭据不进入公共输出。
+
+Git 同步是主动选择的能力，setup、upgrade、文档操作不触发它。remote/分支/凭据复用 Git，不写入 YAML；系统定时任务调用同一命令，不新增守护服务、调度数据库或开关字段。锁不阻止外部编辑器，快照复核发现变化则停止，不承诺文件系统事务。纯 Git 进程机制在 common，同步用例在 Workspace Service。

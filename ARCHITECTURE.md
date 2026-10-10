@@ -208,7 +208,7 @@ Campfire 不把“调用方能够猜对未声明契约”作为可靠性前提�
 | 文档查询索引 | Workspace Markdown、结构声明与有效治理契约 | `~/.campfire/campfire.db` 中按 `workspace_id` 隔离的可重建投影 |
 | 结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；可丢弃并重新生成，新计划重新审批 |
 
-SQLite 中的 Workspace 与 Project 注册数据是结构化事实，文档索引可以从 Markdown 重建；SQLite 不是知识内容的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
+Vault 根目录 `.campfire.yaml` 和本机 `~/.campfire/local.yaml` 保存注册事实；SQLite 全部可重建，不是知识内容或注册数据的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
 
 ### 文档查询投影
 
@@ -264,7 +264,7 @@ Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain
 
 ## 6. 可选阅读环境与未来交付
 
-当前公共入口是 CLI，没有已交付的 Web 工作台或独立 Decision HTTP 状态机。Obsidian 是推荐阅读工具，不是 CLI 的强依赖；Bases、大纲和可选 Kanban 负责相应展示，普通 Markdown 和文档查询不依赖这些组件。Obsidian Git 可辅助版本历史，CLI 不另建备份系统。
+当前公共入口是 CLI，没有已交付的 Web 工作台或独立 Decision HTTP 状态机。Obsidian 是推荐阅读工具，不是 CLI 的强依赖；Bases、大纲和可选 Kanban 负责相应展示，普通 Markdown 和文档查询不依赖这些组件。Vault 可选用 `workspace git sync` 获取、提交、合并与推送，系统调度器按用户授权定时调用；不依赖 Obsidian Git，不内置备份平台或常驻服务。
 
 如未来增加其他交付适配器，必须复用 Application Service，不复制治理规则；这不是当前版本的交付承诺。插件配置教程由维护者后续博客说明，不在 CLI 内实现安装器或配置管理。
 
@@ -284,3 +284,5 @@ Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain
 当前版本先稳定 Workspace 注册、存量结构重构、增量维护、归档、Skill 与治理视图。下一阶段围绕 Task Channel 补齐任务创建、进度事件、交接、待确认和验收协议，再连接工作日志、周报与绩效证据。只有出现真实用例时才新增模块，避免为未来能力预建空架构。
 
 本机配置按 Workspace id 分节，repository_bindings 按 Project id 和 repository id 保存路径；remote 和分支只在 Vault 根目录 `.campfire.yaml`。SQLite 无注册事实、无历史迁移链，只从当前文件生成投影；停止运行中的操作后可整库删除重建。
+
+领域分类与 Project 归属不决定治理方式。所有领域共用结构、检查与 MOC 生成；Project 只关联仓库便携信息与本机位置，Domain 不保存 governance 字段。

@@ -48,7 +48,7 @@
 
 ### 升级注意事项
 
-`maintenance sync` 不再生成 `_generated/相关文档-*.md`，并移除 MOC 自动区域中的关系页入口；MOC 的文档导航、分组和模板入口保持不变。`related_docs` 仍为可选字段，Agent 通过 `document list` 定位文档、通过 `document inspect` 查询出向、入向及失效关联，查询不要求先同步 MOC。
+`maintenance sync` 不再生成 `_generated/相关文档-*.md`，并移除 MOC 自动区域中的关系页入口；MOC 保留统一的文档导航、列表和模板入口。`related_docs` 仍为可选字段，Agent 通过 `document list` 定位文档、通过 `document inspect` 查询出向、入向及失效关联，查询不要求先同步 MOC。
 
 同步不会删除或改写历史关系页，也不会修改人工正文链接。历史清理须先核实来源和人工内容，再确认具体范围；不能按 `_generated` 或 `generated` 目录名递归删除。Base 同步策略和领域模型不在本次变更范围内。
 
@@ -136,7 +136,7 @@ campfire base list / show / check / sync          # Obsidian Base `_治理视图
 ```bash
 campfire workspace space create --id research --name "研究" --path myresearch --type research
 campfire workspace domain create --id wiki --name "Wiki" --path "mywork/项目/wiki" \
-  --type knowledge-domain --governance knowledge-base --confirm
+  --type knowledge-domain --confirm
 campfire --workspace personal workspace project adopt --id example \
   --name "Example" --domain project-example \
   --repositories '[{"id":"source","local_path":"/path/to/repo"}]'
@@ -200,7 +200,7 @@ Vault 根目录 `.campfire.yaml` 保存稳定 Project/repository id、文档领�
 ```bash
 campfire workspace domain adopt --source /path/to/folder --target-path "mynote/新领域" \
   --id knowledge-new --name "新领域" \
-  --type knowledge-domain --governance knowledge-docs
+  --type knowledge-domain
 # 审查同一份结构化计划后，对相同命令追加 --confirm
 ```
 
@@ -237,3 +237,17 @@ campfire workspace restructure verify --batch move-001
 ## 许可
 
 MIT。
+
+## Optional Vault Git synchronization
+
+Git is optional: setup, upgrade and document operations never enable synchronization.
+Every Domain uses the same hierarchy and MOC rules; Project bindings only identify related repositories.
+
+```bash
+campfire --workspace personal workspace git sync
+campfire --workspace personal workspace git sync --expected-plan <preview-digest> --confirm
+```
+
+The command fetches, commits all eligible Vault additions, edits and deletions, merges the upstream and pushes. It respects `.gitignore` (already tracked files remain tracked), refuses manually staged changes and unfinished Git operations, and preserves local commits on failure. A conflict stops synchronization without choosing either version. Only `remote_synced: true` means the push completed. Preview uses cached remote tracking information; it does not fetch.
+
+The Vault must be the Git worktree root with an existing commit, current branch and remote upstream. Configure Git identity and authentication using Git itself; Campfire does not duplicate credentials or remotes in YAML. Project source repositories are outside this command's scope. [Server scheduling and upgrade notes](docs/git-sync.md).

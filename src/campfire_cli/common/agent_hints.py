@@ -53,6 +53,15 @@ HINT_BODY = """## Campfire 文档治理
 11. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
    `--confirm` 只确认 CLI 写入，不代表归档授权。
 
+12. 所有 Domain 使用相同父子结构和 MOC 规则，不传 --governance；Project
+    关联只用于项目归属与代码定位，不决定治理方式。
+13. 用户明确要求同步 Vault 到 Git 远端时，使用
+    `campfire --workspace <id> workspace git sync` 预览，再按授权以
+    `--expected-plan <摘要> --confirm` 获取、提交、合并和推送。
+    仅编辑文档不自动同步；定时运行须主动配置，setup/upgrade 不开启同步。
+    只有 remote_synced=true 才报告远端已同步；冲突或失败保留本地提交并处理提示，
+    不强推、不自动选择本地或远端版本。没有 Git 的 Vault 照常使用。
+
 `.campfire.yaml`、声明 Frontmatter、自动生成区域、Base 和 SQLite
 是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；缺少
 对应命令时停止并报告能力缺口，不直接编辑。声明文件标记外正文不受此限制。

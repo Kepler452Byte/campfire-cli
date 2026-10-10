@@ -16,6 +16,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 - 已知 Workspace、目标和契约直接复用，缺失才 bootstrap。根级 `--workspace` 选择环境，路径以 Workspace 根为基准。
 - Vault 根目录 `.campfire.yaml` 管便携项目事实，`~/.campfire/local.yaml` 管本机接入与路径绑定，Markdown 管内容与声明，SQLite 和生成视图是派生状态；不直接编辑数据库、Base 或自动生成区域。
 - 普通文档归属 Domain，系统受管区按配置处理；Project 由 Manifest 的稳定 Domain 绑定推导，不向 Domain 声明重复写入项目字段。
+- 所有领域共用父子结构、检查与 MOC 生成规则；Project 关联仅用于归属与代码定位，不使用 Domain governance 字段。
 - list / inspect 自行对账索引；check 用于诊断，不是每次查询或写入的前置步骤。
 - 外部文件或文件夹改名后，查询会对账索引，但不自动改写 related_docs。检查报出失效关系时先核实真实目标，再用 document apply 修正；不猜测改名映射，正文链接另行核对。
 
@@ -32,6 +33,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 |-- 单篇改名 / 跨领域移动 -> rename / move
 |-- 接管目录 -> workspace-adoption
 |-- 领域或批量重构 -> workspace-restructure
+|-- 同步 Vault Git 远端 -> git sync 预览 -> 按授权确认 -> 核对 remote_synced
 `-- 刷新派生物 -> 明确 scope 后 maintenance sync
 
 写入需预览的命令 -> 计划符合授权且无阻塞 -> 确认
@@ -75,3 +77,9 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 ## 完成条件与回报
 
 报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。关系唯一事实源是 `related_docs`，纯正文编辑不改变受管关系，无需同步。
+
+## 可选 Vault Git 同步
+
+只有用户要求提交并同步 Vault，或已明确授权定时同步时才执行；编辑文档不自动授权推送整个 Vault。先执行 `campfire --workspace <id> workspace git sync`，核对改动范围与 upstream；确认后执行同一命令加 `--expected-plan <返回摘要> --confirm`。定时任务按用户授权调用 `--confirm`，不携带固定的旧摘要。
+
+同步包含整个 Vault 可提交的新增、修改和删除，遵守 `.gitignore`；不同步 Project 源码仓库。无 Git 的 Vault 仍可正常使用。只完成本地提交时不得报告远端同步成功，必须核对 `remote_synced`；失败返回阶段、提示与冲突路径，非零退出。不自动选一方、不强推、不改写提交历史；处理明确授权范围内的问题后重新预览。定时运行参照产品 Git 同步说明，同一工作树关闭插件自动同步。

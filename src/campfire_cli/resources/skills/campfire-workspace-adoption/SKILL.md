@@ -41,8 +41,8 @@ Workspace 已知直接复用，未知才 resolve。Vault 内来源可原地接�
 假设 Workspace demo 已存在，`mynote/待接管示例` 是用户授权原地接管、尚无领域声明的文件夹：
 
 ```bash
-campfire --workspace demo workspace domain adopt --source "mynote/待接管示例" --id knowledge-example --name "接管示例" --type knowledge-domain --governance knowledge-base
-campfire --workspace demo workspace domain adopt --source "mynote/待接管示例" --id knowledge-example --name "接管示例" --type knowledge-domain --governance knowledge-base --confirm
+campfire --workspace demo workspace domain adopt --source "mynote/待接管示例" --id knowledge-example --name "接管示例" --type knowledge-domain
+campfire --workspace demo workspace domain adopt --source "mynote/待接管示例" --id knowledge-example --name "接管示例" --type knowledge-domain --confirm
 ```
 
 仅在预览无阻塞且符合授权时执行第二条。确认返回 adopted 后才按返回的 scope 维护派生物。
