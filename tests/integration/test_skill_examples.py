@@ -47,8 +47,6 @@ def test_published_creation_examples_and_follow_up(tmp_path: Path) -> None:
             "mynote/开发实践",
             "--type",
             "knowledge-domain",
-            "--governance",
-            "knowledge-base",
             "--confirm",
         ]
     )

@@ -24,7 +24,7 @@ def write_project_domain(workspace: Path) -> Path:
         "name: Project\n"
         "domain_id: project-example\n"
         "domain_type: project-domain\n"
-        "governance: project-docs\n"
+        ""
         "moc: MOC-Project\n"
         "status: active\n"
         "---\n",
@@ -187,7 +187,7 @@ def test_project_registry_root_supplies_legacy_domain_context(workspace: Path) -
     domain.mkdir()
     (domain / "_领域.md").write_text(
         "---\nname: Legacy\ndomain_id: project-legacy\n"
-        "domain_type: project-domain\ngovernance: project-docs\n"
+        "domain_type: project-domain\n"
         "moc: MOC-Legacy\nstatus: active\n---\n",
         encoding="utf-8",
     )

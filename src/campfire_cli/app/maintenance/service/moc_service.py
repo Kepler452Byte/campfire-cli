@@ -20,11 +20,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 
 from campfire_cli.app.workspace.schema.workspace_schema import Domain
-from campfire_cli.app.workspace.service.structure_service import parse_marker as parse_frontmatter
-from campfire_cli.config.defaults import config_section
 
 START_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:START -->"
 END_MARKER = "<!-- AUTO-GENERATED:DOMAIN-INDEX:END -->"
@@ -46,16 +43,16 @@ def direct_templates(domain: Domain) -> list[Path]:
     return sorted(directory.glob("模板-*.md"), key=lambda path: path.name.casefold())
 
 
-def template_link(domain: Domain, template: Path) -> str:
+def moc_link(domain: Domain, target: Path) -> str:
     moc_directory = (domain.path / f"{domain.moc}.md").parent
-    return Path(os.path.relpath(template.with_suffix(""), moc_directory)).as_posix()
+    return Path(os.path.relpath(target.with_suffix(""), moc_directory)).as_posix()
 
 
 def append_template_section(lines: list[str], domain: Domain, templates: list[Path]) -> None:
     if not templates:
         return
     lines.extend(["", "## 文档模板", ""])
-    lines.extend(f"- [[{template_link(domain, item)}|{item.stem}]]" for item in templates)
+    lines.extend(f"- [[{moc_link(domain, item)}|{item.stem}]]" for item in templates)
 
 
 def replace_generated_region(original: str, generated: str) -> str:
@@ -80,66 +77,20 @@ def generate_domain_content(
     )
     parent = next((item for item in domains if item.id == domain.parent_domain), None)
     lines = ["## 领域位置", ""]
-    lines.append(f"- 父领域：[[{parent.moc}|{parent.name}]]" if parent else "- 父领域：当前治理根")
+    lines.append(
+        f"- 父领域：[[{moc_link(domain, parent.path / (parent.moc + '.md'))}|{parent.name}]]"
+        if parent
+        else "- 父领域：当前治理根"
+    )
     lines.extend(["", "## 子领域", ""])
-    lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
+    lines.extend(
+        [
+            f"- [[{moc_link(domain, child.path / (child.moc + '.md'))}|{child.name}]]"
+            for child in children
+        ]
+        or ["- 暂无"]
+    )
     lines.extend(["", "## 本领域文档", ""])
-    lines.extend([f"- [[{note.stem}]]" for note in notes] or ["- 暂无"])
+    lines.extend([f"- [[{moc_link(domain, note)}|{note.stem}]]" for note in notes] or ["- 暂无"])
     append_template_section(lines, domain, templates)
     return "\n".join(lines)
-
-
-def generate_project_domain_content(
-    domain: Domain,
-    domains: list[Domain],
-    notes: list[Path],
-    templates: list[Path],
-    marker_name: str,
-    project_groups: list[dict[str, Any]] | None = None,
-) -> str:
-    """project-docs 领域的 MOC 自动区域：按文档类型分组并列出状态，不计算相似度关系。"""
-    children = sorted(
-        [item for item in domains if item.parent_domain == domain.id],
-        key=lambda item: item.name.casefold(),
-    )
-    parent = next((item for item in domains if item.id == domain.parent_domain), None)
-    lines = ["## 领域位置", ""]
-    lines.append(f"- 父领域：[[{parent.moc}|{parent.name}]]" if parent else "- 父领域：当前治理根")
-    lines.extend(["", "## 子领域", ""])
-    lines.extend([f"- [[{child.moc}|{child.name}]]" for child in children] or ["- 暂无"])
-    lines.extend(["", "## 文档索引", ""])
-    if project_groups is None:
-        project_groups = config_section("moc").get("project_groups", [])
-    group_by_type = {
-        document_type: group["label"]
-        for group in project_groups
-        for document_type in group.get("types", [])
-    }
-    by_group: dict[str, list[tuple[Path, str]]] = {}
-    for note in notes:
-        if note.name in {"README.md", "CLAUDE.md"}:
-            continue
-        meta = parse_frontmatter(note)
-        doc_type = meta.get("type", "") if meta else ""
-        status = meta.get("document_status", "") if meta else ""
-        if not meta:
-            status = "缺 frontmatter"
-        group = group_by_type.get(doc_type, "未分类")
-        by_group.setdefault(group, []).append((note, status))
-    for group in [*(item["label"] for item in project_groups), "未分类"]:
-        entries = sorted(by_group.get(group, []), key=lambda item: item[0].name.casefold())
-        if not entries:
-            continue
-        lines.extend([f"### {group}", ""])
-        for note, status in entries:
-            suffix = f" `{status}`" if status else ""
-            lines.append(f"- [[{note.stem}]]{suffix}")
-        lines.append("")
-    record_dirs = [d for d in ["记录", "_总览"] if (domain.path / d).is_dir()]
-    for d in record_dirs:
-        count = len(list((domain.path / d).rglob("*.md")))
-        if count:
-            lines.extend([f"### {d}/", "", f"- {count} 篇，见目录", ""])
-    append_template_section(lines, domain, templates)
-    lines.append("")
-    return "\n".join(lines).rstrip()

@@ -303,7 +303,7 @@ class DomainService:
                     continue
                 meta = parse_marker(marker)
                 relative = marker.relative_to(self.root).as_posix()
-                for field in ("project", "project_id"):
+                for field in ("project", "project_id", "governance"):
                     if field in meta:
                         issues.append(
                             {
@@ -312,7 +312,7 @@ class DomainService:
                                 "detail": field,
                             }
                         )
-                required = ("name", "domain_id", "domain_type", "governance", "moc", "status")
+                required = ("name", "domain_id", "domain_type", "moc", "status")
                 for field in required:
                     if not meta.get(field):
                         issues.append(
@@ -336,7 +336,6 @@ class DomainService:
                         path=marker.parent,
                         space_id=space.id,
                         type=meta.get("domain_type", ""),
-                        governance=meta.get("governance", ""),
                         moc=meta.get("moc", "").replace("[[", "").replace("]]", ""),
                         parent_domain=meta.get("parent_domain") or None,
                         status=meta.get("status", "active"),
@@ -380,14 +379,6 @@ class DomainService:
                             "detail": item.parent_domain,
                         }
                     )
-                elif item.governance != parent.governance:
-                    issues.append(
-                        {
-                            "code": "domain-governance-mismatch",
-                            "path": item.path.relative_to(self.root).as_posix(),
-                            "detail": parent.governance,
-                        }
-                    )
             moc = item.path / f"{item.moc}.md"
             if item.moc and not moc.is_file():
                 issues.append(
@@ -416,7 +407,6 @@ class DomainService:
                 "name",
                 "domain_id",
                 "domain_type",
-                "governance",
                 "moc",
                 "parent_domain",
                 "status",
@@ -445,7 +435,6 @@ class DomainService:
         name: str,
         path: str,
         domain_type: str,
-        governance: str | None = None,
         project_id: str | None = None,
         confirm: bool = False,
     ) -> DomainCreateResult:
@@ -454,7 +443,6 @@ class DomainService:
             name=name,
             path=path,
             domain_type=domain_type,
-            governance=governance,
             project_id=project_id,
             confirm=confirm,
         )
@@ -466,7 +454,6 @@ class DomainService:
         name: str,
         path: str,
         domain_type: str,
-        governance: str | None,
         project_id: str | None,
         confirm: bool,
     ) -> DomainCreateResult:
@@ -490,14 +477,9 @@ class DomainService:
         parents = [item for item in existing if item.path in target.parents]
         parent = max(parents, key=lambda item: len(item.path.parts)) if parents else None
         if parent:
-            if governance and governance != parent.governance:
-                raise ConfigurationError("子 Domain 必须继承父 Domain 的 governance")
             if project_id and parent.project_id and project_id != parent.project_id:
                 raise ConfigurationError("显式 Project 与父 Domain 继承的 Project 冲突")
-            governance = parent.governance
             project_id = parent.project_id or project_id
-        elif not governance:
-            raise ConfigurationError("根 Domain 必须提供 governance")
         moc = f"_总览/MOC-{name}总览"
         domain = Domain(
             id=domain_id,
@@ -505,7 +487,6 @@ class DomainService:
             path=target,
             space_id=space.id,
             type=domain_type,
-            governance=governance,
             moc=moc,
             parent_domain=parent.id if parent else None,
             project_id=project_id,
@@ -545,7 +526,6 @@ class DomainService:
                 f"{DECLARATION_MANAGED_COMMENT}\n",
                 f"name: {json.dumps(domain.name, ensure_ascii=False)}\n",
                 f"domain_id: {domain.id}\ndomain_type: {domain.type}\n",
-                f"governance: {domain.governance}\n",
                 f'moc: "[[{domain.moc}]]"\n',
                 optional,
                 "status: active\n---\n\n",
@@ -558,20 +538,13 @@ class DomainService:
     @staticmethod
     def render_moc(domain: Domain) -> str:
         today = date.today().isoformat()
-        project_identity = ""
-        project_lifecycle = ""
-        if domain.governance == "project-docs":
-            project_identity = f"project: {domain.project_id}\ndomain: {domain.id}\n"
-            project_lifecycle = "lifecycle: maintained\n"
         return "".join(
             [
                 "---\n",
                 f"name: {json.dumps(domain.name + '总览', ensure_ascii=False)}\n",
                 f"description: {json.dumps(domain.name + '领域导航入口。', ensure_ascii=False)}\n",
                 "type: moc\n",
-                project_identity,
                 "document_status: current\n",
-                project_lifecycle,
                 f"created: {today}\nupdated: {today}\n",
                 "tags: []\n---\n\n",
                 f"# {domain.name}总览\n\n",

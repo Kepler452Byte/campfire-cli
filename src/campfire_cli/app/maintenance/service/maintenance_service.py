@@ -243,18 +243,9 @@ class MaintenanceService:
         for domain in sorted(domains, key=lambda item: item.id):
             notes = notes_by_domain[domain.id]
             note_count += len(notes)
-            if domain.governance == "project-docs":
-                generated = governance_sync.generate_project_domain_content(
-                    domain,
-                    domains,
-                    notes,
-                    templates_by_domain[domain.id],
-                    marker_name,
-                )
-            else:
-                generated = governance_sync.generate_domain_content(
-                    domain, domains, notes, templates_by_domain[domain.id]
-                )
+            generated = governance_sync.generate_domain_content(
+                domain, domains, notes, templates_by_domain[domain.id]
+            )
             moc = domain.path / f"{domain.moc}.md"
             if not moc.is_file():
                 return MaintenanceResult(
@@ -436,7 +427,6 @@ class MaintenanceService:
                     name=domain.name,
                     path=domain.path.relative_to(self._settings.vault_root).as_posix(),
                     domain_type=domain.type,
-                    governance=domain.governance,
                     moc=domain.moc,
                     status=domain.status,
                     source_hash=file_sha256(marker),

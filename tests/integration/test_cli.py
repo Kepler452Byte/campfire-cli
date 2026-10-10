@@ -292,7 +292,7 @@ def test_relationships_follow_rename_move_and_retype(workspace: Path) -> None:
         domain.mkdir()
         (domain / "_领域.md").write_text(
             f"---\nname: {name}\ndomain_id: {name.lower()}\ndomain_type: knowledge-domain\n"
-            f"governance: knowledge-docs\nmoc: MOC-{name}\nstatus: active\n---\n",
+            f"moc: MOC-{name}\nstatus: active\n---\n",
             encoding="utf-8",
         )
 

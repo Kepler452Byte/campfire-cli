@@ -75,8 +75,6 @@ def test_custom_mapping_resolve_matches_apply_and_existing_path(workspace: Path)
         "mynote/Demo",
         "--type",
         "knowledge-domain",
-        "--governance",
-        "knowledge-base",
         "--confirm",
     )
     profile = invoke("document", "profile", "resolve", "--type", "knowledge")["profile"]

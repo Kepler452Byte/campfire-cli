@@ -43,7 +43,7 @@ class DomainState(BaseModel):
     name: str
     path: str
     domain_type: str
-    governance: str
+
     moc: str
     status: str
     source_hash: str

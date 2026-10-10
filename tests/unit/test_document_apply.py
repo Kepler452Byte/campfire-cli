@@ -19,7 +19,7 @@ def project_domain(workspace: Path) -> Path:
     domain.mkdir()
     (domain / "_领域.md").write_text(
         "---\nname: Example\ndomain_id: project-example\ndomain_type: project-domain\n"
-        "governance: project-docs\nmoc: MOC-Example\nstatus: active\n---\n",
+        "moc: MOC-Example\nstatus: active\n---\n",
         encoding="utf-8",
     )
     (workspace / ".campfire.yaml").write_text(

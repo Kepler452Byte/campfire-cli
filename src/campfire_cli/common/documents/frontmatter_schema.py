@@ -36,9 +36,8 @@ def parse_shape(text: str) -> tuple[dict[str, str], dict[str, str]]:
 def is_project_context(path: Path | None) -> bool:
     """Return whether a path belongs to a Project root declared by the Manifest.
 
-    A Domain's ``governance`` label and a document's legacy ``project`` field
-    are descriptive metadata, not the Project--Domain binding.  The Manifest
-    owns that binding through ``projects[].document_domain_id``.
+    Vault root ``.campfire.yaml`` owns the binding through
+    ``projects[].document_domain_id``; Domain classification does not alter rules.
     """
     if path is None:
         return False

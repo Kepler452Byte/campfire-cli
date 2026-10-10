@@ -43,7 +43,7 @@ def make_domain(vault: Path, domain_id: str, doc_count: int) -> None:
         f"name: {domain_id}\n"
         f"domain_id: {domain_id}\n"
         "domain_type: knowledge-domain\n"
-        "governance: knowledge-docs\n"
+        ""
         f'moc: "[[MOC-{domain_id}]]"\n'
         "status: active\n"
         "---\n",

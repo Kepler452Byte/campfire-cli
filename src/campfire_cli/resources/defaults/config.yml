@@ -131,32 +131,6 @@ frontmatter_schema:
       unknown_fields: report
       fields:
         human_decision_status: {kind: enum, required: true, default: pending, values: [pending, decided, deferred, cancelled]}
-moc:
-  project_groups:
-  - label: 任务
-    types:
-    - task
-  - label: 索引
-    types:
-    - moc
-  - label: 产品需求
-    types:
-    - prd
-  - label: 技术设计
-    types:
-    - trd
-  - label: 决策
-    types:
-    - decision
-  - label: 计划
-    types:
-    - plan
-  - label: 记录
-    types:
-    - record
-  - label: 看板
-    types:
-    - board
 project:
   version: 1
   statuses:
