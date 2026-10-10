@@ -17,46 +17,11 @@ Unfinished Git operations, manual staged changes, missing upstream and lock cont
 
 Workspace locking coordinates Campfire operations, not external editors or Git clients. Snapshot checks stop detected external changes; this is not a filesystem transaction. Stop concurrent Git automation on the same worktree, including Obsidian Git, before enabling this mechanism. Enablement authorizes submitting all eligible Vault changes, not just one document.
 
-## Linux example
+## Manage scheduled synchronization
 
-This is an optional user-managed example, not an automatically installed service. Replace the executable path and Workspace id with the actual local values. The timer interval is a user choice. The user service must have access to the same Git credentials, SSH agent and Campfire configuration as an interactive invocation; do not store tokens in unit files.
+Use the [system scheduling SOP](../src/campfire_cli/resources/skills/campfire-workspace-maintenance/references/git-sync-scheduling.md) for Linux systemd user timers, macOS LaunchAgents and Windows Task Scheduler. It covers inspection, creation, interval changes, pause/resume, removal and failure diagnosis. The same reference ships with `campfire-workspace-maintenance`; Agent hints route scheduling requests there.
 
-`~/.config/systemd/user/campfire-vault-sync.service`:
-
-```ini
-[Unit]
-Description=Synchronize personal Vault
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/campfire --workspace personal workspace git sync --confirm
-TimeoutStartSec=180
-```
-
-`~/.config/systemd/user/campfire-vault-sync.timer`:
-
-```ini
-[Unit]
-Description=Periodically synchronize personal Vault
-
-[Timer]
-OnStartupSec=2min
-OnUnitInactiveSec=5min
-Unit=campfire-vault-sync.service
-
-[Install]
-WantedBy=timers.target
-```
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now campfire-vault-sync.timer
-journalctl --user -u campfire-vault-sync.service
-# Turn automatic synchronization off:
-systemctl --user disable --now campfire-vault-sync.timer
-```
-
-A user timer runs while the user manager is active. For unattended operation after logout, an administrator can configure user lingering; this is not enabled by Campfire. Failures remain visible in the journal and service status; no new notification service is included. Other platforms can use their native schedulers to invoke the same command.
+Tasks are device-local and explicitly opt-in. Upgrades refresh instructions but do not create, replace or enable tasks. Scheduler registration alone does not prove remote synchronization. Desktop examples run in the user's active session; unattended server operation needs the corresponding system account and credential setup.
 
 ## Upgrading existing Vaults to 0.2.2
 
