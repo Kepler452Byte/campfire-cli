@@ -2,10 +2,25 @@
 
 Campfire 负责提交并推送 Vault；Tickwork 负责本机任务注册、三平台调度与执行记录。管理 Vault 定时同步时读取本页，再加载 `tickwork-task-management`。其他本机定时命令直接进入 Tickwork Skill，不需要 Campfire bootstrap。
 
+## 首次安装与 Agent 资源接入
+
+本机找不到 `tickwork` 时，先报告缺少可选工具。用户已授权安装或完成定时任务配置时，在当前用户环境安装 PyPI 包，要求 Python 3.12+：
+
+```sh
+uv tool install tickwork-cli
+tickwork --help
+tickwork doctor
+```
+
+复用本机已有的 uv；缺少安装工具时按 Tickwork README 的安装指引处理，不自动提升权限。安装后若命令仍不可用，核实工具可执行目录及 PATH，不重复安装。官方项目：https://github.com/Kepler452Byte/tickwork-cli 。
+
+若 `tickwork-task-management` Skill 尚未安装，使用 `tickwork agent install --help` 查询资源接入命令。`--agents-file` 和 `--skills-dir` 使用当前 Agent 实际加载的绝对路径；例如 Codex 常见位置为 `~/.agents/AGENTS.md` 和 `~/.agents/skills`，先核实，不写入另一个 Agent 的目录。先预览，再按授权携带本次 `--expected-plan` 与 `--confirm` 安装 Hint 和 Skill，随后读取安装的 Skill。资源接入不会创建或启用任务。
+
 ## 流程总览
 
 ```text
 定时同步需求 -> 核实 Workspace、范围、频率与已有入口
+             -> Tickwork 缺失时按授权安装并接入 Agent 资源
              -> Tickwork Skill：查询任务和调度能力
              -> 按授权预览并管理任务
              -> 核对调度状态、执行记录和 remote_synced
