@@ -34,8 +34,8 @@ printf '%s\n' "$demo"
 以下命令在上述两种 Shell 中相同。领域预览先检查路径和作用域，确认后创建。
 
 ```text
-campfire --workspace demo workspace domain create --id notes --name Notes --path mynote/Notes --type knowledge-domain --governance knowledge-base
-campfire --workspace demo workspace domain create --id notes --name Notes --path mynote/Notes --type knowledge-domain --governance knowledge-base --confirm
+campfire --workspace demo workspace domain create --id notes --name Notes --path mynote/Notes --type knowledge-domain
+campfire --workspace demo workspace domain create --id notes --name Notes --path mynote/Notes --type knowledge-domain --confirm
 campfire --workspace demo document apply --path mynote/Notes/Target.md --type knowledge --set description=Target
 campfire --workspace demo document apply --path mynote/Notes/Target.md --type knowledge --set description=Target --expected-hash missing --confirm
 campfire --workspace demo document apply --path mynote/Notes/Source.md --type knowledge --set description=Source --set 'related_docs=["[[mynote/Notes/知识-Target.md]]"]'

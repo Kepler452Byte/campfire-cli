@@ -15,7 +15,6 @@ def test_task_and_record_directories_can_be_domains(workspace: Path) -> None:
         name="任务",
         path="mywork/任务",
         domain_type="work-domain",
-        governance="work-docs",
         project_id=None,
         confirm=True,
     )
@@ -36,7 +35,6 @@ def test_task_and_record_directories_can_be_domains(workspace: Path) -> None:
         domain_id="records",
         name="记录",
         domain_type="work-domain",
-        governance="work-docs",
         confirm=True,
     )
     assert adopted.status == "adopted"
@@ -57,7 +55,6 @@ def test_reserved_domain_path_reports_the_matching_directory(
             name="Blocked",
             path=path,
             domain_type="work-domain",
-            governance="work-docs",
             project_id=None,
             confirm=False,
         )
@@ -76,7 +73,6 @@ def test_plain_directory_names_can_be_domains(workspace: Path, name: str) -> Non
         name=name,
         path=f"mywork/{name}",
         domain_type="work-domain",
-        governance="work-docs",
         project_id=None,
         confirm=True,
     )

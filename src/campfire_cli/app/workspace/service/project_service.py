@@ -75,7 +75,6 @@ class ProjectService:
             name=project.name,
             path=request.document_domain_path,
             domain_type="project-domain",
-            governance="project-docs",
             project_id=project.id,
             confirm=False,
         )
@@ -92,7 +91,6 @@ class ProjectService:
             name=project.name,
             path=request.document_domain_path,
             domain_type="project-domain",
-            governance="project-docs",
             project_id=project.id,
             confirm=True,
         )

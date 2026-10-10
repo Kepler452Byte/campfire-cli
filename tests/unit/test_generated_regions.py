@@ -4,7 +4,7 @@ import pytest
 
 from campfire_cli.app.maintenance.service.moc_service import (
     direct_templates,
-    generate_project_domain_content,
+    generate_domain_content,
     replace_generated_region,
 )
 from campfire_cli.app.workspace.schema.workspace_schema import Domain
@@ -50,18 +50,15 @@ def test_domain_moc_lists_only_templates_owned_by_that_domain(tmp_path) -> None:
         path=tmp_path,
         space_id="work",
         type="project-domain",
-        governance="project-docs",
         moc="MOC-Example",
     )
 
     templates = direct_templates(domain)
-    generated = generate_project_domain_content(
+    generated = generate_domain_content(
         domain,
         [domain],
         [],
         templates,
-        "_领域.md",
-        {},
     )
 
     assert templates == [template]
@@ -77,17 +74,32 @@ def test_domain_moc_omits_template_section_without_direct_templates(tmp_path) ->
         path=tmp_path,
         space_id="work",
         type="project-domain",
-        governance="project-docs",
         moc="MOC-Example",
     )
 
-    generated = generate_project_domain_content(
+    generated = generate_domain_content(
         domain,
         [domain],
         [],
         [],
-        "_领域.md",
-        {},
     )
 
     assert "## 文档模板" not in generated
+
+
+def test_all_domain_classifications_use_identical_moc_rules(tmp_path):
+    note = tmp_path / "知识-Note.md"
+    note.write_text("content", encoding="utf-8")
+    domain = Domain(
+        id="example",
+        name="Example",
+        path=tmp_path,
+        space_id="work",
+        type="knowledge-domain",
+        moc="_总览/MOC-Example",
+    )
+    project_domain = domain.model_copy(update={"type": "project-domain", "project_id": "example"})
+    plain = generate_domain_content(domain, [domain], [note], [])
+    project = generate_domain_content(project_domain, [project_domain], [note], [])
+    assert plain == project
+    assert "[[../知识-Note|知识-Note]]" in plain

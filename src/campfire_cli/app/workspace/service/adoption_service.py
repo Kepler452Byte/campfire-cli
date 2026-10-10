@@ -60,7 +60,6 @@ class AdoptionService:
         domain_id: str,
         name: str,
         domain_type: str,
-        governance: str | None = None,
         project_id: str | None = None,
         confirm: bool = False,
     ) -> AdoptionResult:
@@ -82,7 +81,6 @@ class AdoptionService:
             name=name,
             space_id=space_id,
             domain_type=domain_type,
-            governance=governance,
             project_id=project_id,
         )
         follow_up_scopes = [target_path]
@@ -181,7 +179,6 @@ class AdoptionService:
         name: str,
         space_id: str,
         domain_type: str,
-        governance: str | None,
         project_id: str | None,
     ) -> Domain:
         if not ID_RE.fullmatch(domain_id):
@@ -192,16 +189,9 @@ class AdoptionService:
         parents = [item for item in existing if item.path in target.parents]
         parent = max(parents, key=lambda item: len(item.path.parts)) if parents else None
         if parent:
-            if governance and parent.governance != governance:
-                raise ConfigurationError("子 Domain 必须继承父 Domain governance")
             if project_id and parent.project_id and project_id != parent.project_id:
                 raise ConfigurationError("显式 Project 与父 Domain 继承的 Project 冲突")
-            governance = parent.governance
             project_id = project_id or parent.project_id
-        elif not governance:
-            raise ConfigurationError("根 Domain 必须提供 governance")
-        if governance == "project-docs" and not project_id:
-            raise ConfigurationError("project-docs Domain 必须绑定或继承 Project id")
         if project_id and self._workspaces.get_project(project_id) is None:
             raise ConfigurationError(f"Project 未注册：{project_id}")
         if not name.strip():
@@ -212,7 +202,6 @@ class AdoptionService:
             path=target,
             space_id=space_id,
             type=domain_type,
-            governance=governance,
             moc=f"_总览/MOC-{name.strip()}总览",
             parent_domain=parent.id if parent else None,
             project_id=project_id,

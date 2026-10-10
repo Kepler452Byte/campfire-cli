@@ -122,8 +122,6 @@ class DomainRestructureService:
             parent = domains[0]
             if parent.id == domain.id or domain.path in parent.path.parents:
                 raise ConfigurationError("Domain 不能移动到自身或自己的子 Domain")
-            if parent.governance != domain.governance:
-                raise ConfigurationError("移动后的子 Domain 必须继承父 Domain governance")
             is_project_root = any(
                 project.document_domain_id == domain.id
                 for project in self._workspaces.list_projects(self._settings.workspace_id)
@@ -538,15 +536,6 @@ class DomainRestructureService:
             issues.append({"code": "domain-merge-same-domain", "path": source_relative})
         if source.path in target.path.parents:
             issues.append({"code": "domain-merge-target-inside-source", "path": source_relative})
-        if source.governance != target.governance:
-            issues.append(
-                {
-                    "code": "domain-merge-governance-conflict",
-                    "path": source_relative,
-                    "source": source.governance,
-                    "target": target.governance,
-                }
-            )
         source_is_project_root = any(
             project.document_domain_id == source.id
             for project in self._workspaces.list_projects(self._settings.workspace_id)

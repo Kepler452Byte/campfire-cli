@@ -147,7 +147,7 @@ class Domain(BaseModel):
     path: Path
     space_id: str
     type: str
-    governance: str
+
     moc: str
     parent_domain: str | None = None
     project_id: str | None = None

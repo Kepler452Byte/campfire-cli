@@ -20,7 +20,7 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
     domain.mkdir(parents=True)
     (domain / "_领域.md").write_text(
         "---\nname: perf-domain\ndomain_id: perf-domain\n"
-        "domain_type: knowledge-domain\ngovernance: knowledge-docs\n"
+        "domain_type: knowledge-domain\n"
         'moc: "[[MOC-perf-domain]]"\nstatus: active\n---\n',
         encoding="utf-8",
     )
@@ -45,7 +45,7 @@ def test_project_resolve_git_subprocesses_do_not_scale_with_registry(
         (domain_dir / "_领域.md").write_text(
             "---\n"
             f"name: {domain_id}\ndomain_id: {domain_id}\n"
-            "domain_type: project-domain\ngovernance: project-docs\n"
+            "domain_type: project-domain\n"
             f'moc: "[[MOC-{domain_id}]]"\nstatus: active\n---\n',
             encoding="utf-8",
         )

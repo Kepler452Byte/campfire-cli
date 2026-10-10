@@ -16,6 +16,7 @@ from campfire_cli.app.skill.service.skill_service import SkillService
 from campfire_cli.app.video.cli.video_cli import video_cli
 from campfire_cli.app.workspace.cli.config_cli import config_cli
 from campfire_cli.app.workspace.cli.domain_cli import domain_cli
+from campfire_cli.app.workspace.cli.git_cli import git_cli
 from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
@@ -65,6 +66,7 @@ app = typer.Typer(
     context_settings=CONTEXT_SETTINGS,
     cls=JsonTyperGroup,
 )
+workspace_cli.add_typer(git_cli, name="git")
 workspace_cli.add_typer(project_cli, name="project")
 workspace_cli.add_typer(space_cli, name="space")
 workspace_cli.add_typer(domain_cli, name="domain")

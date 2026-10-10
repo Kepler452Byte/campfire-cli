@@ -37,8 +37,6 @@ def test_relation_queries_and_sync_across_cli_processes(workspace: Path) -> None
         "mynote/Example",
         "--type",
         "knowledge-domain",
-        "--governance",
-        "knowledge-base",
         "--confirm",
     )
     target = "mynote/Example/知识-Target.md"

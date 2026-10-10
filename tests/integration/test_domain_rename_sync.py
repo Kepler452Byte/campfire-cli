@@ -34,7 +34,6 @@ def domain_tree(workspace: Path) -> AppContainer:
             name=domain_id,
             path=path,
             domain_type="knowledge-domain",
-            governance="knowledge-base",
             confirm=True,
         )
     container = AppContainer.build("test")
@@ -65,17 +64,16 @@ def indexed_paths(container: AppContainer) -> dict[str, str]:
     return {row.domain_id: row.path for row in session.scalars(select(WorkspaceDomain))}
 
 
-@pytest.mark.parametrize("governance", ["knowledge-base", "project-docs"])
+@pytest.mark.parametrize("domain_type", ["knowledge-domain", "project-domain"])
 @pytest.mark.parametrize("with_note", [False, True])
 def test_sync_keeps_moc_without_relation_pages(
-    workspace: Path, governance: str, with_note: bool
+    workspace: Path, domain_type: str, with_note: bool
 ) -> None:
     DomainService(workspace, campfire_home()).create(
         domain_id="example",
         name="Example",
         path="mynote/Example",
-        domain_type="knowledge-domain",
-        governance=governance,
+        domain_type=domain_type,
         confirm=True,
     )
     container = AppContainer.build("test")
@@ -96,7 +94,7 @@ def test_sync_keeps_moc_without_relation_pages(
     assert "## 子领域" in moc
     assert "## 自动关系" not in moc
     if with_note:
-        assert "[[知识-Note]]" in moc
+        assert "[[../知识-Note|知识-Note]]" in moc
     assert container.maintenance.sync(scope="mynote/Example").generated_file_count == 0
 
 
@@ -124,7 +122,7 @@ def test_sync_preserves_legacy_files_and_authored_links(
     updated = moc.read_text(encoding="utf-8")
     assert "## 自动关系" not in updated
     assert updated.endswith("Authored link: [[相关文档-child]]\n")
-    assert "[[知识-说明]]" in updated
+    assert "[[../知识-说明|知识-说明]]" in updated
     assert {p: p.read_bytes() for p in original_files} == original_files
     assert all("_generated" not in op["path"] for op in result.operations)
     assert domain_tree.maintenance.sync(scope="mynote/金融").generated_file_count == 0
@@ -300,7 +298,6 @@ def test_case_only_rename_is_explicit(workspace: Path, domain_tree: AppContainer
         name="Case",
         path="mynote/Case",
         domain_type="knowledge-domain",
-        governance="knowledge-base",
         confirm=True,
     )
     if (workspace / "mynote/case").exists():
@@ -340,7 +337,6 @@ def test_project_binding_survives_folder_rename(workspace: Path) -> None:
         name="Project",
         path="mywork/Project",
         domain_type="project-domain",
-        governance="project-docs",
         confirm=True,
     )
     manifest = workspace / ".campfire.yaml"

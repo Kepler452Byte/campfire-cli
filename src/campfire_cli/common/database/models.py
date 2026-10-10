@@ -49,7 +49,6 @@ class WorkspaceDomain(Base):
     name: Mapped[str] = mapped_column(String(160))
     path: Mapped[str] = mapped_column(Text)
     domain_type: Mapped[str] = mapped_column(String(64))
-    governance: Mapped[str] = mapped_column(String(64))
     moc: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24))
     source_hash: Mapped[str] = mapped_column(String(64))

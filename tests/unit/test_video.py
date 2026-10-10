@@ -348,8 +348,6 @@ def test_deliver_cli_reuses_document_governance(media, tmp_path):
             "mynote/Learning",
             "--type",
             "knowledge-domain",
-            "--governance",
-            "knowledge-docs",
             "--confirm",
         ]
     )

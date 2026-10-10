@@ -60,9 +60,6 @@ def create(
     name: str = typer.Option(..., "--name", help="Domain 显示名称"),
     path: str = typer.Option(..., "--path", help="待创建 Domain 的 Workspace 相对路径"),
     domain_type: str = typer.Option(..., "--type", help="Domain 类型"),
-    governance: str | None = typer.Option(
-        None, "--governance", help="根 Domain 必填；嵌套 Domain 自动继承"
-    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(
@@ -72,7 +69,6 @@ def create(
                 name=name,
                 path=path,
                 domain_type=domain_type,
-                governance=governance,
                 project_id=None,
                 confirm=confirm,
             )
@@ -90,9 +86,6 @@ def adopt(
         None, "--target-path", help="外部来源必填；内部来源省略时原地接管"
     ),
     domain_type: str = typer.Option(..., "--type", help="Domain 类型"),
-    governance: str | None = typer.Option(
-        None, "--governance", help="根 Domain 必填；嵌套 Domain 自动继承"
-    ),
     confirm: bool = typer.Option(False, "--confirm"),
 ) -> None:
     emit(
@@ -103,7 +96,6 @@ def adopt(
                 name=name,
                 target_path=target_path,
                 domain_type=domain_type,
-                governance=governance,
                 project_id=None,
                 confirm=confirm,
             )
