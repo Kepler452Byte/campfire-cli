@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from campfire_cli.common.agent_hints import (
+from campfire_cli.app.agent_resources.service.agent_hints import (
     HINT_END,
     HINT_START,
     inject_agent_hint,

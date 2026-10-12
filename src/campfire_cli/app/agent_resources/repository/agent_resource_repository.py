@@ -6,7 +6,7 @@ from pathlib import Path
 from campfire_cli.common.filesystem import atomic_write
 
 
-class SkillRepository:
+class AgentResourceRepository:
     def source_root(self) -> Path:
         return Path(str(files("campfire_cli.resources") / "skills"))
 

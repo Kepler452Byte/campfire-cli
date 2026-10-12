@@ -7,7 +7,7 @@
 ```text
 CLI delivery adapter
         ↓
-AppContainer 组合根，承担跨 App 编排
+AppContainer 组合根，装配 System 与业务服务
         ↓
 Document / Workspace Restructure / Maintenance Service
         ↓
@@ -19,7 +19,7 @@ SQLite / Filesystem Implementation
 - `app/` 放业务模块与 CLI 适配器。
 - `common/` 放两个 App 共同使用的文档治理原子能力和技术机制。
 - `config/` 放随 Workspace 或运行环境变化的配置。
-- 跨 App 的用例编排放 `AppContainer` 组合根，`setup` 与 `upgrade` 是当前实例；CLI 不编排跨服务流程，单个 App Service 不直接调用其他 App 的 Service。
+- 系统用例的跨模块编排放 `app/system`；`AppContainer` 只装配并持有依赖。System 消费业务模块的公开能力，不复制业务规则；CLI 不编排跨服务流程。
 - 纯技术机制放 `common/`，例如网络查询、版本比较与进程编排；不得包含治理业务语义，也不得反向依赖 `app/`。
 - `resources/defaults/config.yml` 是产品默认规则的唯一 SSOT；Service 不得重复声明可演进的目录、类型、状态、归档或 Issue 规则。
 - CLI 通过用户级 registry 管理多个 Workspace，不依赖任何 Workspace 内的工具目录。

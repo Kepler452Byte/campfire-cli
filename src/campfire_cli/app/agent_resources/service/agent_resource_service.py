@@ -3,8 +3,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from campfire_cli.app.skill.repository.skill_repository import SkillRepository
-from campfire_cli.app.skill.schema.skill_schema import SkillInfo, SkillResult
+from campfire_cli.app.agent_resources.repository.agent_resource_repository import (
+    AgentResourceRepository,
+)
+from campfire_cli.app.agent_resources.schema.agent_resource_schema import SkillInfo, SkillResult
 from campfire_cli.common.governance import enrich_issue, optimistic_write_lock
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.defaults import config_section
@@ -14,8 +16,8 @@ NAME_RE = re.compile(r"^name:\s*[\"']?([^\n\"']+)", re.MULTILINE)
 DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?([^\n\"']+)", re.MULTILINE)
 
 
-class SkillService:
-    def __init__(self, settings: WorkspaceSettings, repository: SkillRepository) -> None:
+class AgentResourceService:
+    def __init__(self, settings: WorkspaceSettings, repository: AgentResourceRepository) -> None:
         self._settings = settings
         self._repository = repository
 

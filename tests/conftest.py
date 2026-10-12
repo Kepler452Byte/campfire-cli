@@ -34,8 +34,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "_收件箱").mkdir()
     (tmp_path / "_待用户确认").mkdir()
     (tmp_path / ".campfire.yaml").write_text(
-        "workspace:\n  id: test\n  name: Test\n"
-        "  governance_version: 1\nprojects: []\n",
+        "workspace:\n  id: test\n  name: Test\n  governance_version: 1\nprojects: []\n",
         encoding="utf-8",
     )
     FilesystemWorkspaceRepository(campfire_home).save_registry(

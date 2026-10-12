@@ -178,7 +178,9 @@ def test_starter_templates_are_created_once_and_not_synced(tmp_path, monkeypatch
     task.write_text(modified, encoding="utf-8")
     (root / "_模板/模板-版本发布清单.md").unlink()
     invoke("setup", "--path", str(root))
-    monkeypatch.setattr("campfire_cli.container.fetch_latest_version", lambda _: None)
+    monkeypatch.setattr(
+        "campfire_cli.app.system.service.system_service.fetch_latest_version", lambda _: None
+    )
     invoke("upgrade", "--skip-package")
     assert task.read_text(encoding="utf-8") == modified
     assert not (root / "_模板/模板-版本发布清单.md").exists()

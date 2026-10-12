@@ -7,6 +7,7 @@
 - `document/`：文档自身、文档规则以及面向用户和 Agent 的文档命令。
 - `maintenance/`：新增与变更文档的持续维护和派生视图同步。
 - `workspace/`：注册、初始化、解析和选择多个 Workspace，并通过扁平的 Restructure Service 执行一次性、大规模、批次化结构重构。
-- `skill/`：Campfire SOP Skill 的发现、加载、校验和同步。
+- `agent_resources/`：Campfire SOP Skill 的发现、加载、校验、路径匹配与全局资源同步。
+- `system/`：版本、命令发现、本机初始化与升级的跨模块编排。
 - `base/`：Obsidian Base 标准治理视图。
 - `video/`：实验性的本地视频素材准备、草稿校验与图文交付。

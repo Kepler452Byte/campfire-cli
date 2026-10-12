@@ -26,7 +26,7 @@ def test_manifest_rejects_removed_project_domain_path_field() -> None:
     with pytest.raises(ValueError, match="document_domain"):
         WorkspaceManifest.model_validate(
             {
-                    "workspace": {"id": "personal", "name": "Personal"},
+                "workspace": {"id": "personal", "name": "Personal"},
                 "projects": [
                     {
                         "id": "campfire-cli",

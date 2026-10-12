@@ -32,9 +32,7 @@ def ignored_directory(name: str, config: dict[str, Any]) -> bool:
         for part in PurePosixPath(raw_root).parts
         if part.startswith("_")
     }
-    return name.startswith(".") or (
-        name.startswith("_") and name not in managed_system_directories
-    )
+    return name.startswith(".") or (name.startswith("_") and name not in managed_system_directories)
 
 
 def iter_documents(

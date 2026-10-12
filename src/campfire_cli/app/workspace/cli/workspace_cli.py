@@ -51,7 +51,11 @@ def create(
     )
     demo_request = invoke(lambda: _demo_request(demo, workspace_id))
     created = invoke(lambda: service().create(request))
-    setup = invoke(lambda: AppContainer.setup(Path(created.workspace), make_default, workspace_id))
+    setup = invoke(
+        lambda: AppContainer.build_system().setup(
+            Path(created.workspace), make_default, workspace_id
+        )
+    )
     demo_result = (
         invoke(
             lambda: ProjectService(
