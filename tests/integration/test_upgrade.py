@@ -58,6 +58,17 @@ def test_invalid_hint_preflight_is_queryable(tmp_path):
     assert queried["resources"]["skills"]["issues"][0]["code"] == "invalid-markers"
 
 
+def test_invalid_operation_id_has_input_contract(tmp_path):
+    result = CliRunner().invoke(app, ["agent", "upgrade-status", "../outside"])
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert payload["code"] == "invalid-input"
+    assert payload["field"] == "operation_id"
+    assert payload["expected_type"] == "string"
+    assert not (tmp_path / "campfire-home").exists()
+
+
 def test_multiple_workspaces_report_failure_and_preserve_templates(workspace):
     repository = FilesystemWorkspaceRepository(workspace / "_campfire")
     registry = repository.load_registry()

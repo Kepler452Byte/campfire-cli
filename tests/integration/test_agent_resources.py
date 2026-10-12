@@ -132,3 +132,11 @@ def test_symlink_target_is_rejected(tmp_path, monkeypatch):
     with pytest.raises(GovernanceBlockedError):
         AppContainer.build_skill().align()
     assert list(actual.iterdir()) == []
+
+
+def test_internal_state_target_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("CAMPFIRE_SKILL_TARGETS", str(tmp_path / "campfire-home" / "skills"))
+    with pytest.raises(GovernanceBlockedError) as error:
+        AppContainer.build_skill().align()
+    assert error.value.code == "unsafe-path"
+    assert not (tmp_path / "campfire-home").exists()

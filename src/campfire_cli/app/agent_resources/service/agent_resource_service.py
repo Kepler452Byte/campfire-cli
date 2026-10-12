@@ -178,7 +178,7 @@ class AgentResourceService:
         for location in [*skills, *hints]:
             if self.repository.resolve(Path(location)).is_relative_to(self.state_root):
                 raise GovernanceBlockedError(
-                    "Agent targets must be outside internal CLI state", "unsafe-path"
+                    "Agent targets must be outside internal CLI state", code="unsafe-path"
                 )
         old = {item.path: item for item in registry.files if include_hints or item.kind != "hint"}
         desired: dict[str, tuple[bytes, str]] = {}

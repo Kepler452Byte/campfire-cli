@@ -14,7 +14,7 @@ from hashlib import sha256
 from importlib import metadata
 from pathlib import Path
 
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.exceptions import AppError, InputError
 from campfire_cli.common.filesystem.resource_files import (
     atomic_write,
     read_bytes,
@@ -191,7 +191,14 @@ class PackageUpdater:
 
     def status(self, operation_id: str) -> dict[str, object]:
         if not re.fullmatch(r"[a-f0-9]{32}", operation_id):
-            raise AppError("Invalid upgrade operation ID", code="invalid-input")
+            raise InputError(
+                "Invalid upgrade operation ID",
+                code="invalid-input",
+                field="operation_id",
+                expected_type="string",
+                pattern="^[a-f0-9]{32}$",
+                hint="Use the operation_id returned by campfire upgrade",
+            )
         path = self.state_root / "upgrades" / operation_id / "result.json"
         raw = read_bytes(path)
         if raw is None:
