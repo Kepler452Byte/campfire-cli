@@ -38,7 +38,7 @@ def check_tag(version: str) -> None:
 
 def smoke_test_wheel(version: str, artifact_dir: Path | None = None) -> None:
     with tempfile.TemporaryDirectory(prefix="campfire-quality-") as raw_directory:
-        directory = Path(raw_directory)
+        directory = Path(raw_directory).resolve()
         dist = artifact_dir or directory / "dist"
         if artifact_dir is not None and dist.exists() and any(dist.iterdir()):
             raise SystemExit(f"artifact directory must be empty: {dist}")

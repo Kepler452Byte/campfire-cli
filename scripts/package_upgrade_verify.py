@@ -34,7 +34,7 @@ def archive(ref: str, target: Path) -> None:
 
 def verify(manager: str, baseline: str = "v0.2.5") -> dict:
     with tempfile.TemporaryDirectory(prefix="campfire upgrade ") as raw:
-        root = Path(raw)
+        root = Path(raw).resolve()
         source = root / "source with spaces"
         candidate = root / "candidate"
         archive(baseline, source)
@@ -86,12 +86,14 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
         started = subprocess.run(
             [str(python), "-c", host],
             env=environment,
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
             encoding="utf-8",
             timeout=30,
         )
+        if started.returncode:
+            raise RuntimeError(started.stderr or started.stdout)
         operation = json.loads(started.stdout)
         result_path = root / "state" / "upgrades" / operation["operation_id"] / "result.json"
         deadline = time.monotonic() + 240
