@@ -37,4 +37,7 @@ def check(ctx: typer.Context) -> None:
 @skill_cli.command("sync")
 def sync(ctx: typer.Context, dry_run: bool = typer.Option(False, "--dry-run")) -> None:
     """将托管 Skill 从包内 SSOT 确定性同步到全局 Agent 目录。"""
-    emit(ctx.obj.skill.sync(dry_run))
+    result = ctx.obj.skill.sync(dry_run)
+    emit(result, err=result.status == "blocked")
+    if result.status == "blocked":
+        raise typer.Exit(3)

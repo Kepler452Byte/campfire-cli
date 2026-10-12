@@ -30,10 +30,8 @@ from campfire_cli.app.workspace.service.restructure_service import RestructureSe
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.database import create_sqlite_engine, initialize_database, open_session
 from campfire_cli.common.database.models import Workspace
-from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem.cwd import safe_cwd
-from campfire_cli.config.defaults import effective_config
-from campfire_cli.config.settings import WorkspaceSettings, campfire_home
+from campfire_cli.config.settings import AgentResourceSettings, WorkspaceSettings, campfire_home
 
 
 @dataclass
@@ -94,24 +92,19 @@ class AppContainer:
         return SystemService(cls.build, cls.build_skill())
 
     @classmethod
+    def build_upgrade(cls):
+        from campfire_cli.app.system.service.upgrade_service import UpgradeService
+        from campfire_cli.common.package_updater import PackageUpdater
+
+        return UpgradeService(
+            cls.build_system(), PackageUpdater("campfire-cli", "campfire", campfire_home())
+        )
+
+    @classmethod
     def build_skill(cls) -> AgentResourceService:
         """Build the global Skill service without requiring a registered Workspace."""
-        home = campfire_home()
-        try:
-            config = effective_config(home / "config.yml")
-        except (OSError, ValueError) as exc:
-            raise ConfigurationError(f"无法加载 Campfire config.yml：{exc}") from exc
-        settings = WorkspaceSettings(
-            workspace_id="",
-            vault_root=home,
-            state_root=home,
-            governance=config["governance"],
-            document_types=config["document_types"],
-            frontmatter_schema=config["frontmatter_schema"],
-            skills=config["skills"],
-            bases=config["bases"],
-        )
-        return AgentResourceService(settings, AgentResourceRepository())
+        settings = AgentResourceSettings.load()
+        return AgentResourceService(settings, AgentResourceRepository(settings.state_root))
 
     @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:
@@ -147,7 +140,7 @@ class AppContainer:
             settings,
             workspace_repository,
         )
-        skill = AgentResourceService(settings, AgentResourceRepository())
+        skill = cls.build_skill()
         base = BaseService(settings, BaseRepository())
         return cls(
             settings=settings,

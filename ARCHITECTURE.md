@@ -46,6 +46,8 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
 
 ## 4. 系统架构
 
+`app/system` 编排本机接入、包更新与资源核验，`app/agent_resources` 管理全局 Skill 与 Hint。资源登记是本机所有权记录，不是历史内容数据库；Hint 块外正文与用户新增附属文件属于用户。`common` 提供安装渠道识别、隔离进程、文件锁和字节写入机制，不解释资源覆盖策略。后台升级必须由新版核验安装版本和逐 Workspace 结果，启动不能作为完成证据。
+
 本地视频能力由 `app/video` 承担素材准备与交付校验，`common/media` 提供模型下载、媒体探测与语音转写机制；可选原生处理依赖在独立子进程中延迟加载。`AppContainer.deliver_video` 组合文档治理检查与视频交付，不让 Video Service 调用 Document Service。文档结构仍由 `document apply` 创建，正文复用文件变更集及乐观锁；没有新的数据库、独立下载服务或模型调度器。语义整理留给宿主 Agent 与内置 Skill，结构检查不等于语义保真验收。
 
 ```text

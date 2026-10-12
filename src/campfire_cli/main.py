@@ -11,7 +11,7 @@ from campfire_cli.app.agent_resources.service.agent_resource_service import Agen
 from campfire_cli.app.base.cli.base_cli import base_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
-from campfire_cli.app.system.cli.system_cli import register_system_commands
+from campfire_cli.app.system.cli.system_cli import register_system_commands, version_option
 from campfire_cli.app.video.cli.video_cli import video_cli
 from campfire_cli.app.workspace.cli.config_cli import config_cli
 from campfire_cli.app.workspace.cli.domain_cli import domain_cli
@@ -83,6 +83,14 @@ app.add_typer(video_cli, name="video")
 def main(
     ctx: typer.Context,
     workspace: str | None = typer.Option(None, "--workspace", help="已注册 Workspace 的稳定 id"),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=version_option,
+        is_eager=True,
+        help="显示安装包版本并退出",
+    ),
 ) -> None:
     """初始化目标 Workspace 的应用依赖。"""
     if ctx.invoked_subcommand in {None, "version", "setup", "workspace", "document"}:

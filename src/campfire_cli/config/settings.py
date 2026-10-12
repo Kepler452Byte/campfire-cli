@@ -48,3 +48,33 @@ class WorkspaceSettings:
             skills=config["skills"],
             bases=config["bases"],
         )
+
+
+@dataclass(frozen=True)
+class AgentResourceSettings:
+    state_root: Path
+    targets: list[Path]
+    hints: list[Path]
+    managed_skills: list[str]
+
+    @classmethod
+    def load(cls) -> AgentResourceSettings:
+        home = campfire_home()
+        try:
+            skills = effective_config(home / "config.yml")["skills"]
+        except (OSError, ValueError) as exc:
+            raise ConfigurationError(f"无法加载 Campfire config.yml：{exc}") from exc
+        override = os.environ.get("CAMPFIRE_SKILL_TARGETS")
+        values = override.split(os.pathsep) if override else skills.get("targets", [])
+        hint_override = os.environ.get("CAMPFIRE_AGENT_HINT_PATH")
+        hints = (
+            hint_override.split(os.pathsep)
+            if hint_override
+            else ["~/.claude/CLAUDE.md", "~/.agents/AGENTS.md"]
+        )
+        return cls(
+            home,
+            [Path(v).expanduser().absolute() for v in values if v],
+            [Path(v).expanduser().absolute() for v in hints if v],
+            list(skills.get("managed_skills", [])),
+        )

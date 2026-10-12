@@ -1,5 +1,14 @@
 # 版本记录
 
+## 0.2.6 — 2026-10-12
+
+- 系统命令与跨模块编排迁入 System，Skill 与 Hint 收敛为 Agent Resources；全局资源不再依赖空 Workspace 配置。
+- 增加 --version/-V、公开离线 upgrade --skip-package 与 agent upgrade-status，包和资源阶段分别持久化，启动只报告 planned。
+- 通过安装登记识别 uv tool/pipx，隔离 worker 等待宿主退出并使用参数数组更新；新版身份和版本验证通过后才对齐资源。
+- 旧托管资源可直接接管；登记文件随包清理，用户新增文件保留。Hint 拒绝异常标记，块外原始字节与 CRLF 保留，附属文件按字节分发。
+- 部分资源失败、Workspace 不可访问与配置失败不再汇总为 ok；blocked 输出 stderr 单行 JSON 并退出 3。版本 JSON 新增 package 字段，依赖完整对象相等的调用方须更新。
+- 本轮按已确认清单采用 0.2.6，新增公共能力作为次版本规则的明确例外；不转换旧配置，不覆盖 Workspace 模板，不启用定时任务。
+
 ## 0.2.5 — 2026-10-10
 
 [PyPI 安装包](https://pypi.org/project/campfire-cli/0.2.5/) · [GitHub Release](https://github.com/Kepler452Byte/campfire-cli/releases/tag/v0.2.5) · [三平台发布与公开安装验证](https://github.com/Kepler452Byte/campfire-cli/actions/runs/38041662695)

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from campfire_cli.app.agent_resources.service.agent_hints import (
-    HINT_END,
-    HINT_START,
-    inject_agent_hint,
-)
+from campfire_cli.container import AppContainer
+
+HINT_START = "<!-- campfire:agent-hints:start -->"
+HINT_END = "<!-- campfire:agent-hints:end -->"
+
+
+def inject_agent_hint(path: Path) -> str:
+    os.environ["CAMPFIRE_AGENT_HINT_PATH"] = str(path)
+    result = AppContainer.build_skill().align()
+    assert result["skills"]["status"] == "synced", result
+    return next(item["action"] for item in result["agent_hints"] if item["path"] == str(path))
 
 
 def test_inject_creates_then_keeps(tmp_path: Path) -> None:

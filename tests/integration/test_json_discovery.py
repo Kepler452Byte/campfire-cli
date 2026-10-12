@@ -43,6 +43,7 @@ def test_version_and_tree_are_json():
     assert json.loads(runner.invoke(app, ["version"]).stdout) == {
         "status": "ok",
         "version": __version__,
+        "package": "campfire-cli",
     }
     result = json.loads(runner.invoke(app, ["tree"]).stdout)
     assert result["tree"]["name"] == "campfire"
@@ -58,7 +59,7 @@ def test_version_and_tree_are_json():
 def test_help_hides_internal_options_and_exposes_types():
     runner = CliRunner()
     upgrade = json.loads(runner.invoke(app, ["upgrade", "--help"]).stdout)
-    assert "skip_package" not in {p["name"] for p in upgrade["parameters"]}
+    assert "skip_package" in {p["name"] for p in upgrade["parameters"]}
     removed = runner.invoke(app, ["video", "frames", "--help"])
     assert removed.exit_code != 0
     assert json.loads(removed.stderr)["status"] == "error"

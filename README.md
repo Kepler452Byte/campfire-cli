@@ -59,7 +59,11 @@ uv tool install campfire-cli
 campfire version
 ```
 
-升级：`campfire upgrade` 是一条幂等命令——检测 PyPI 新版本并按安装方式（uv tool / pipx）更新包本身（更新器在独立进程中等待当前进程退出后执行，完成后自动用新版代码对齐治理资源），随后按当前模型初始化 SQLite、对齐全局 Skill、Base 与提示词路标。离线、已是最新、editable 源码安装或无法识别安装方式时跳过包更新仅对齐资源。
+升级：`campfire upgrade` 检测 PyPI 新版本，核对 uv tool 或 pipx 安装登记，在独立进程中等待当前进程退出后更新包。启动返回 `planned` 与 `operation_id`，使用 `campfire agent upgrade-status <operation_id>` 核验完成情况。新版先验证产品身份和版本，再初始化 SQLite、对齐全局 Skill、Hint 与逐 Workspace Base。安装器或版本核验失败时跳过资源更新。
+
+`campfire upgrade --skip-package` 是完全离线的资源对齐入口，不查询 PyPI。editable、未知渠道、离线与已是最新均在 `package.action` 中明确报告，资源结果独立返回。失败返回 `blocked`、stderr 单行 JSON 与退出码 3，保留已完成操作与逐 Workspace 结果。`version`、`--version` 和 `-V` 返回相同安装版本及 `package` 身份，不创建本机状态。
+
+托管 Skill 与 Hint 块按包内容恢复。首次升级按原受管名单和本产品标记接管旧资源；登记保存于 `<CAMPFIRE_HOME>/agent-resources.json`，后续只清理登记过且包内已删除的文件。用户新增附属文件、其他产品资源与 Hint 块外字节保留。异常标记、未知同名资源、软链接与并发变化会阻止写入。多目标和目标变更保留已登记位置的对齐；`setup --verbose` 可查看逐文件操作。
 
 开发机安装（跟随本地源码）：
 

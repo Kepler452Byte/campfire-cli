@@ -86,3 +86,7 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 同步包含整个 Vault 可提交的新增、修改和删除，遵守 `.gitignore`；不同步 Project 源码仓库。无 Git 的 Vault 仍可正常使用。只完成本地提交时不得报告远端同步成功，必须核对 `remote_synced`；失败返回阶段、提示与冲突路径，非零退出。不自动选一方、不强推、不改写提交历史；处理明确授权范围内的问题后重新预览。同一工作树启用前关闭插件等其他 Git 自动同步。
 
 用户要求配置定时同步、调整间隔、暂停、恢复、删除任务或排查定时失败时，读取 [Tickwork 定时同步 SOP](references/git-sync-scheduling.md)，再由 `tickwork-task-management` 通过 Tickwork CLI 管理本机任务。Campfire 负责同步契约，Tickwork 负责三平台调度、运行记录与日志。任务不写入 Vault 根 `.campfire.yaml`，不随 setup/upgrade 自动启用；保留已有停用状态。任务已注册不代表同步成功，需区分调度状态、执行退出码和 `remote_synced`。
+
+## CLI 与资源升级
+
+用户明确要求升级 Campfire 或对齐本机资源时，读取 [升级结果核验](references/resource-upgrade.md)。不把包升级加入普通文档维护的固定步骤。
