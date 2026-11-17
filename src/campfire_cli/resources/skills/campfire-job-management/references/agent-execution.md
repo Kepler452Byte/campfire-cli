@@ -2,6 +2,8 @@
 
 使用通用 Job 的 argv 启动已安装的 Agent CLI，不新增会话编排。先核对本机 `codex exec --help` 或 `claude --help`，使用绝对程序路径、明确工作目录和非交互模式；stdin 关闭。登录、工具权限与网络必须在实际调度环境中测试，不只在交互终端验证。
 
+npm 安装的入口可能通过 /usr/bin/env 查找 Node；程序路径绝对也不能保证调度器找到解释器。遇到此类启动失败，查询本次日志并使用绝对 Node 路径加 CLI 脚本路径，或已有的明确环境 wrapper；不为此增加调度服务或修改系统 PATH。
+
 - Codex 使用 codex exec，按用户授权配置 sandbox 与工具权限；写任务需允许目标目录写入，跨 Vault/代码目录显式声明。不要默认使用绕过全部权限的选项。
 - Claude Code 使用 claude -p，按本机契约配置 allowedTools 和无人应答时的处理；不默认 bypassPermissions。若依赖 Campfire Hint/Skill，不能使用会跳过它们的启动方式却声称已经加载。
 - 普通定时任务每次启动新会话，读取最新任务与进展恢复上下文。用户显式要求恢复会话才配置准确的会话 id，不选“最近一次”。

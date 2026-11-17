@@ -312,12 +312,16 @@ class JobService:
             result = run_job(job, self.runs, self.config["log_limit_bytes"])
             expired = self.policy.select(self.runs.completed(), datetime.now(UTC))
             self.runs.delete_completed([run for run in expired if run != result["id"]])
-            return {
+            payload = {
                 "status": "ok" if result["status"] == "succeeded" else "error",
-                "code": None if result["status"] == "succeeded" else "run-failed",
                 "run": result,
                 "follow_up": self.run_follow_up(result["id"]),
             }
+            if result["status"] != "succeeded":
+                payload.update(
+                    code="run-failed", message="Process did not succeed; inspect this Run"
+                )
+            return payload
         finally:
             execution.close()
 
