@@ -257,7 +257,7 @@ The command fetches, commits all eligible Vault additions, edits and deletions, 
 The Vault must be the Git worktree root with an existing commit, current branch and remote upstream. Configure Git identity and authentication using Git itself; Campfire does not duplicate credentials or remotes in YAML. Project source repositories are outside this command's scope. [Server scheduling and upgrade notes](docs/git-sync.md).
 
 
-### v0.2.7 查询与维护
+### v0.2.8 查询与维护
 
 ```bash
 campfire document list --type task --tags 主线 --tags 公司任务
