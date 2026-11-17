@@ -114,22 +114,30 @@ def test_schedule_modes_stale_plans_busy_mutations_and_compensation(service, job
     assert not change(service, "update", scheduled)["scheduler"]["enabled"]
 
 
-@pytest.mark.parametrize("mode", ["failed", "timeout", "missing", "stdin", "truncated"])
+@pytest.mark.parametrize(
+    "mode", ["failed", "timeout", "timeout-closed", "missing", "stdin", "truncated"]
+)
 def test_execution_failure_timeout_eof_and_log_cap(service, job, tmp_path, mode):
     commands = {
         "failed": [sys.executable, "-c", "import sys;sys.exit(7)"],
         "timeout": [sys.executable, "-c", "import time;time.sleep(20)"],
+        "timeout-closed": [
+            sys.executable,
+            "-c",
+            "import os,time;os.close(1);os.close(2);time.sleep(20)",
+        ],
         "missing": [str(tmp_path / "removed-executable")],
         "stdin": [sys.executable, "-c", "import sys;assert sys.stdin.read()=='';print('eof')"],
         "truncated": [sys.executable, "-c", "print('x'*50000)"],
     }
-    definition = replace(job, argv=commands[mode], timeout=1 if mode == "timeout" else 5)
+    definition = replace(job, argv=commands[mode], timeout=1 if mode.startswith("timeout") else 5)
     service.repository.write({job.id: definition})
     service.config["log_limit_bytes"] = 1024
     result = run(service)
     expected = {
         "failed": "failed",
         "timeout": "timeout",
+        "timeout-closed": "timeout",
         "missing": "failed",
         "stdin": "succeeded",
         "truncated": "succeeded",

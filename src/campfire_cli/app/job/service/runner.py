@@ -78,7 +78,7 @@ def run_job(task: Job, repository: RunRepository, log_limit: int) -> dict[str, A
         }
         completed = 0
         timed_out = False
-        while completed < 2:
+        while completed < 2 or process.poll() is None:
             if time.monotonic() - started >= task.timeout and not timed_out:
                 timed_out = True
                 if job:

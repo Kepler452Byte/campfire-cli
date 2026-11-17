@@ -53,7 +53,7 @@ description: 管理本机手动或定时命令、启动 Codex/Claude Code、查�
 
 默认位置为 Vault 根 `_定时任务/记录-<environment_id>.md`，以实际返回路径为准；一环境一篇 record，不维护额外总览。缺少 environment.id 时报告尚未建立本机 Job 身份，不临时生成标识、改名或写入其他环境文件。
 
-不存在时，按授权使用 document apply 创建 record：--path 用返回路径、--type record、--set 填 description 和易读的 name；确认携带预览哈希。随后在正文锚点后写内容，只执行实际 follow_up。已存在时读最新正文并直接编辑，保留 Frontmatter、生成区和人工备注。
+不存在时，按授权使用 document apply 创建 record：--path 用返回路径、--type record、--set 填 description；确认携带预览哈希。随后在正文锚点后写易读的环境标题与内容，只执行实际 follow_up。name 沿文件名规范保留稳定标识。已存在时读最新正文并直接编辑，保留 Frontmatter、生成区和人工备注。
 
 正文包含环境名称和 id、平台/时区、最后完整核验时间；任务表只列 id、用途、频率、实际启停、最近运行结果。manual 如需展示则单列。无历史写“无可用运行记录”；完整成功查询为空写“当前无定时任务”，保留文档。用途从已知事实概括，未知保留说明，不复制完整命令、绝对路径、环境变量、凭据或日志。
 
