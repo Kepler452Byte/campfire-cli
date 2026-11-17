@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from typing import BinaryIO
 
 from sqlalchemy import UniqueConstraint, create_engine, inspect
 from sqlalchemy.engine import Connection, Engine
@@ -15,14 +16,45 @@ from campfire_cli.common.database.models import Base
 from campfire_cli.common.exceptions import GovernanceBlockedError
 
 
-def _lease(path: Path, *, exclusive: bool = False) -> BinaryIO:
+@contextmanager
+def _lease(path: Path, *, exclusive: bool = False) -> Iterator[None]:
     handle = path.with_suffix(path.suffix + ".lock").open("a+b")
     try:
         if os.name == "nt":
+            import ctypes
             import msvcrt
+            from ctypes import wintypes
 
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK, 1)
+            class Overlapped(ctypes.Structure):
+                _fields_ = [
+                    ("Internal", ctypes.c_size_t),
+                    ("InternalHigh", ctypes.c_size_t),
+                    ("Offset", wintypes.DWORD),
+                    ("OffsetHigh", wintypes.DWORD),
+                    ("hEvent", wintypes.HANDLE),
+                ]
+
+            # CRT read-lock modes are exclusive; LockFileEx supports shared leases.
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            lock = kernel.LockFileEx
+            lock.argtypes = [
+                wintypes.HANDLE,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                ctypes.POINTER(Overlapped),
+            ]
+            lock.restype = wintypes.BOOL
+            if not lock(
+                msvcrt.get_osfhandle(handle.fileno()),
+                3 if exclusive else 1,
+                0,
+                1,
+                0,
+                ctypes.byref(Overlapped()),
+            ):
+                raise ctypes.WinError(ctypes.get_last_error())
         else:
             import fcntl
 
@@ -34,11 +66,27 @@ def _lease(path: Path, *, exclusive: bool = False) -> BinaryIO:
             code="database-busy",
             path=str(path),
         ) from exc
-    return handle
+    try:
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                unlock = kernel.UnlockFileEx
+                unlock.argtypes = [
+                    wintypes.HANDLE,
+                    wintypes.DWORD,
+                    wintypes.DWORD,
+                    wintypes.DWORD,
+                    ctypes.POINTER(Overlapped),
+                ]
+                unlock.restype = wintypes.BOOL
+                unlock(msvcrt.get_osfhandle(handle.fileno()), 0, 1, 0, ctypes.byref(Overlapped()))
+        finally:
+            handle.close()
 
 
 class _CacheConnection(sqlite3.Connection):
-    lease: BinaryIO
+    lease: ExitStack
 
     def close(self) -> None:
         try:
@@ -52,7 +100,8 @@ def create_sqlite_engine(database_path: Path) -> Engine:
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
     def connect() -> _CacheConnection:
-        lease = _lease(database_path)
+        lease = ExitStack()
+        lease.enter_context(_lease(database_path))
         try:
             connection = sqlite3.connect(
                 database_path, factory=_CacheConnection, check_same_thread=False

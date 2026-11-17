@@ -97,8 +97,13 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
         operation = json.loads(started.stdout)
         result_path = root / "state" / "upgrades" / operation["operation_id"] / "result.json"
         deadline = time.monotonic() + 240
+        result = {"state": "pending"}
         while time.monotonic() < deadline:
-            result = json.loads(result_path.read_bytes())
+            try:
+                result = json.loads(result_path.read_bytes())
+            except (PermissionError, FileNotFoundError):
+                time.sleep(0.2)
+                continue
             if result["state"] in {"completed", "failed"}:
                 break
             time.sleep(0.2)

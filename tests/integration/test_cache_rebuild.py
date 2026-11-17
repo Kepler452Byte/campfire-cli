@@ -87,3 +87,13 @@ def test_rebuild_discards_old_plan_approval(workspace: Path) -> None:
     with pytest.raises(ValueError, match="批次不存在"):
         replacement.restructure._repository.load_plan("old")
     assert replacement.document.list().status == "ok"
+
+
+def test_healthy_cache_accepts_multiple_live_connections(workspace: Path) -> None:
+    engine = create_sqlite_engine(campfire_home() / "campfire.db")
+    initialize_database(engine)
+    with engine.connect() as first, engine.connect() as second:
+        assert first.exec_driver_sql("SELECT 1").scalar_one() == 1
+        assert second.exec_driver_sql("SELECT 1").scalar_one() == 1
+        initialize_database(engine)
+    engine.dispose()
