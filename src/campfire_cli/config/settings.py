@@ -66,11 +66,16 @@ class AgentResourceSettings:
             raise ConfigurationError(f"无法加载 Campfire config.yml：{exc}") from exc
         override = os.environ.get("CAMPFIRE_SKILL_TARGETS")
         values = override.split(os.pathsep) if override else skills.get("targets", [])
+        if not override and os.environ.get("CLAUDE_CONFIG_DIR"):
+            values = [
+                str(Path(os.environ["CLAUDE_CONFIG_DIR"]) / "skills")
+                if v == "~/.claude/skills"
+                else v
+                for v in values
+            ]
         hint_override = os.environ.get("CAMPFIRE_AGENT_HINT_PATH")
         hints = (
-            hint_override.split(os.pathsep)
-            if hint_override
-            else ["~/.claude/CLAUDE.md", "~/.agents/AGENTS.md"]
+            hint_override.split(os.pathsep) if hint_override else list(client_hint_paths().values())
         )
         return cls(
             home,
@@ -78,3 +83,12 @@ class AgentResourceSettings:
             [Path(v).expanduser().absolute() for v in hints if v],
             list(skills.get("managed_skills", [])),
         )
+
+
+def client_hint_paths() -> dict[str, Path]:
+    """Return each supported client's user instruction entry point."""
+    return {
+        "claude-code": Path(os.environ.get("CLAUDE_CONFIG_DIR") or "~/.claude").expanduser()
+        / "CLAUDE.md",
+        "codex": Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser() / "AGENTS.md",
+    }

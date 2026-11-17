@@ -43,6 +43,7 @@ class DocumentIndexBuilder:
             lifecycle=self._string(frontmatter.get("lifecycle")),
             task_status=self._string(frontmatter.get("task_status")),
             priority=self._string(frontmatter.get("priority")),
+            tags=self._strings(frontmatter.get("tags")),
             assignee=self._strings(frontmatter.get("assignee")),
             due=self._date_string(frontmatter.get("due")),
             source_updated=self._date_string(frontmatter.get("updated")),

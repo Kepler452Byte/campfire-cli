@@ -32,7 +32,7 @@ document/
 - `frontmatter`：检查、规划、执行和格式化文档属性。
 - `rule`：统一解释类型、Profile、枚举与跨字段不变量。
 - `index`：Service 只编排新鲜度、generation 和查询，Builder 只把 Markdown 属性、Domain/Project 上下文与 `related_docs`转换为确定性投影；配置、拓扑或解析器变化时完整重建，普通文件变化时调用时 reconcile。
-- `list`：按 Project、Domain、类型和生命周期对索引做精确 AND 筛选；返回全部生命周期，不读取或复制正文。
+- `list`：按 Project、Domain、类型、生命周期及可重复 --tags 对索引做精确 AND 筛选；返回全部生命周期，不读取或复制正文。
 - `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile、具体问题，以及 outgoing、incoming、unresolved 及入度、出度。
 - `apply`：根据目标路径和类型解析 Profile，不存在时生成文档并在 Frontmatter 后写入唯一的 `<!-- CAMPFIRE:BODY -->` 正文锚点，已有 Frontmatter 时只应用显式补丁，无 Frontmatter 时保留正文并补齐完整契约；先完整渲染并校验，追加 `--confirm` 后原子写入。存量文档不因缺少锚点而迁移。
 - `template`：只继承 base Profile，集中存放在 Workspace 根目录 `_模板/`，属于无 Domain 的系统受管范围；已有 Domain `_模板/` 仍可用。只校验模板目录和字段，不绑定目标类型、不校验正文结构，不维护继承关系。
@@ -66,7 +66,7 @@ Document 写入接口不得要求 Agent 猜测 Frontmatter 输入契约：
 - 输入错误统一返回稳定错误码、字段、实际值、期望类型和可直接照抄的参数示例；apply 与 move 不得分别构造两套解码或诊断。
 - apply 在 Profile 已明确时并列收集可确定的禁用字段、缺失字段与类型错误；无效赋值不再重复报同字段缺失。有错误不写入且 follow-up 为空；只有缺失输入时返回 needs-input，含其他问题时返回 blocked 并保留 missing_fields。
 - 文档相对路径始终以 Workspace 根解析，不受 cwd 影响；apply 的 domain-missing 返回实际解析路径和带 Workspace 的领域发现入口，不默认枚举全量候选。
-- 不因输入格式不直观而增加 `--tags`、`--sources` 等字段专用参数，也不把逗号字符串静默猜成列表。
+- 写入不因输入格式不直观而增加 `--tags`、`--sources` 等字段专用参数，也不把逗号字符串静默猜成列表。
 - 现有文档的有效 Profile 已由 `document inspect` 返回。Skill 只在字段契约未知时安排一次 `inspect → apply`；契约已知的补丁直接 apply，正文小改不进入本接口。
 
 标准字段用于格式化、补全和校验。默认 `unknown_fields: preserve`：已有业务扩展字段不参与标准排序但必须原样保留，不因尚未建立专属 Profile 而制造全库噪声；确需封闭字段集合的 Profile 可显式设为 `report`。
@@ -76,3 +76,5 @@ Document 不维护配置副本，也不提供契约同步命令。升级 Python 
 `_空间.md`、`_领域.md` 等声明文件由 Workspace App 按结构契约校验，不是普通 Document，不得套用 base Profile。Document 的单篇命令遇到豁免文件时返回 `not-applicable` 和对应的 Workspace 检查入口。
 
 Document Rule 必须把属性顺序错误作为正式 Issue 暴露；顺序取自同一个 Effective Profile。`document format --path <文档>` 默认只预览字段顺序变化，追加 `--confirm` 后才写入；它不新增、删除或修改属性值。
+
+apply 的 --name 允许补字段或类型变更时同次指定新标题；目标按类型规范化，不允许路径或 .md 后缀。普通只改标题仍使用 rename；目标冲突拒绝覆盖，改路径复用相同 ChangeSet 与 expected_plan 保护。list 的 --tags 每项一个完整标签，多个标签为 AND，SQL 筛选后再计数与 limit；不传行为不变，返回条目携带原始 tags。主线仅为 task 的主线标签，不定义独立数据实体。

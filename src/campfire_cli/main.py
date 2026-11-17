@@ -20,8 +20,7 @@ from campfire_cli.app.workspace.cli.project_cli import project_cli
 from campfire_cli.app.workspace.cli.restructure_cli import restructure_cli
 from campfire_cli.app.workspace.cli.space_cli import space_cli
 from campfire_cli.app.workspace.cli.workspace_cli import workspace_cli
-from campfire_cli.common.cli_output import JsonTyperGroup, emit
-from campfire_cli.common.exceptions import AppError
+from campfire_cli.common.cli_output import JsonTyperGroup
 from campfire_cli.container import AppContainer
 
 # Windows 控制台默认 GBK 代码页会把中文输出编码成 GBK 导致乱码；
@@ -50,11 +49,7 @@ class LazyContainer:
                 self._skill = AppContainer.build_skill()
             return self._skill
         if self._container is None:
-            try:
-                self._container = AppContainer.build(self._workspace)
-            except AppError as exc:
-                emit(exc.payload(), err=True)
-                raise typer.Exit(exc.exit_code) from exc
+            self._container = AppContainer.build(self._workspace)
         return getattr(self._container, name)
 
 

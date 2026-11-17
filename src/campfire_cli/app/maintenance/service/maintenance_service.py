@@ -307,7 +307,10 @@ class MaintenanceService:
                     domain_states = self._topology_states([], domains)[1]
                     self._repository.replace_scope_index(scope or ".", domain_states)
             except GovernanceBlockedError as exc:
-                return self._sync_blocked("concurrent-change", str(exc), scope)
+                result = self._sync_blocked(exc.code or "concurrent-change", scope or ".", scope)
+                result.issues[0].detail = str(exc)
+                result.issues[0].actual = exc.details
+                return result
             except (AppError, OSError) as exc:
                 return self._sync_failure(exc, "generated-files-and-domain-index", scope)
         return MaintenanceResult(

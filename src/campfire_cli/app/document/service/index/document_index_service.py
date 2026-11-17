@@ -25,7 +25,7 @@ from campfire_cli.common.documents.markdown import MarkdownDocument, parse_docum
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.config.settings import WorkspaceSettings
 
-INDEX_SCHEMA_VERSION = 2
+INDEX_SCHEMA_VERSION = 3
 PARSER_VERSION = "3"
 
 
@@ -58,6 +58,7 @@ class DocumentIndexService:
         document_status: str | None = None,
         task_status: str | None = None,
         limit: int | None = None,
+        tags: list[str] | None = None,
     ) -> DocumentListResult:
         index = self.reconcile()
         self._validate_filters(project, domain, document_type, document_status, task_status)
@@ -72,6 +73,8 @@ class DocumentIndexService:
             }.items()
             if value is not None
         }
+        if tags:
+            filters["tags"] = list(dict.fromkeys(tags))
         records, total = self._repository.query_documents(filters, limit)
         items = [self._list_item(item) for item in records]
         return DocumentListResult(
@@ -327,6 +330,7 @@ class DocumentIndexService:
             lifecycle=item.lifecycle,
             task_status=item.task_status,
             priority=item.priority,
+            tags=item.tags,
             assignee=item.assignee,
             due=item.due,
             updated=item.source_updated,

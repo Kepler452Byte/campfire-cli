@@ -124,6 +124,7 @@ class DocumentService:
         document_status: str | None = None,
         task_status: str | None = None,
         limit: int | None = None,
+        tags: list[str] | None = None,
     ) -> DocumentListResult:
         return self._index.list_documents(
             project=project,
@@ -132,6 +133,7 @@ class DocumentService:
             document_status=document_status,
             task_status=task_status,
             limit=limit,
+            tags=tags,
         )
 
     def rebuild_index(self) -> DocumentIndexResult:

@@ -49,7 +49,7 @@ description: "持续维护 Campfire Workspace 的结构与文档合规；适用�
 3. `_xxx/` 统一表示系统治理目录，不能声明为 Domain；其他目录名没有隐藏保留语义。新 Domain 使用 create，已有内容目录使用 adopt，文档类型不强制决定目录；归档只更新 `document_status`，不创建或移动到 `archive/`。
 4. 只改标题用 rename，跨 Domain 用 move；确认带上预览返回的 `--expected-hash` 和 `--expected-plan`。批量语义迁移使用重构流程，不逐文件绕过计划。
 5. 声明顺序异常时使用诊断返回的 format 修复入口，不把 formatter 列为日常必经步骤。声明标记外的人工正文可直接编辑。
-6. sync 刷新 MOC，不再生成关系页；历史关系页不自动删除，清理需先盘点并确认范围，保留人工内容和疑点文件。关联查询使用 document inspect，无需预先 sync。sync 自身直接写入派生物；用户要求预览时才使用 --dry-run，不传不存在的 --confirm。使用实际 follow_up 的 scope 或用户明确的治理范围，不无条件扩大全库。
+6. maintenance sync 刷新本地 MOC 导航，不再生成关系页；历史关系页不自动删除，清理需先盘点并确认范围，保留人工内容和疑点文件。关联查询使用 document inspect，无需预先 sync。sync 自身直接写入派生物；用户要求预览时才使用 --dry-run，不传不存在的 --confirm。使用实际 follow_up 的 scope 或用户明确的治理范围，不无条件扩大全库。
 7. 只有索引损坏或明确恢复需求才使用 workspace rebuild 预览和确认；不把 rebuild 放入普通维护链。
 8. 通用模板集中在 Workspace 根目录 `_模板/`，使用 template 类型；局部模板明确指定才使用，不逐层查找。共享模板只留必要结构，顶部写适用类型与特殊说明；完整原则可放目录 README，不逐份复制或强制每次加载。正文可直接编辑但模板变更须获授权，扩展单篇文档不等于授权修改模板，不校验使用者是否套用。
 
@@ -77,7 +77,9 @@ campfire --workspace demo maintenance sync --scope "mywork/【Hello World】文�
 
 ## 完成条件与回报
 
-报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。关系唯一事实源是 `related_docs`，纯正文编辑不改变受管关系，无需同步。
+报告已修正内容、生成物变化和剩余问题。Maintenance 不改变主物理归属，不自动合并领域；只验证了局部就不宣称全 Workspace 合规。关系唯一事实源是 `related_docs`，纯正文编辑不改变受管关系，无需因此刷新导航。
+
+同一 Workspace 的治理写入串行执行，不同时运行多个 maintenance sync 或其他治理写命令。锁占用与内容变化按返回 code 区分；等待已有操作结束后先核实再重试，不删除活动锁、不跳过哈希保护。需要 Git 远端同步时，在文档修改与必要导航刷新之后执行。回报区分“导航已刷新”“远端已同步”和“本地已提交，远端未同步”，按实际结果表述。
 
 ## 可选 Vault Git 同步
 

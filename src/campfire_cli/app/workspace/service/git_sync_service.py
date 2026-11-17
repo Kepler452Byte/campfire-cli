@@ -28,16 +28,17 @@ class GitSyncService:
         phase = "inspect"
         try:
             if not confirm:
-                return {**result, **self._inspect()}
+                result.update(self._inspect(result))
+                return result
             with workspace_write_lock(self.state_root):
-                initial = self._inspect()
+                initial = self._inspect(result)
                 result.update(initial)
                 if expected_plan and expected_plan != initial["expected_plan"]:
                     return self._blocked(result, "plan-changed", phase)
                 phase = "fetch"
                 run_git(self.root, "fetch", "--", initial["remote"])
                 result["remote_checked"] = True
-                current = self._inspect()
+                current = self._inspect(result)
                 if current["expected_plan"] != initial["expected_plan"]:
                     return self._blocked(result, "local-changed", phase)
                 result.update(current)
@@ -114,15 +115,23 @@ class GitSyncService:
                 **self._blocked(result, exc.code or f"git-{phase}-failed", phase),
                 "message": str(exc),
             }
-        except GovernanceBlockedError:
-            return self._blocked(result, "workspace-locked", phase)
+        except GovernanceBlockedError as exc:
+            return {**self._blocked(result, exc.code or "workspace-locked", phase), **exc.details}
         except OSError:
             return self._blocked(result, "local-read-failed", phase)
 
-    def _inspect(self) -> dict:
+    def _inspect(self, known: dict | None = None) -> dict:
+        known = known if known is not None else {}
         top = Path(run_git(self.root, "rev-parse", "--show-toplevel").strip()).resolve()
         if top != self.root:
             raise GitCommandError("Vault 必须是 Git 工作树根目录", "vault-not-git-root")
+        known["remotes"] = run_git(self.root, "remote").splitlines()
+        try:
+            known["branch"] = run_git(self.root, "symbolic-ref", "--short", "HEAD").strip()
+        except GitCommandError as exc:
+            raise GitCommandError(
+                "当前是 detached HEAD，请先选择已确认的本地分支", "branch-required"
+            ) from exc
         for operation in (
             "MERGE_HEAD",
             "rebase-merge",
@@ -137,15 +146,19 @@ class GitSyncService:
         if self._paths("diff", "--cached", "--name-only", "-z"):
             raise GitCommandError("先提交或取消人工暂存", "staged-changes")
         try:
-            branch = run_git(self.root, "symbolic-ref", "--short", "HEAD").strip()
+            branch = known["branch"]
             remote = run_git(self.root, "config", "--get", f"branch.{branch}.remote").strip()
+            known["remote"] = remote
             remote_ref = run_git(self.root, "config", "--get", f"branch.{branch}.merge").strip()
         except GitCommandError as exc:
             raise GitCommandError("需要当前分支及其远端 upstream", "upstream-required") from exc
         if remote == "." or remote.startswith("-") or not remote_ref.startswith("refs/heads/"):
             raise GitCommandError("需要远端分支 upstream", "upstream-required")
+        known["remote_ref"] = remote_ref
         run_git(self.root, "check-ref-format", remote_ref)
         upstream = run_git(self.root, "rev-parse", "--symbolic-full-name", "@{upstream}").strip()
+        known["upstream"] = upstream
+        known["tracking_state_source"] = "local-remote-tracking-refs"
         behind, ahead = map(
             int,
             run_git(self.root, "rev-list", "--left-right", "--count", f"{upstream}...HEAD").split(),
@@ -210,5 +223,12 @@ class GitSyncService:
             "status": "blocked",
             "code": code,
             "phase": phase,
-            "hint": "检查 Git/upstream、凭据、暂存或未完成操作；保留本地内容，处理后重新预览同步。",
+            "hint": {
+                "upstream-required": "核实 branch 与 remotes 后配置 upstream；远端认证尚未验证。",
+                "branch-required": "先选择用户已确认的本地分支，再预览同步。",
+                "unfinished-git-operation": "先处理未完成的 Git 操作，再预览同步。",
+                "staged-changes": "先处理已有人工暂存，提交或取消暂存后再预览同步。",
+                "unresolved-conflicts": "先核实并解决现有冲突，再预览同步，不自动选边。",
+                "workspace-locked": "等待同一 Workspace 的治理操作结束，核实后重新预览。",
+            }.get(code, "保留本地内容；根据失败阶段处理 Git 问题后重新预览同步。"),
         }

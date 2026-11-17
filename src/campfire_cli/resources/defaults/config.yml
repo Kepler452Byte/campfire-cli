@@ -180,6 +180,12 @@ issues:
     template-enum-invalid:
     - Skill 模板中的枚举值与当前 Schema 不一致。
     - 修改项目内 Skill SSOT 后运行 campfire skill sync。
+    workspace-locked:
+    - 同一治理范围已有写操作，当前操作未取得锁。
+    - 等待现有操作结束后核实并重新预览；不要删除活动锁或跳过哈希保护。
+    database-busy:
+    - 派生缓存正在使用，当前不能替换数据库。
+    - 等待其他 Campfire 操作结束后重试；不要删除正在使用的数据库文件。
     concurrent-change:
     - 预览后有文件被其他会话修改。
     - 读取最新内容后重新执行原命令；不要覆盖其他会话的修改。
@@ -250,6 +256,7 @@ skills:
   - campfire-weekly-report-writing
   - campfire-kanban-board
   - campfire-task-management
+  - campfire-task-mainline
   unknown_skill_policy: ignore
   orphaned_skill_policy: report
 bases:

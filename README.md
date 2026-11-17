@@ -90,7 +90,7 @@ campfire maintenance sync --dry-run
 
 不指定 `--path` 运行 `campfire setup` 是降级执行而不是报错：仍会同步全局 Skill 与提示词路标，输出接入引导，并显式列出被跳过的 Manifest 相关步骤。
 
-`setup` 会向 `~/.claude/CLAUDE.md`、`~/.agents/AGENTS.md` 注入幂等的 campfire 路标块，保留标记外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标。`setup` 与 `skill sync` 会把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`，可通过 `CAMPFIRE_SKILL_TARGETS` 覆盖。单独执行 `skill sync` 不更新提示词路标。
+`setup` 会向 `~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md` 注入幂等的 campfire 路标块，保留标记外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标。`setup` 与 `skill sync` 会把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`，可通过 `CAMPFIRE_SKILL_TARGETS` 覆盖。单独执行 `skill sync` 不更新提示词路标。Codex 的指令目录跟随 `CODEX_HOME`，Claude Code 的指令和默认 Skill 目录跟随 `CLAUDE_CONFIG_DIR`。非空 `AGENTS.override.md` 优先于同目录 `AGENTS.md`；自定义 Hint 目标须自行接入客户端。对齐结果中的 `loading_verified=false` 表示只完成文件写入，需在新会话核验实际加载；Claude Code 可用 `/memory` 辅助核对。
 
 ## 核心概念
 
@@ -255,3 +255,19 @@ campfire --workspace personal workspace git sync --expected-plan <preview-digest
 The command fetches, commits all eligible Vault additions, edits and deletions, merges the upstream and pushes. It respects `.gitignore` (already tracked files remain tracked), refuses manually staged changes and unfinished Git operations, and preserves local commits on failure. A conflict stops synchronization without choosing either version. Only `remote_synced: true` means the push completed. Preview uses cached remote tracking information; it does not fetch.
 
 The Vault must be the Git worktree root with an existing commit, current branch and remote upstream. Configure Git identity and authentication using Git itself; Campfire does not duplicate credentials or remotes in YAML. Project source repositories are outside this command's scope. [Server scheduling and upgrade notes](docs/git-sync.md).
+
+
+### v0.2.7 查询与维护
+
+```bash
+campfire document list --type task --tags 主线 --tags 公司任务
+campfire document apply --path "mywork/领域/wyx.md" --type record --name "补充记录" --set 'description=补齐结构并区分重名'
+```
+
+`--tags` 可重复，全部精确匹配，筛选在计数与 limit 前完成。`apply --name` 用于补齐结构时同次选择标题，确认时携带预览的 expected_hash 与 expected_plan；普通改标题用 rename。
+
+可选全局 `campfire-task-mainline` 通过 task 的主线标签发现持续工作，不限定季度、文件名或存放目录；用户位置与已有 Workspace 规则优先。全局 Hint 只提供入口，操作细节在对应 Skill。
+
+所有 blocked 结果统一 stderr 单行 JSON/退出码 3；正常预览及 needs-input/needs-review 保持 stdout/0，使用者仍要核对业务结果。治理写入在同一 Workspace 内串行；workspace-locked 与内容变化分别诊断。Git 预览不联网，remote_checked=false，ahead/behind 来自本机远端跟踪记录；缺少 upstream 时保留已知分支/远端并给出指引。
+
+SQLite 不兼容缓存自动删除重建，无备份或历史迁移链；数据库被使用时拒绝替换。Markdown、Manifest 与 local.yaml 不变，旧计划审批失效。新数据库连接使用共享锁，重建使用独占锁，以协调共用数据库的 Workspace。

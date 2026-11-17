@@ -43,6 +43,7 @@ SQLite / Filesystem Implementation
 
 - 所有公共命令成功时 stdout 只输出一个 indent JSON 对象，包括 `--help`、无参数帮助、`version` 与 `tree`；错误只输出一个单行 JSON 对象到 stderr，退出码非 0。帮助使用参数结构，命令树使用层级结构，不返回 ANSI 文本。第三方日志须捕获，不混入命令输出；不提供第二套文本模式或 shell 补全脚本输出入口。
 - `status` 字段是 Agent 依赖的公共契约，只允许复用既有词汇，不得发明近义词。命令级词汇：ok、error、blocked、needs-input、needs-review、dry-run、synced、planned、ready、applied、moved、renamed、issues-found、formatted、archived、up-to-date。文档、领域与 Decision 各有自己的字段词汇表。需要新状态先在本节登记。
+- `blocked` 统一以退出码 3 输出单行 JSON 到 stderr；`error` 按异常类别使用既有非零退出码（通用 1、配置/输入 2、治理 3）。正常预览、`needs-input` 和 `needs-review` 是成功返回的业务结果，stdout/0，调用方仍须读取 issues、skipped 和 write_performed，不把进程成功等同于完成写入。部分写入后阻塞保留已写入事实并非零退出。
 - 可恢复的输入错误必须包含稳定 `code`、对应字段和机器可读的期望类型；当正确序列化方式不直观时，同时返回示例值或修复提示。自然语言 message 与示例可以演进，不作为调用方分支判断依据。
 - 前置条件缺失时优先降级执行：能完成的部分照常完成，输出 `needs-input` 并以 `skipped` 字段显式列出被跳过的步骤，而非整体报错退出。
 
@@ -144,7 +145,7 @@ Campfire 使用语义化版本：
 
 - `.campfire.yaml` 与 `local.yaml` 各有唯一事实，不双向复制 remote、分支、名称和文档领域。项目查询按稳定 id 合并两者，元数据写入 Vault 文件，路径绑定写入本机文件。
 - 只支持当前文件结构，无 schema_version 分支或旧格式读取。已有用户由 Agent 在备份后一次性整理文件；转换逻辑不进入产品。
-- 停止正在执行的操作后，可删除 campfire.db 及其 WAL/SHM，再由正常查询、setup 或 rebuild 从文件恢复派生状态；重新生成的计划重新确认，旧审批不沿用。
+- SQLite 表结构不满足当前模型时自动关闭本次连接、取得跨 Workspace 的数据库独占锁并删除 campfire.db 及其 WAL/SHM，按当前模型创建，索引由正常查询/setup 重建。不保留旧库、备份、恢复文件或历史迁移链；活动连接占用时返回 database-busy，不删除。Markdown、Manifest、local.yaml 保留，重新生成的计划重新确认，旧审批不沿用。
 - SQLite 不承载唯一的文件回滚材料；结构变更继续通过文件变更集执行与补偿，不承诺断电原子性，恢复未完成时停止清理并核对文件。
 
 ## 领域与 Vault 同步
@@ -152,3 +153,5 @@ Campfire 使用语义化版本：
 - 所有领域共用父子结构、检查与 MOC 规则，Domain 不保存 governance；domain_type 仅作分类，Project 关联仅作项目归属与代码定位。
 - Vault Git 同步是独立可选命令，不接入 setup、upgrade 或单篇文档写入；remote、分支和凭据使用现有 Git upstream。预览只读，确认后获取、提交、合并、推送；失败不误报同步成功，不改写历史，不自动解决业务冲突。
 - v0.2.2 按用户指定版本发布，新增能力及删除 Domain 字段/参数明确记为本次版本例外与破坏性变化，不修改既有标签。
+
+- v0.2.7 按用户指定补丁版本承载本轮新增能力和退出状态契约变化，作为通常版本递增规则的显式例外。

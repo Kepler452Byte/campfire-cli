@@ -39,11 +39,24 @@ def _acquire(lock: Path) -> int:
         try:
             pid = int(lock.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
-            raise GovernanceBlockedError(f"已有治理写操作且锁内容无法确认：{lock}") from exc
+            raise GovernanceBlockedError(
+                "治理锁内容无法确认，请核实占用后重试",
+                code="workspace-locked",
+                lock_path=str(lock),
+                hint="等待现有治理操作结束，核实文件后重新预览；不要删除活动锁。",
+            ) from exc
         if psutil.pid_exists(pid):
-            raise GovernanceBlockedError(f"已有治理写操作（PID {pid}）：{lock}") from exc
+            raise GovernanceBlockedError(
+                "已有治理写操作",
+                code="workspace-locked",
+                pid=pid,
+                lock_path=str(lock),
+                hint="同一 Workspace 的治理写操作依次执行；等待结束后核实并重新预览。",
+            ) from exc
         lock.unlink(missing_ok=True)
         try:
             return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError as retry_exc:
-            raise GovernanceBlockedError(f"已有治理写操作：{lock}") from retry_exc
+            raise GovernanceBlockedError(
+                "已有治理写操作", code="workspace-locked", lock_path=str(lock)
+            ) from retry_exc

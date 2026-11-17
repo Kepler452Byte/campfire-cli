@@ -13,9 +13,18 @@ from typer.core import TyperGroup, _click
 from campfire_cli.common.exceptions import AppError
 
 
-def emit(value: BaseModel | dict[str, Any], *, err: bool = False) -> None:
+def emit(
+    value: BaseModel | dict[str, Any], *, err: bool = False, exit_code: int | None = None
+) -> None:
+    """Emit one JSON result and terminate failed commands with a nonzero code."""
     payload = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
+    status = payload.get("status")
+    failed = status in {"blocked", "error"}
+    err = err or failed
     typer.echo(json.dumps(payload, ensure_ascii=False, indent=None if err else 2), err=err)
+    if failed:
+        code = exit_code if exit_code is not None else (3 if status == "blocked" else 1)
+        raise SystemExit(code)
 
 
 def command_tree(command: Any, name: str) -> dict[str, Any]:
@@ -92,8 +101,7 @@ def invoke[ResultT](operation: Callable[[], ResultT]) -> ResultT:
     try:
         return operation()
     except AppError as exc:
-        emit(exc.payload(), err=True)
-        raise typer.Exit(exc.exit_code) from exc
+        emit(exc.payload(), err=True, exit_code=exc.exit_code)
 
 
 def usage_payload(exc: _click.UsageError) -> dict[str, object]:
@@ -125,19 +133,19 @@ class JsonTyperGroup(TyperGroup):
                 if exc.ctx is not None:
                     typer.echo(exc.ctx.get_help())
                 return 0
-            emit(usage_payload(exc), err=True)
-            self._exit(exc.exit_code, standalone_mode)
+            emit(usage_payload(exc), err=True, exit_code=exc.exit_code)
         except (KeyboardInterrupt, typer.Abort):
-            emit({"status": "error", "code": "cancelled", "message": "操作已取消"}, err=True)
-            self._exit(130, standalone_mode)
+            emit(
+                {"status": "error", "code": "cancelled", "message": "操作已取消"},
+                err=True,
+                exit_code=130,
+            )
         except AppError as exc:
-            emit(exc.payload(), err=True)
-            self._exit(exc.exit_code, standalone_mode)
+            emit(exc.payload(), err=True, exit_code=exc.exit_code)
         except typer.Exit:
             raise
         except Exception as exc:
             emit({"status": "error", "code": "internal-error", "message": str(exc)}, err=True)
-            self._exit(1, standalone_mode)
         if standalone_mode and isinstance(result, int) and result:
             self._exit(result, standalone_mode)
         return result

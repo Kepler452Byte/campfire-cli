@@ -1,82 +1,11 @@
-## Campfire 文档治理
+## Campfire 文档协作
 
-本机装有 campfire CLI（`campfire --help`），Obsidian Vault 已注册为文档工作区。
-当用户要求"沉淀/记录/写文档/归档/跟踪问题"到知识库或项目文档时：
+本机提供 campfire CLI（`campfire --help`）。仅在用户的文档、任务或 Workspace 工作适用时使用，按意图加载对应 Skill，不把 Skill 清单当作固定流水线。
 
-1. 用户首次要求创建、接入或修复一个文档 Workspace 时，先加载
-   `campfire-workspace-onboarding`。它决定新目录、已有目录、无 Manifest
-   或损坏 Manifest 的安全入口；不要直接创建或编辑 `.campfire.yaml`。
-2. 用户已给出唯一存在路径，且只读取或小范围修改人工正文时，
-   先读取文档开头和最近 `_领域.md` 的人工规则，再直接使用文件工具；
-   不加载 bootstrap，不调用 Campfire CLI。
-3. 新建、Frontmatter、文件名、归属、移动、归档、派生维护或结构治理
-   仅在所需 Workspace、Project、Domain 或 Profile 上下文缺失时加载
-   `campfire-context-bootstrap`；上下文已明确则直接进入目标操作。
-4. 发现文档集合使用 `campfire document list`，理解单篇文档的确定关系使用
-   `campfire document inspect`；两者不要求预先运行 Maintenance。
-5. 治理流程按用户意图加载对应的 Campfire 垂直 Skill。
-6. 创建正式文档或修改 Frontmatter 时使用 `campfire document apply`。
-   契约已知就直接 apply；现有文档的字段类型或合法值未知时只执行一次
-   `document inspect` 后 apply，不从 `tree` 开始逐层探索。创建或唯一更新时
-   `--path` 可省略 `.md`，创建时可省略类型前缀，由 CLI 返回最终 target。
-   相对路径以 Workspace 根为基准，不是 cwd；创建成功后按 target 用 Edit
-   补正文，不传 title 或不存在的 --body 参数。类型不确定或需了解全部支持类型时，
-   运行 `campfire --workspace <id> document type list` 获取当前有效类型、名称和前缀，
-   不猜 type，不把目录名或 Profile 名当作 type。选定类型后，字段契约未知才查询
-   `document profile resolve --type <type>`；类型和契约已明确时直接 apply。
-   用户已明确授权就不重复询问是否创建。
-7. 只改一篇文档标题时使用 `campfire document rename --path <source> --name <标题>`；
-   它保留原目录并同步标题、规范文件名和受管引用。跨 Domain 移动才使用
-   `campfire document move`。
-8. `_空间.md` 和 `_领域.md` 的 Frontmatter 只能由 Workspace 命令修改，
-   `AUTO-GENERATED` 标记区域只能由 CLI 修改；标记外 Markdown 正文可以直接
-   使用文件工具编辑。CLI 写命令完成后只执行结果实际返回的
-   `follow_up`；文档关系只通过 `related_docs` 字段维护，正文链接不参与索引或自动改写。
-   rename / move / 类型联动改名确认时带回预览的 `expected_hash` 与 `expected_plan`。
-   没有 follow-up 就结束，不固定追加 dry-run、check 或全 Workspace 扫描。
-9. `--set` 的值类型由有效 Profile 决定；列表使用严格 JSON 数组。
-   CLI 返回 `needs-input` 或输入错误时按结构化允许值和参数示例重试，
-   不为通过检查而猜测。
-10. 创建结构化文档时，默认按需查看 Workspace 根 `_模板/`；
-   局部模板仅在用户或领域规则明确指定时使用，不逐层查找、不合并模板。
-   正文按需裁剪，没有模板不阻塞写作，不修改模板源文档。
-11. 设置 `document_status=archived` 前必须获得用户针对该文档的明确同意；
-   `--confirm` 只确认 CLI 写入，不代表归档授权。
+- 首次接入或修复 Workspace 用 campfire-workspace-onboarding；上下文缺失才用 campfire-context-bootstrap。
+- 文档记录或更新用 campfire-document-capture，普通任务用 campfire-task-management；周清单分流和持续主线维护可选 campfire-task-mainline。其他文档意图由 campfire-conversation-router 路由。
+- 已知唯一路径的正文读取与小改直接用文件工具，保留 Frontmatter、声明及生成区；创建和结构变化走 CLI。字段契约未知时按 Skill 获取，不从 tree 固定开始探索。
+- 治理检查、导航刷新及 Vault Git 同步用 campfire-workspace-maintenance；同一 Workspace 的治理写操作串行执行，只消费实际返回的 follow_up。
+- 文档或任务维护不等于授权实施任务、归档或推送。导航刷新与 Git 远端同步分别回报，失败检查 status、issues 和实际写入结果。
 
-12. 所有 Domain 使用相同父子结构和 MOC 规则，不传 --governance；Project
-    关联只用于项目归属与代码定位，不决定治理方式。
-13. 用户明确要求同步 Vault 到 Git 远端时，使用
-    `campfire --workspace <id> workspace git sync` 预览，再按授权以
-    `--expected-plan <摘要> --confirm` 获取、提交、合并和推送。
-    仅编辑文档不自动同步；定时运行须主动配置，setup/upgrade 不开启同步。
-    只有 remote_synced=true 才报告远端已同步；冲突或失败保留本地提交并处理提示，
-    不强推、不自动选择本地或远端版本。没有 Git 的 Vault 照常使用。
-14. 配置、调整、暂停、恢复、删除或排查 Vault 定时同步，使用
-    campfire-workspace-maintenance 的 references/git-sync-scheduling.md 确认同步契约，
-    再加载 tickwork-task-management，通过 Tickwork CLI 管理本机任务。
-    先核对已有任务、Workspace、可执行路径和授权，不重复创建，不因升级重新启用。
-    其他本机定时命令直接使用 Tickwork Skill，不经过 Campfire bootstrap。
-
-`.campfire.yaml`、声明 Frontmatter、自动生成区域、Base 和 SQLite
-是 CLI 管理资源。Agent 可以读取，但只能通过 Campfire 语义命令写入；缺少
-对应命令时停止并报告能力缺口，不直接编辑。声明文件标记外正文不受此限制。
-`_空间.md` 与 `_领域.md` 的人工正文维护局部业务规则；通用结构事实和索引
-由 CLI 生成，不手工重复维护。
-
-不要直接在代码仓库里创建笔记文件。Agent Hint 只规定入口纪律；
-字段、枚举和顺序以 Campfire Profile 为唯一事实来源。
-
-用户已授权升级 Campfire 时执行 `campfire upgrade`；只离线对齐资源使用
-`campfire upgrade --skip-package`。返回 planned 只表示后台已启动，使用返回的
-operation_id 执行 `campfire agent upgrade-status <operation_id>` 核验包与资源阶段；
-未完成、失败或仅对齐资源时按实际结果报告，不宣称包已更新。
-
-## 写作风格
-
-以下风格适用于所有文档、提交说明、注释与回复，违反即返工：
-
-- 禁止括号补充说明。补充内容改用从句、冒号或"例如"引导的句子展开；
-  函数调用等代码必要括号不受影响。
-- 简洁直接，不啰嗦：一句话能说清的不拆成三句，同一信息不重复出现。
-- 代码注释只写代码本身表达不了的约束；不写下一行做什么，不写给评审者
-  看的改动说明。
+具体参数、写入门禁、模板、关系与同步规则在对应 Skill 中按需读取。升级使用 campfire upgrade；离线对齐资源使用 campfire upgrade --skip-package。安装了资源不代表当前客户端已加载，新会话入口与核验见产品说明。

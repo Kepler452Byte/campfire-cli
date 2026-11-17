@@ -72,6 +72,7 @@ class SqliteRestructureRepository:
         self._write(plan.batch, "plan.json", plan.model_dump(mode="json"))
 
     def load_plan(self, batch: str) -> RestructurePlan:
+        self.load_inventory(batch)
         return RestructurePlan.model_validate(self._read(batch, "plan.json"))
 
     def save_execution(self, result: RestructureResult) -> None:

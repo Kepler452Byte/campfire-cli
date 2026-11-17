@@ -104,6 +104,22 @@ class DocumentApplyService:
             if not exists or changes_type
             else source
         )
+        if request.name is not None:
+            title = request.name.strip()
+            if (
+                not title
+                or any(c in title for c in ("/", "\\"))
+                or title.endswith(".md")
+                or title in {".", ".."}
+            ):
+                raise ConfigurationError(
+                    "--name 必须是不含路径和 .md 后缀的标题",
+                    code="document-name-invalid",
+                    field="name",
+                )
+            target = source.with_name(
+                prefixed_name(title + ".md", document_type, self._settings.document_types)
+            )
         target_name = target.relative_to(self._settings.vault_root).as_posix()
         context = (
             None
@@ -160,6 +176,14 @@ class DocumentApplyService:
             for key in unknown
         ]
         # Field semantics are fully declared by the selected Profile; no type-specific injection.
+        if request.name is not None:
+            prefix = self._settings.document_types["types"][document_type]["prefix"]
+            title = target.stem.removeprefix(prefix)
+            if "name" in values and values["name"] != title:
+                raise ConfigurationError(
+                    "--name 与 --set name 必须一致", code="document-name-conflict", field="name"
+                )
+            values["name"] = title
         frontmatter.update(values)
         frontmatter["type"] = document_type
         frontmatter["updated"] = today
@@ -303,7 +327,7 @@ class DocumentApplyService:
                     exists,
                     parsed.has_frontmatter,
                     context,
-                    changes_type,
+                    changes_type or target != source,
                 ),
             }
         )
@@ -351,6 +375,8 @@ class DocumentApplyService:
 
     def _normalization(self, request: DocumentApplyRequest, target: str) -> list[dict[str, str]]:
         actions: list[dict[str, str]] = []
+        if request.name is not None:
+            actions.append({"reason": "document-name", "name": request.name})
         requested = Path(request.path)
         normalized_request = requested
         if not requested.suffix:

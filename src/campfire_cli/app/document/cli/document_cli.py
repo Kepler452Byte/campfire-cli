@@ -66,6 +66,11 @@ def list_documents(
     document_type: str | None = typer.Option(None, "--type", help="精确文档类型"),
     document_status: str | None = typer.Option(None, "--document-status"),
     task_status: str | None = typer.Option(None, "--task-status"),
+    tags: list[str] | None = typer.Option(
+        None,
+        "--tags",
+        help="精确标签，可重复；多个标签全部匹配（AND），例如 --tags 主线 --tags 公司任务",
+    ),
     limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
     """按 Project、Domain、类型与状态列出受管内容文档。"""
@@ -78,6 +83,7 @@ def list_documents(
                 document_status=document_status,
                 task_status=task_status,
                 limit=limit,
+                tags=tags,
             )
         )
     )
@@ -124,6 +130,11 @@ def apply_document(
         help=PATH_OPTION_HELP + "；创建或唯一更新时可省略 .md，创建时可省略类型前缀",
     ),
     document_type: str | None = typer.Option(None, "--type"),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        help="同次补字段并指定新标题，不含类型前缀、路径及 .md；普通改标题使用 rename",
+    ),
     set_values: list[str] | None = typer.Option(None, "--set", help=SET_OPTION_HELP),
     expected_hash: str | None = typer.Option(None, "--expected-hash"),
     expected_plan: str | None = typer.Option(
@@ -146,6 +157,7 @@ def apply_document(
                 DocumentApplyRequest(
                     path=path,
                     document_type=document_type,
+                    name=name,
                     values=values,
                     expected_hash=expected_hash,
                     expected_plan=expected_plan,

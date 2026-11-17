@@ -27,5 +27,3 @@ def sync(
 
     result = invoke(execute)
     emit(result)
-    if result["status"] == "blocked":
-        raise typer.Exit(1)

@@ -163,7 +163,8 @@ def test_sync_detects_external_change_during_fetch(repositories, tmp_path, monke
 def test_sync_non_git_cli_reports_blocked_without_other_side_effects(workspace):
     result = CliRunner().invoke(app, ["workspace", "git", "sync"])
     assert result.exit_code != 0
-    payload = json.loads(result.stdout)
+    payload = json.loads(result.stderr)
+    assert result.stdout == ""
     assert payload["status"] == "blocked"
     assert not payload["write_performed"]
     assert not (workspace / ".git").exists()
@@ -266,3 +267,16 @@ def test_sync_rename_snapshot_does_not_change_when_staged(repositories, tmp_path
     ) == "original\n"
     assert not (second / "note.md").exists()
     assert git(first, "config", "diff.renames") == rename_detection
+
+
+def test_preview_missing_upstream_retains_known_diagnostics(repositories, tmp_path):
+    _remote, first, _second = repositories
+    git(first, "branch", "--unset-upstream")
+    before = (first / ".git/config").read_bytes()
+    service = GitSyncService(first, tmp_path / "state")
+    result = service.sync()
+    assert result["code"] == "upstream-required"
+    assert result["branch"] == "main"
+    assert result["remotes"] == ["origin"]
+    assert not result["remote_checked"] and not result["write_performed"]
+    assert (first / ".git/config").read_bytes() == before

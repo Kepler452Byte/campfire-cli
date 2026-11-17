@@ -11,6 +11,7 @@ from campfire_cli.app.base.schema.operation_schema import CommandFollowUp
 class DocumentApplyRequest(BaseModel):
     path: str
     document_type: str | None = None
+    name: str | None = None
     values: dict[str, str] = Field(default_factory=dict)
     expected_hash: str | None = None
     expected_plan: str | None = None
@@ -64,6 +65,7 @@ class DocumentIndexRecord(BaseModel):
     lifecycle: str | None = None
     task_status: str | None = None
     priority: str | None = None
+    tags: list[str] = Field(default_factory=list)
     assignee: list[str] = Field(default_factory=list)
     due: str | None = None
     source_updated: str | None = None
@@ -115,6 +117,7 @@ class DocumentListItem(BaseModel):
     lifecycle: str | None = None
     task_status: str | None = None
     priority: str | None = None
+    tags: list[str] = Field(default_factory=list)
     assignee: list[str] = Field(default_factory=list)
     due: str | None = None
     updated: str | None = None
@@ -124,7 +127,7 @@ class DocumentListResult(BaseModel):
     status: Literal["ok"] = "ok"
     workspace_id: str
     index_generation: int
-    filters: dict[str, str] = Field(default_factory=dict)
+    filters: dict[str, str | list[str]] = Field(default_factory=dict)
     count: int
     total: int
     returned: int

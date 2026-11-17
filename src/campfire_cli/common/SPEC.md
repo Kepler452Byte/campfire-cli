@@ -3,7 +3,7 @@
 本目录放 Workspace 与 Maintenance 等业务模块共同使用的原子能力。
 
 - `documents/`：Markdown、Frontmatter、文档类型、链接、领域、关系和 MOC。
-- `database/`：SQLite、模型和数据库迁移机制。
+- `database/`：SQLite、当前模型契约及不兼容派生缓存的删除重建；不维护历史迁移链。
 - `filesystem/`：安全路径、原子写入和锁。
 - `reports/`：稳定 JSON 与 Markdown 报告渲染。
 - `media/`：可选的本地媒体解码、抽帧、语音转写及隔离进程，不负责文档治理与交付。

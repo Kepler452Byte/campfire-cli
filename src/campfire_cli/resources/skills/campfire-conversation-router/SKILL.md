@@ -18,6 +18,7 @@ description: "路由用户在对话中表达的问答、任务、学习和文档
 ```text
 用户意图
 |-- 当前问答 -> 直接回答，不创建文档
+|-- 周清单分流或主线维护 -> 可选 task-mainline
 |-- 明确任务查询或维护 -> task-management
 |-- 文档沉淀或更新 -> document-capture
 |-- 已有收件箱材料 -> inbox-triage

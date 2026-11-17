@@ -70,7 +70,7 @@ class SqliteDocumentIndexRepository:
         )
 
     def query_documents(
-        self, filters: dict[str, str], limit: int | None = None
+        self, filters: dict[str, str | list[str]], limit: int | None = None
     ) -> tuple[list[DocumentIndexRecord], int]:
         fields = {
             "project": Document.project_id,
@@ -83,7 +83,14 @@ class SqliteDocumentIndexRepository:
             Document.workspace_id == self._workspace_id, Document.queryable.is_(True)
         )
         for field, value in filters.items():
-            statement = statement.where(fields[field] == value)
+            if field == "tags":
+                for tag in value:
+                    entries = func.json_each(Document.tags_json).table_valued("value")
+                    statement = statement.where(
+                        select(1).select_from(entries).where(entries.c.value == tag).exists()
+                    )
+            else:
+                statement = statement.where(fields[field] == value)
         total = self._session.scalar(select(func.count()).select_from(statement.subquery())) or 0
         rows = self._session.scalars(statement.order_by(Document.path).limit(limit)).all()
         return [self._document(row) for row in rows], total
@@ -184,6 +191,7 @@ class SqliteDocumentIndexRepository:
                         lifecycle=item.lifecycle,
                         task_status=item.task_status,
                         priority=item.priority,
+                        tags_json=json.dumps(item.tags, ensure_ascii=False),
                         assignee_json=json.dumps(item.assignee, ensure_ascii=False),
                         due=item.due,
                         source_updated=item.source_updated,
@@ -243,6 +251,7 @@ class SqliteDocumentIndexRepository:
             lifecycle=row.lifecycle,
             task_status=row.task_status,
             priority=row.priority,
+            tags=json.loads(row.tags_json or "[]"),
             assignee=json.loads(row.assignee_json or "[]"),
             due=row.due,
             source_updated=row.source_updated,

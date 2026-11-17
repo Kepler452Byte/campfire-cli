@@ -72,6 +72,7 @@ class Document(Base):
     lifecycle: Mapped[str | None] = mapped_column(String(32), nullable=True)
     task_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    tags_json: Mapped[str] = mapped_column(Text, default="[]")
     assignee_json: Mapped[str] = mapped_column(Text, default="[]")
     due: Mapped[str | None] = mapped_column(String(32), nullable=True)
     source_updated: Mapped[str | None] = mapped_column(String(32), nullable=True)

@@ -18,7 +18,7 @@ from campfire_cli.app.agent_resources.schema.agent_resource_schema import (
 from campfire_cli.common.exceptions import GovernanceBlockedError
 from campfire_cli.common.package_version import installed_version
 from campfire_cli.config.defaults import config_section
-from campfire_cli.config.settings import AgentResourceSettings
+from campfire_cli.config.settings import AgentResourceSettings, client_hint_paths
 
 NAME_RE = re.compile(r"^name:\s*[\"']?([^\n\"']+)", re.MULTILINE)
 DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?([^\n\"']+)", re.MULTILINE)
@@ -335,7 +335,31 @@ class AgentResourceService:
                         if self._block(current)
                         else "appended"
                     )
-                hints.append({"path": path, "action": action})
+                client = next(
+                    (
+                        name
+                        for name, target in client_hint_paths().items()
+                        if target.absolute() == Path(path)
+                    ),
+                    None,
+                )
+                override = Path(path).with_name("AGENTS.override.md")
+                shadowed = (
+                    client == "codex" and override.is_file() and bool(override.read_bytes().strip())
+                )
+                hints.append(
+                    {
+                        "path": path,
+                        "action": action,
+                        "client": client,
+                        "loading_verified": False,
+                        "loading_hint": "非空 AGENTS.override.md 优先；此 AGENTS.md 不会加载。"
+                        if shadowed
+                        else "自定义目标需显式接入客户端，文件写入不代表自动加载。"
+                        if client is None
+                        else "请在该客户端新会话核验指令加载；本次仅对齐文件。",
+                    }
+                )
         if conflicts:
             result["status"] = "blocked"
             return {"skills": result, "agent_hints": hints}

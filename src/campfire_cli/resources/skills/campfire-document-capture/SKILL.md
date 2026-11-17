@@ -47,7 +47,7 @@ CLI 预览结果
 
 - **已知路径，只改人工正文**：读取局部内容与尚未知的局部规则 → 最小 Edit → 核对修改区域。不加载 bootstrap，不调用 apply，不改 Frontmatter 或自动生成区。
 - **已授权、主题及目标目录明确的新文档**：契约已知时直接 apply 预览 → 无问题后以相同输入加返回哈希和 `--confirm` → 按返回的 `target` 在 `<!-- CAMPFIRE:BODY -->` 后 Edit 正文 → 执行实际 follow_up。没有重复、覆盖或事实疑点时不固定查询 Workspace、Project、全部 Domain 或现有文档集合。
-- **已知文档修改结构**：契约已知直接 apply；字段或枚举未知先 inspect 一次。只改标题使用 rename，跨 Domain 移动使用 move，不手改受管结构。
+- **已知文档修改结构**：契约已知直接 apply；字段或枚举未知先 inspect 一次。只改标题使用 rename，跨 Domain 移动使用 move，不手改受管结构。补齐字段或变更类型时若规范名冲突，可在 apply 中同时传 --name <新标题>；不临时挪动已有文档。
 
 ### 命令示例
 

@@ -20,13 +20,6 @@ def version_option(value: bool) -> None:
         raise typer.Exit()
 
 
-def emit_system(result: dict) -> None:
-    blocked = result.get("status") == "blocked"
-    emit(result, err=blocked)
-    if blocked:
-        raise typer.Exit(3)
-
-
 def register_system_commands(app: typer.Typer) -> None:
     @app.command("version")
     def version() -> None:
@@ -63,7 +56,7 @@ def register_system_commands(app: typer.Typer) -> None:
                 else service.setup(path, make_default, workspace_id, verbose)
             )
 
-        emit_system(invoke(operation))
+        emit(invoke(operation))
 
     @app.command("upgrade")
     def upgrade(
@@ -72,7 +65,7 @@ def register_system_commands(app: typer.Typer) -> None:
         ),
     ) -> None:
         """更新包并对齐资源；后台启动不等于升级完成。"""
-        emit_system(invoke(lambda: AppContainer.build_upgrade().upgrade(skip_package)))
+        emit(invoke(lambda: AppContainer.build_upgrade().upgrade(skip_package)))
 
     agent = typer.Typer(
         help="查询本机 Agent 资源升级结果", context_settings={"help_option_names": ["-h", "--help"]}
@@ -81,6 +74,6 @@ def register_system_commands(app: typer.Typer) -> None:
     @agent.command("upgrade-status")
     def upgrade_status(operation_id: str) -> None:
         """查询一次升级的包、资源阶段与 Workspace 结果。"""
-        emit_system(invoke(lambda: AppContainer.build_upgrade().status(operation_id)))
+        emit(invoke(lambda: AppContainer.build_upgrade().status(operation_id)))
 
     app.add_typer(agent, name="agent")
