@@ -16,5 +16,5 @@ job CLI -> JobService -> JobRepository -> jobs.yaml
 - 部署只管理带产品/home/id 所有权的条目，runner 携带准确 home 和安装环境；Windows 使用 pythonw 及无控制台子进程。不得提升权限或保存系统密码。
 - 子进程 stdin 关闭、输出单独流式记录，上限来自默认配置并明确 truncated。超时终止进程树，进程退出与业务产物分开验收。
 - 升级由 System 在 Job 空闲门禁内启动，已有异步升级状态阻止新 Run，避免检查与启动之间竞争；不会开启或恢复 Job。
-- Job 变更后的文档维护由可选 Skill 承担：查询成功后更新 Vault `_定时任务/` 下当前环境的一篇 record。只记录显式绑定该 Workspace 的任务，不写完整命令、路径、凭据或原始日志；文档不反向部署。
+- Job 变更后的文档维护由可选 Skill 承担：查询成功后更新 Vault `_定时任务/` 下当前环境的一篇 record。文件名使用可读主机名，正文环境 id 核对身份；主机改名由 Skill 定位同 id 原文档后走受管 apply --name，同名异环境停止核实。只记录显式绑定该 Workspace 的任务，不写完整命令、路径、凭据或原始日志；文档不反向部署。
 - 环境目录属于系统受管 scope，不声明 Domain；首次写入才创建，无额外总览、MOC 或新文档类型。查询、Runner 和升级不自动写此文档，失败分别报告。

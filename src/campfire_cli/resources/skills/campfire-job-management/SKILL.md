@@ -51,11 +51,13 @@ description: 管理本机手动或定时命令、启动 Codex/Claude Code、查�
 
 通过 `campfire --workspace <id> job list` 取得本机 environment、显式筛选后的 jobs 和 inventory_document；只使用成功、无未核实项的完整结果。不要从共享文档部署 Job，不把查询失败写成没有任务。
 
-默认位置为 Vault 根 `_定时任务/记录-<environment_id>.md`，以实际返回路径为准；一环境一篇 record，不维护额外总览。缺少 environment.id 时报告尚未建立本机 Job 身份，不临时生成标识、改名或写入其他环境文件。
+默认位置为 Vault 根 `_定时任务/记录-<主机名>.md`，以实际返回路径为准；一环境一篇 record，不维护额外总览。缺少 environment.id 时报告尚未建立本机 Job 身份，不临时生成标识、改名或写入其他环境文件。
 
-不存在时，按授权使用 document apply 创建 record：--path 用返回路径、--type record、--set 填 description；确认携带预览哈希。随后在正文锚点后写易读的环境标题与内容，只执行实际 follow_up。name 沿文件名规范保留稳定标识。已存在时读最新正文并直接编辑，保留 Frontmatter、生成区和人工备注。
+不存在时，按授权使用 document apply 创建 record：--path 用返回路径、--type record、--set 填 description；确认携带预览哈希。随后在正文锚点后写易读的环境标题与内容，只执行实际 follow_up。name 随文件名使用可读主机名，环境 id 只在正文核对。已存在时读最新正文并直接编辑，保留 Frontmatter、生成区和人工备注。
 
 正文包含环境名称和 id、平台/时区、最后完整核验时间；任务表只列 id、用途、频率、实际启停、最近运行结果。manual 如需展示则单列。无历史写“无可用运行记录”；完整成功查询为空写“当前无定时任务”，保留文档。用途从已知事实概括，未知保留说明，不复制完整命令、绝对路径、环境变量、凭据或日志。
+
+目标不存在时，先检查该目录是否已有正文 environment id 相同的记录；唯一匹配时用 document apply --name 的预览、哈希和计划确认改名，保留备注和受管引用，不重复创建。多条匹配或同名文档属于其他环境时停止核实，不自动加随机后缀。主机名中的文件名非法字符由 CLI 替换为连字符。
 
 文件中标识不符、外部变化或 Git 冲突时停止对应写入并核实；不覆盖其他环境，不自动归档离线环境或推送 Vault。Job 配置成功但文档失败时分别回报，重新查询后仅补文档，不重复创建任务。
 

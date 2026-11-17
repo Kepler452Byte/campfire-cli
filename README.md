@@ -30,7 +30,7 @@
 +-- jobs/runs.db     可清理的执行历史与日志
 
 Vault/_定时任务/
-+-- 记录-<环境id>.md  Agent 根据 Skill 维护；一环境一篇
++-- 记录-<主机名>.md  Agent 根据 Skill 维护；一环境一篇
 ```
 
 使用 `campfire job create --help` 查看 JSON 输入。manual 不部署定时器；interval（整分钟 60..86400 秒）、daily 和 weekly 使用设备本地时区及原生系统调度。新建暂停，更新保留启停状态；运行中拒绝修改和删除。同 Job 及显式绑定同 Workspace 的自动执行互斥，不持有整轮治理写锁。

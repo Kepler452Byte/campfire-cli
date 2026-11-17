@@ -190,6 +190,7 @@ def test_child_campfire_can_write_with_parent_workspace_execution_lock(workspace
     definition = replace(
         job,
         workspace_id="test",
+        timeout=30,
         argv=[
             sys.executable,
             "-m",
@@ -335,12 +336,17 @@ def test_cleanup_preview_staleness_orphan_reconcile_and_compact(service, job):
     assert service.compact(True, preview["expected_plan"])["write_performed"]
 
 
-def test_environment_name_changes_keep_identity_and_record_path(service, job, monkeypatch):
+def test_environment_name_changes_keep_identity_with_readable_record_path(
+    service, job, monkeypatch
+):
     change(service, "create", job)
     first = service.environment()["id"], service.inventory_path()
     monkeypatch.setattr("socket.gethostname", lambda: "renamed-device")
     assert service.environment()["name"] == "renamed-device"
-    assert (service.environment()["id"], service.inventory_path()) == first
+    assert service.environment()["id"] == first[0]
+    assert service.inventory_path() == "_定时任务/记录-renamed-device.md"
+    monkeypatch.setattr("socket.gethostname", lambda: "办公电脑/机房:01")
+    assert service.inventory_path() == "_定时任务/记录-办公电脑-机房-01.md"
 
 
 def test_list_native_failure_is_not_an_empty_success(service, job):

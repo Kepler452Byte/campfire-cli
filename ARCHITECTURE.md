@@ -299,7 +299,7 @@ campfire job -> JobService -> jobs.yaml（本机执行定义）
                                       +-> 普通命令 / Codex / Claude Code
 
 Agent + 可选 Job Skill -> 查询该 Workspace 的本机 Job
-                      -> Vault/_定时任务/记录-<environment_id>.md
+                      -> Vault/_定时任务/记录-<主机名>.md
 ```
 
 local.yaml 保存稳定环境 id 与原有本机绑定，Job 不依赖已注册 Workspace。显式 workspace_id 绑定的任务在同 Workspace 执行层互斥，治理写锁仅覆盖真正的写操作；父 Runner 不占用整轮治理写锁。配置预览确认、原生部署补偿、运行中维护拒绝与升级协调见 app/job/SPEC.md。

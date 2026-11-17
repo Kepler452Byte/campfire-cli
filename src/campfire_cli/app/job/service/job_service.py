@@ -1,6 +1,7 @@
 import hashlib
 import json
 import platform
+import re
 import socket
 import uuid
 from contextlib import ExitStack, contextmanager
@@ -82,7 +83,8 @@ class JobService:
         if identity is None:
             return None
         prefix = config_section("document_types")["types"]["record"]["prefix"]
-        return str(Path(self.config["inventory_root"]) / f"{prefix}{identity}.md").replace(
+        name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", socket.gethostname()).strip(" .")
+        return str(Path(self.config["inventory_root"]) / f"{prefix}{name or '本机'}.md").replace(
             "\\", "/"
         )
 
