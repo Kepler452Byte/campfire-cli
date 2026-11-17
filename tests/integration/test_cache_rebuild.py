@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ def test_incompatible_cache_rebuilds_without_backups(workspace: Path, change: st
     if change == "corrupt":
         db.write_bytes(b"not a sqlite database")
     else:
-        with sqlite3.connect(db) as connection:
+        with closing(sqlite3.connect(db)) as connection, connection:
             connection.execute(
                 {
                     "old-column": "ALTER TABLE domains ADD COLUMN governance TEXT NOT NULL",
@@ -59,7 +60,7 @@ def test_cache_replacement_refuses_active_connections(workspace: Path) -> None:
     db = campfire_home() / "campfire.db"
     engine = create_sqlite_engine(db)
     initialize_database(engine)
-    with sqlite3.connect(db) as connection:
+    with closing(sqlite3.connect(db)) as connection, connection:
         connection.execute("ALTER TABLE domains ADD COLUMN obsolete TEXT")
     other = create_sqlite_engine(db)
     with other.connect():
@@ -81,7 +82,7 @@ def test_rebuild_discards_old_plan_approval(workspace: Path) -> None:
     repository.save_batch("uuid", "old", ".", "hash")
     repository._session.close()
     db = campfire_home() / "campfire.db"
-    with sqlite3.connect(db) as connection:
+    with closing(sqlite3.connect(db)) as connection, connection:
         connection.execute("ALTER TABLE domains ADD COLUMN obsolete TEXT")
     replacement = AppContainer.build("test")
     with pytest.raises(ValueError, match="批次不存在"):
