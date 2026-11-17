@@ -6,6 +6,35 @@ on:
     tags: ["v*"]
 
 jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+      RUN_NATIVE_TEST: "1"
+      NATIVE_EVIDENCE_DIR: native-evidence
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: uv sync --frozen
+      - name: Start Linux test user manager
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo systemctl start user@$(id -u).service
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+      - name: Verify native lifecycle and actual timer execution
+        run: uv run pytest -q tests/integration/test_job_native.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-${{ runner.os }}
+          path: native-evidence/
   upgrade:
     strategy:
       fail-fast: false
@@ -68,7 +97,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    needs: [quality, video, upgrade]
+    needs: [quality, video, upgrade, native]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

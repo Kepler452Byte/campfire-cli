@@ -8,7 +8,7 @@ Campfire 是一个面向工作与学习场景的、本地优先的人机协作 C
 
 Campfire 不把聊天记录当作长期事实来源，也不绑定 Obsidian、某一种 Agent 或某一个 Workspace。Obsidian Vault 是当前首个 Markdown 存储适配器，而不是产品边界。
 
-Campfire 当前不负责 Agent 调度、实时消息推送或替代 Jira/Notion；它提供这些系统和不同 Agent 会话都可以共同读写的持久协作协议。
+Campfire 支持通过本机原生调度定时启动普通命令、Codex 或 Claude Code，围绕 Vault 中的上下文执行已授权工作。它不管理 Agent 会话编排、实时消息推送或替代 Jira/Notion。
 
 ## 2. 核心业务对象
 
@@ -210,7 +210,7 @@ Campfire 不把“调用方能够猜对未声明契约”作为可靠性前提�
 | 文档查询索引 | Workspace Markdown、结构声明与有效治理契约 | `~/.campfire/campfire.db` 中按 `workspace_id` 隔离的可重建投影 |
 | 结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；可丢弃并重新生成，新计划重新审批 |
 
-Vault 根目录 `.campfire.yaml` 和本机 `~/.campfire/local.yaml` 保存注册事实；SQLite 全部可重建，不是知识内容或注册数据的 SSOT。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
+Vault 根目录 `.campfire.yaml` 和本机 `~/.campfire/local.yaml` 保存注册事实；campfire.db 全部可重建，不是知识内容或注册数据的 SSOT；jobs/runs.db 是可清理但不可从文件重建的运行历史。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
 
 ### 文档查询投影
 
@@ -288,3 +288,20 @@ Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain
 本机配置按 Workspace id 分节，repository_bindings 按 Project id 和 repository id 保存路径；remote 和分支只在 Vault 根目录 `.campfire.yaml`。SQLite 无注册事实、无历史迁移链，只从当前文件生成投影；停止运行中的操作后可整库删除重建。
 
 领域分类与 Project 归属不决定治理方式。所有领域共用结构、检查与 MOC 生成；Project 只关联仓库便携信息与本机位置，Domain 不保存 governance 字段。
+
+## 本机执行与环境记录（v0.3.0）
+
+```text
+campfire job -> JobService -> jobs.yaml（本机执行定义）
+                          -> 原生调度器（实际启停与触发）
+                          -> Runner -> jobs/runs.db（历史与日志）
+                                      |
+                                      +-> 普通命令 / Codex / Claude Code
+
+Agent + 可选 Job Skill -> 查询该 Workspace 的本机 Job
+                      -> Vault/_定时任务/记录-<environment_id>.md
+```
+
+local.yaml 保存稳定环境 id 与原有本机绑定，Job 不依赖已注册 Workspace。显式 workspace_id 绑定的任务在同 Workspace 执行层互斥，治理写锁仅覆盖真正的写操作；父 Runner 不占用整轮治理写锁。配置预览确认、原生部署补偿、运行中维护拒绝与升级协调见 app/job/SPEC.md。
+
+环境文档只记录用途、时间规则、状态、最近结果与核验时间，不复制本机启动配置或日志，不反向部署。_定时任务 是系统受管范围，不属于 Space/Domain，首次记录时创建；无额外总览、远程控制或跨设备状态保证。原生用户会话、休眠和关机的限制按平台处理，不补跑或自动重试。

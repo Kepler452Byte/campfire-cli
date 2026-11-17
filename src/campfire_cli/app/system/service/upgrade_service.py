@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import nullcontext
 
 from campfire_cli.app.system.service.system_service import SystemService
 from campfire_cli.common.filesystem.resource_files import atomic_write, write_lock
@@ -14,9 +15,10 @@ from campfire_cli.common.package_version import (
 
 
 class UpgradeService:
-    def __init__(self, system: SystemService, updater: PackageUpdater):
+    def __init__(self, system: SystemService, updater: PackageUpdater, jobs=None):
         self.system = system
         self.updater = updater
+        self.jobs = jobs
 
     def upgrade(self, skip_package: bool = False) -> dict:
         installed = installed_version()
@@ -52,7 +54,8 @@ class UpgradeService:
                     "skipped",
                 )
             plan["target_version"] = latest
-            operation = self.updater.start(plan, plan_digest(plan))
+            with self.jobs.idle() if self.jobs is not None else nullcontext():
+                operation = self.updater.start(plan, plan_digest(plan))
             package.update(action="updater-spawned", update_command=plan["update_command"])
             return {
                 "status": "planned",

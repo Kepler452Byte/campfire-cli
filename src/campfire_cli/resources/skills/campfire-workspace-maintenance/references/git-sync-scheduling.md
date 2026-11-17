@@ -1,42 +1,19 @@
-# Vault Git 的 Tickwork 定时同步 SOP
+# Vault Git 的 Job 定时同步
 
-Campfire 负责提交并推送 Vault；Tickwork 负责本机任务注册、三平台调度与执行记录。管理 Vault 定时同步时读取本页，再加载 `tickwork-task-management`。其他本机定时命令直接进入 Tickwork Skill，不需要 Campfire bootstrap。
+Campfire 的 workspace git sync 负责提交和远端同步，job 负责本机调度与日志。管理定时同步时读取本页和 campfire-job-management，不安装 Tickwork，也不手写平台调度脚本。
 
-## 首次安装与 Agent 资源接入
-
-本机找不到 `tickwork` 时，先报告缺少可选工具。用户已授权安装或完成定时任务配置时，在当前用户环境安装 PyPI 包，要求 Python 3.12+：
-
-```sh
-uv tool install tickwork-cli
-tickwork --help
-tickwork doctor
-```
-
-复用本机已有的 uv；缺少安装工具时按 Tickwork README 的安装指引处理，不自动提升权限。安装后若命令仍不可用，核实工具可执行目录及 PATH，不重复安装。官方项目：https://github.com/Kepler452Byte/tickwork-cli 。
-
-若 `tickwork-task-management` Skill 尚未安装，使用 `tickwork agent install --help` 查询资源接入命令。`--agents-file` 和 `--skills-dir` 使用当前 Agent 实际加载的绝对路径；例如 Codex 常见位置为 `~/.agents/AGENTS.md` 和 `~/.agents/skills`，先核实，不写入另一个 Agent 的目录。先预览，再按授权携带本次 `--expected-plan` 与 `--confirm` 安装 Hint 和 Skill，随后读取安装的 Skill。资源接入不会创建或启用任务。
-
-## 流程总览
+## 流程
 
 ```text
-定时同步需求 -> 核实 Workspace、范围、频率与已有入口
-             -> Tickwork 缺失时按授权安装并接入 Agent 资源
-             -> Tickwork Skill：查询任务和调度能力
-             -> 按授权预览并管理任务
-             -> 核对调度状态、执行记录和 remote_synced
+已有同步授权与目标 -> 核对 Workspace、频率及其他同步入口
+    -> 预览实际 Git 状态 -> 按授权测试并核验 remote_synced
+    -> Job 创建/更新预览 -> 确认 -> 按授权启用
+    -> 查询本机实际状态与运行结果 -> 更新当前环境记录
 ```
 
-## 执行步骤
-
-1. 复用已确认的 Workspace、频率和授权。启用定时同步代表允许提交并推送整个 Vault 的可提交改动；仅写文档、升级或查询不构成启用授权。暂停、删除或调频不先运行同步，不顺便恢复已暂停任务。
-2. 按 Tickwork Skill 查询已有任务和原生调度状态，并核对 Obsidian Git、cron 等其他同步入口。按实际执行参数识别目标，不只看名称。同一工作树只保留一个自动同步入口；旧入口的交接按 Tickwork Skill 处理，不自动改动未知系统任务。
-3. 新建或恢复前，核实本机 Campfire 绝对路径、Vault 注册与根目录、Git identity/upstream 和非交互凭据。按已有同步授权预览、确认一次手动同步，核对 `remote_synced: true`。Tickwork 不可用时报告缺少工具；安装按用户授权执行，不另写平台定时脚本。
-4. 任务 argv 使用 Campfire 绝对路径及 `--workspace <id> workspace git sync --confirm`，cwd 使用本机 Vault 根目录。定时执行不携带固定的旧 `--expected-plan`。频率和 timeout 按用户需求及 Tickwork 当前契约选择；五分钟只是示例，不是自动启用的默认值。不同设备分别解析路径，不复制其他设备的路径或凭据。使用自定义 `CAMPFIRE_HOME` 时，先确认任务实际运行环境指向正确配置。
-5. 通过 Tickwork CLI 预览并确认创建或修改，使用本次返回的计划摘要。新任务默认暂停，获得启用授权后才恢复；已暂停任务调整后保持暂停。参数、文件格式和平台限制以 CLI 帮助及 Tickwork Skill 为准，不手写原生调度配置。
-6. 用 Tickwork 查询部署与启用状态；获执行授权后手动运行并检查 history、result 和 logs。退出码为零只代表命令执行成功，仍需从本次 Campfire JSON 核对 `remote_synced: true`。报告任务 id、Workspace、间隔、启用状态和最近运行结果，不用历史成功替代本次结果。
-
-## 失败与完成边界
-
-先区分未触发、可执行文件或凭据不可用、Tickwork 执行失败与 Campfire 同步失败。调度及日志问题交给 Tickwork Skill；同步问题按 Campfire JSON 的阶段、提示与冲突路径处理，不强推或自动选一方。正在同步时优先等待结束，不为修改任务强杀 Git。
-
-任务定义保存在本机 Tickwork 配置，不写入 Vault `.campfire.yaml` 或 Campfire `~/.campfire/local.yaml`；运行记录和日志由 Tickwork 管理。用户会话、休眠与关机的触发限制见 Tickwork 平台说明，不承诺设备离线时同步，也不默认扩大权限。Campfire setup/upgrade 只更新资源，不创建或启用任务。
+1. 启用定时同步代表允许提交并推送整个 Vault 的可提交新增、修改与删除。仅文档编辑、升级或查询不构成授权；已有持续同步授权直接复用。暂停、调频或删除不先执行 Git 同步，不顺便恢复暂停状态。
+2. 查询已有 Job，并核对插件、cron 等其他同步入口；同一工作树只保留一个自动同步入口。旧 Tickwork 按用户已确认范围由 Agent 记录要求、暂停等待、移除，再普通新建；不双启动、不迁移历史。
+3. 核实 Campfire 绝对路径、Workspace 注册、Git identity/upstream 和实际调度环境的非交互凭据。按授权测试本次 git sync，核对 remote_synced=true；缺 upstream、冲突或认证失败时按真实阶段处理，不强推、不自动解决冲突。
+4. Job JSON 的 argv 为绝对 Campfire 程序路径及 --workspace <id> workspace git sync --confirm，cwd 为本机 Vault 根目录，同时填写 workspace_id。频率与 timeout 来自用户需求；定时执行不携带陈旧 Git expected_plan。自定义 CAMPFIRE_HOME 在原生运行环境中保持正确，必要时显式 wrapper，不复制其他设备路径或凭据。
+5. Job 配置沿当前预览和摘要确认；新建默认暂停，获执行及启用授权后测试并 resume。更新保持启停状态；按实际 Job 结果与本次 Git JSON 验收，进程退出 0 不代替 remote_synced。
+6. 配置变更后按 Job Skill 更新 Vault `_定时任务/` 中当前环境的文档。区分调度已启用、本次执行结果、远端已同步和环境记录是否更新；失败只补失败步骤。文档记录不反向部署任务，setup/upgrade 不启用任务。

@@ -1,0 +1,37 @@
+import subprocess
+import sys
+from pathlib import Path
+
+from campfire_cli.common.exceptions import JobError
+
+
+def no_window_flags() -> int:
+    if sys.platform == "win32":
+        return subprocess.CREATE_NO_WINDOW
+    return 0
+
+
+def command(argv: list[str], *, allowed_codes: tuple[int, ...] = (0,)) -> str:
+    powershell = Path(argv[0]).name.lower() == "powershell.exe"
+    if powershell:
+        argv = [
+            *argv[:-1],
+            "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); " + argv[-1],
+        ]
+    try:
+        result = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8" if powershell else None,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+            creationflags=no_window_flags(),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise JobError("scheduler-unavailable", str(exc)) from exc
+    if result.returncode not in allowed_codes:
+        raise JobError(
+            "scheduler-failed", f"{argv[0]} exited {result.returncode}: {result.stderr.strip()}"
+        )
+    return result.stdout

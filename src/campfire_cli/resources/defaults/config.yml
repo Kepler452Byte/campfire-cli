@@ -1,4 +1,13 @@
-version: 4
+version: 5
+jobs:
+  inventory_root: _定时任务
+  log_limit_bytes: 10485760
+  retention:
+    success_days: 7
+    failure_days: 30
+    success_limit: 100
+    failure_limit: 100
+    failure_keep: 10
 video:
   model:
     repository: Systran/faster-whisper-small
@@ -50,6 +59,7 @@ document_types:
   scope_roots:
   - _待用户确认
   - _模板
+  - _定时任务
   exempt_basenames:
   - _领域.md
   - _空间.md
@@ -257,6 +267,7 @@ skills:
   - campfire-kanban-board
   - campfire-task-management
   - campfire-task-mainline
+  - campfire-job-management
   unknown_skill_policy: ignore
   orphaned_skill_policy: report
 bases:

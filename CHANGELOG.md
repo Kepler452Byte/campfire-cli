@@ -1,5 +1,13 @@
 # 版本记录
 
+## 0.3.0 — 待发布
+
+- 合并 Tickwork 的本机手动命令、三平台原生定时、进程树超时与运行日志，公开入口为 campfire job。
+- Job 定义和稳定环境身份保存在本机 YAML，运行历史独立 SQLite，文档索引仍可整库删除重建。
+- 增加显式 Workspace 绑定与执行互斥、计划复核、活动运行期间的维护和升级保护。
+- 新增可选 campfire-job-management Skill，支持定时启动 Codex/Claude Code，并在 Vault _定时任务/ 中一环境一篇记录；不依赖 Tickwork、不迁移旧任务。
+- 更新 Typer 参数接口与依赖范围，修复新版依赖安装后 JSON 帮助失效。
+
 ## 0.2.8 — 2026-11-17
 
 - 新增 document list 可重复 --tags 精确 AND 查询与 apply --name 同次补结构和修复重名。

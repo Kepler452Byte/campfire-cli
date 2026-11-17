@@ -10,6 +10,7 @@ from campfire_cli.app.agent_resources.cli.skill_cli import skill_cli
 from campfire_cli.app.agent_resources.service.agent_resource_service import AgentResourceService
 from campfire_cli.app.base.cli.base_cli import base_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
+from campfire_cli.app.job.cli.job_cli import job_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
 from campfire_cli.app.system.cli.system_cli import register_system_commands, version_option
 from campfire_cli.app.video.cli.video_cli import video_cli
@@ -55,7 +56,7 @@ class LazyContainer:
 
 app = typer.Typer(
     add_completion=False,
-    help="人类与 Agent 共用的 Workspace 文档治理 CLI",
+    help="人类与 Agent 共用的本地上下文、文档治理与命令执行 CLI",
     no_args_is_help=True,
     context_settings=CONTEXT_SETTINGS,
     cls=JsonTyperGroup,
@@ -72,6 +73,7 @@ app.add_typer(maintenance_cli, name="maintenance")
 app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
 app.add_typer(video_cli, name="video")
+app.add_typer(job_cli, name="job")
 
 
 @app.callback()
@@ -94,3 +96,6 @@ def main(
 
 
 register_system_commands(app)
+
+if __name__ == "__main__":
+    app()

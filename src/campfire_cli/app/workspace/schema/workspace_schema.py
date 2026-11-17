@@ -19,6 +19,7 @@ class WorkspaceRegistry(BaseModel):
 
     default_workspace: str | None = None
     workspaces: dict[str, WorkspaceEntry] = Field(default_factory=dict)
+    environment_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
 
 
 class WorkspaceResult(BaseModel):

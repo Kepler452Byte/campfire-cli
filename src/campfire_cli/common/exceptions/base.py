@@ -38,3 +38,24 @@ class GovernanceBlockedError(AppError):
 
     exit_code = 3
     error_code = "governance-blocked"
+
+
+class JobError(AppError):
+    """Expose a stable code for local execution and scheduling failures."""
+
+    def __init__(self, code: str, message: str, **details: object) -> None:
+        super().__init__(message, code=code, **details)
+        self.blocked = code in {
+            "busy",
+            "stale-plan",
+            "foreign-job",
+            "already-deployed",
+            "upgrade-active",
+            "workspace-binding-changed",
+            "environment-missing",
+            "recovery-required",
+        }
+        self.exit_code = 3 if self.blocked else (2 if code.startswith("invalid-") else 1)
+
+    def payload(self) -> dict[str, object]:
+        return {**super().payload(), "status": "blocked" if self.blocked else "error"}

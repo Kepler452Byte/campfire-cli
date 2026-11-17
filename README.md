@@ -3,7 +3,7 @@
 `campfire` 是面向工作与学习场景的本地优先人机协作 CLI。它让人类和多个 Agent 围绕同一份持久共享上下文协作：把口头要求、临时笔记、任务进度、项目资料和长期知识沉淀进可检索、可交接、可审计的 Workspace。
 
 - **人类和 Agent 同一条链路**：同一套 CLI 契约 + 全局 Agent Skill，没有两套规则。
-- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；`.campfire.yaml` 保存便携项目事实，`~/.campfire/local.yaml` 保存本机注册与绑定；SQLite 全部是可重建状态。
+- **Markdown 是事实源**：正文永远可脱离 campfire 阅读和迁移；`.campfire.yaml` 保存便携项目事实，`~/.campfire/local.yaml` 保存本机注册与绑定；campfire.db 是可重建索引；本机 Job 定义另存 YAML，历史与日志在独立 SQLite 中。
 - **写操作默认预览**：先计划、再确认、执行前在治理锁内复核内容哈希，检测到输入变化时拒绝覆盖；不承诺外部编辑器遵守锁或跨介质崩溃原子性。
 - **本地优先**：不绑定云服务、不内置账号；Obsidian 是推荐阅读工具而非强依赖；CLI 可独立治理 Markdown Workspace。
 
@@ -17,6 +17,40 @@
 - [版本变化](CHANGELOG.md) · [贡献指南](CONTRIBUTING.md) · [安全反馈](SECURITY.md)
 
 推荐搭配 Obsidian：内置 Bases 展示表格，大纲提供章节导航；Kanban 用于看板，Obsidian Git 用于版本历史。它们不是普通文档查询和治理的前提。Templater、TOC 不作为依赖。插件配置教程等待维护者提供博客链接，不在 CLI 输出或仓库重复编写，也不自动修改插件设置。
+
+## 本机命令与定时执行（v0.3.0）
+
+安装使用 `uv tool install campfire-cli`，升级使用 `campfire upgrade`。Tickwork 的执行能力已并入 `campfire job`，支持普通脚本、Campfire、`codex exec` 和 `claude -p`，不要求另装 Tickwork。
+
+```text
+~/.campfire/
++-- local.yaml       Workspace 本机绑定与稳定环境 id
++-- jobs.yaml        执行定义：argv、cwd、时间规则、超时
++-- campfire.db      可删除重建的文档索引
++-- jobs/runs.db     可清理的执行历史与日志
+
+Vault/_定时任务/
++-- 记录-<环境id>.md  Agent 根据 Skill 维护；一环境一篇
+```
+
+使用 `campfire job create --help` 查看 JSON 输入。manual 不部署定时器；interval（整分钟 60..86400 秒）、daily 和 weekly 使用设备本地时区及原生系统调度。新建暂停，更新保留启停状态；运行中拒绝修改和删除。同 Job 及显式绑定同 Workspace 的自动执行互斥，不持有整轮治理写锁。
+
+```sh
+campfire job create --file /absolute/job.json
+campfire job create --file /absolute/job.json --expected-plan <创建预览摘要> --confirm
+campfire job run example
+campfire job run example --expected-plan <运行预览摘要> --confirm
+campfire --workspace demo job list
+campfire job history --job example
+```
+
+定时 Job 在获启用授权后，使用 `job resume <id>` 预览、带回该次摘要确认。`job doctor` 诊断本机调度条件，`result`/`logs` 查看实际运行；失败也返回本次查询入口。进程退出成功仍需核验业务产物。清理和 compact 独立预览，不改变定义或启用状态。
+
+可选全局 `campfire-job-management` Skill 负责配置、测试、启用及环境文档维护，具体 Agent 启动方式按需读取其 references。任务约定明确允许动作、完成依据和结果位置，每次可从 Vault 最新进展恢复；不强制季度或业务文档目录。Agent 的登录与工具权限由客户端负责，不默认绕过权限。
+
+Linux 需要可用的 systemd 用户 manager，macOS 需要已登录 GUI 会话，Windows 当前用户 Task Scheduler 需要登录会话及同安装环境 pythonw。命令使用绝对路径和 argv，stdin 关闭；不提高权限、不唤醒、不自动补跑或重试。升级不启用 Job，活动运行会阻止替换安装环境；重装到其他位置需显式 update 后核验原生入口。
+
+环境文档只是截至核验时间的可读记录，不反向部署、不包含本机命令路径或凭据；CLI 查询、Runner 和升级不自动写它。删 campfire.db 不影响 Job、原生定时器或运行日志；删 runs.db 会失去历史，且活动运行时拒绝替换。旧 Tickwork 任务由 Agent 记录要求、暂停等待并移除，再通过普通 Job 命令新建，不导入或兼容旧数据库。
 
 ## 本地视频文字整理（v0.2.0）
 

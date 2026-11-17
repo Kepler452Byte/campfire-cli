@@ -36,6 +36,7 @@ document/
 - `inspect`：向 Agent 返回单篇文档的 Domain、类型、有效 Profile、具体问题，以及 outgoing、incoming、unresolved 及入度、出度。
 - `apply`：根据目标路径和类型解析 Profile，不存在时生成文档并在 Frontmatter 后写入唯一的 `<!-- CAMPFIRE:BODY -->` 正文锚点，已有 Frontmatter 时只应用显式补丁，无 Frontmatter 时保留正文并补齐完整契约；先完整渲染并校验，追加 `--confirm` 后原子写入。存量文档不因缺少锚点而迁移。
 - `template`：只继承 base Profile，集中存放在 Workspace 根目录 `_模板/`，属于无 Domain 的系统受管范围；已有 Domain `_模板/` 仍可用。只校验模板目录和字段，不绑定目标类型、不校验正文结构，不维护继承关系。
+- `_定时任务/` 是无 Domain 的系统受管 scope，环境记录复用 record/base Profile、正常 apply 和索引；不新增 Job 文档类型或反向配置协议。
 - `move`：在任意已声明 Domain 之间移动一篇文档，按目标 Profile 对齐可确定的 `domain`/`project` 归属，并只更新 `related_docs` 的精确路径引用。目标 Profile 缺少业务字段时返回 `needs-input`，不猜测。
 - `rename`：保持一篇文档的物理目录与 Domain 归属不变，根据逻辑标题重算类型前缀文件名，并在同一变更集中更新 `name` 与可确定引用。目标存在时阻止，不覆盖或自动编号。
 - `scanner`：统一解释受管根、忽略目录和豁免文件；Document 与 Maintenance 共用。

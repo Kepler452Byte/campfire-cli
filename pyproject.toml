@@ -1,6 +1,6 @@
 [project]
 name = "campfire-cli"
-version = "0.2.8"
+version = "0.3.0"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 license = "MIT"
@@ -12,7 +12,8 @@ dependencies = [
   "pydantic-settings>=2.2",
   "pyyaml>=6.0",
   "sqlalchemy>=2.0",
-  "typer>=0.12",
+  "typer>=0.29,<0.30",
+  "tzdata>=2025.1",
 ]
 
 [project.urls]

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
-from sqlalchemy import UniqueConstraint, create_engine, inspect
+from sqlalchemy import MetaData, UniqueConstraint, create_engine, inspect
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session
@@ -17,72 +16,20 @@ from campfire_cli.common.exceptions import GovernanceBlockedError
 
 
 @contextmanager
-def _lease(path: Path, *, exclusive: bool = False) -> Iterator[None]:
-    handle = path.with_suffix(path.suffix + ".lock").open("a+b")
+def database_lease(path: Path, *, exclusive: bool = False) -> Iterator[None]:
+    from campfire_cli.common.filesystem.process_lock import os_lock
+
     try:
-        if os.name == "nt":
-            import ctypes
-            import msvcrt
-            from ctypes import wintypes
-
-            class Overlapped(ctypes.Structure):
-                _fields_ = [
-                    ("Internal", ctypes.c_size_t),
-                    ("InternalHigh", ctypes.c_size_t),
-                    ("Offset", wintypes.DWORD),
-                    ("OffsetHigh", wintypes.DWORD),
-                    ("hEvent", wintypes.HANDLE),
-                ]
-
-            # CRT read-lock modes are exclusive; LockFileEx supports shared leases.
-            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-            lock = kernel.LockFileEx
-            lock.argtypes = [
-                wintypes.HANDLE,
-                wintypes.DWORD,
-                wintypes.DWORD,
-                wintypes.DWORD,
-                wintypes.DWORD,
-                ctypes.POINTER(Overlapped),
-            ]
-            lock.restype = wintypes.BOOL
-            if not lock(
-                msvcrt.get_osfhandle(handle.fileno()),
-                3 if exclusive else 1,
-                0,
-                1,
-                0,
-                ctypes.byref(Overlapped()),
-            ):
-                raise ctypes.WinError(ctypes.get_last_error())
-        else:
-            import fcntl
-
-            fcntl.flock(handle, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
+        with os_lock(path.with_suffix(path.suffix + ".lock"), shared=not exclusive):
+            yield
     except OSError as exc:
-        handle.close()
+        if not isinstance(exc, BlockingIOError) and getattr(exc, "winerror", None) not in {32, 33}:
+            raise
         raise GovernanceBlockedError(
             "缓存正在使用，等待其他 Campfire 操作结束后重试",
             code="database-busy",
             path=str(path),
         ) from exc
-    try:
-        yield
-    finally:
-        try:
-            if os.name == "nt":
-                unlock = kernel.UnlockFileEx
-                unlock.argtypes = [
-                    wintypes.HANDLE,
-                    wintypes.DWORD,
-                    wintypes.DWORD,
-                    wintypes.DWORD,
-                    ctypes.POINTER(Overlapped),
-                ]
-                unlock.restype = wintypes.BOOL
-                unlock(msvcrt.get_osfhandle(handle.fileno()), 0, 1, 0, ctypes.byref(Overlapped()))
-        finally:
-            handle.close()
 
 
 class _CacheConnection(sqlite3.Connection):
@@ -101,7 +48,7 @@ def create_sqlite_engine(database_path: Path) -> Engine:
 
     def connect() -> _CacheConnection:
         lease = ExitStack()
-        lease.enter_context(_lease(database_path))
+        lease.enter_context(database_lease(database_path))
         try:
             connection = sqlite3.connect(
                 database_path, factory=_CacheConnection, check_same_thread=False
@@ -116,12 +63,12 @@ def create_sqlite_engine(database_path: Path) -> Engine:
     return create_engine(f"sqlite:///{database_path}", creator=connect, poolclass=NullPool)
 
 
-def _current(connection: Connection) -> bool:
+def _current(connection: Connection, metadata: MetaData) -> bool:
     inspector = inspect(connection)
     actual = set(inspector.get_table_names())
-    if actual != set(Base.metadata.tables):
+    if actual != set(metadata.tables):
         return False
-    for name, table in Base.metadata.tables.items():
+    for name, table in metadata.tables.items():
         columns = {column["name"]: column for column in inspector.get_columns(name)}
         if set(columns) != set(table.columns.keys()):
             return False
@@ -150,36 +97,37 @@ def _current(connection: Connection) -> bool:
     return True
 
 
-def _compatible(engine: Engine) -> bool:
+def _compatible(engine: Engine, metadata: MetaData) -> bool:
     try:
         with engine.connect() as connection:
-            return _current(connection)
+            return _current(connection, metadata)
     except DatabaseError as exc:
         if getattr(exc.orig, "sqlite_errorname", "") in {"SQLITE_CORRUPT", "SQLITE_NOTADB"}:
             return False
         raise
 
 
-def initialize_database(engine: Engine) -> None:
+def initialize_database(engine: Engine, metadata: MetaData = Base.metadata) -> bool:
     """Replace incompatible disposable caches without migrations or backups."""
-    if _compatible(engine):
-        return
+    if _compatible(engine, metadata):
+        return False
     path = Path(engine.url.database)
     engine.dispose()
     # The exclusive lease also excludes other Workspaces sharing this database.
-    with _lease(path, exclusive=True):
+    with database_lease(path, exclusive=True):
         bootstrap = create_engine(engine.url, poolclass=NullPool)
         try:
-            if _compatible(bootstrap):
-                return
+            if _compatible(bootstrap, metadata):
+                return False
             bootstrap.dispose()
             for suffix in ("", "-wal", "-shm"):
                 Path(str(path) + suffix).unlink(missing_ok=True)
-            Base.metadata.create_all(bootstrap)
+            metadata.create_all(bootstrap)
             with bootstrap.connect() as connection:
                 connection.exec_driver_sql("PRAGMA journal_mode=WAL")
         finally:
             bootstrap.dispose()
+    return True
 
 
 def open_session(engine: Engine) -> Session:

@@ -121,7 +121,7 @@ Campfire 使用语义化版本：
 - Markdown Frontmatter 的 `related_docs` 是文档关系唯一 SSOT，采用 `[[Workspace相对路径.md]]`。不解析、索引或自动改写正文链接；历史正文保留，SQLite 关系投影可从该字段重建；不再生成 Markdown 关系页，Agent 通过 document inspect 查询关系。
 - 改名、移动与类型联动改名只定向更新 `related_docs` 引用方；预览输出 `expected_plan`，确认复核整个变更集摘要和文件哈希。文件提交后的索引失败必须报告已写入事实，并使索引可在下次查询恢复。
 
-- SQLite 全部表只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT。
+- campfire.db 全部表只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT；Job 运行日志独立存储在 jobs/runs.db，删除后不恢复历史。
 - Document App 拥有文档记录、确定关系、集合查询和单篇关系查询；Repository 只持久化投影，不解释 Profile、Domain 或链接语义。
 - 文档索引保存 schema version、parser version、有效配置 hash、拓扑 hash 和 generation；Domain 声明、Project 文档根映射等任一解释输入变化都必须自动完整重建。
 - `document list` 与 `document inspect` 查询前必须轻量 reconcile。文件 stat 只筛选变化候选，content hash 表示内容版本；调用方不需要先运行 Maintenance。
@@ -155,3 +155,11 @@ Campfire 使用语义化版本：
 - v0.2.2 按用户指定版本发布，新增能力及删除 Domain 字段/参数明确记为本次版本例外与破坏性变化，不修改既有标签。
 
 - 本轮按用户指定采用 0.2.x 补丁版本承载新增能力和退出状态契约变化，作为通常版本递增规则的显式例外。v0.2.7 标签因 Windows 门禁失败保留，修复后递增至 v0.2.8，不移动或覆盖既有标签。
+
+## 本机 Job
+
+- v0.3.0 将 Tickwork 核心并入 app/job，通过 campfire job 管理本机手动与原生定时命令，可启动 Codex、Claude Code 等外部 CLI；不引入常驻调度器或 Agent 会话编排。
+- jobs.yaml 保存唯一任务定义，local.yaml 保存稳定环境 id，jobs/runs.db 保存运行历史；删 campfire.db 不影响这些数据与原生部署。
+- Job 配置和执行确认采用当前计划摘要，同 Job 与同 Workspace 执行互斥，运行中拒绝修改、删除、compact 和升级替换环境；不持有整轮治理写锁。
+- Vault 的 _定时任务/ 一环境一篇 record，由 Skill 查询后维护，属于可读记录而非执行配置；无 Domain、无额外总览，不写本机路径、凭据或原始日志。
+- 统一到当前 Typer 0.29 参数描述接口与 JSON 帮助，依赖限制在已验证的次版本范围，不保留旧参数接口兼容分支。

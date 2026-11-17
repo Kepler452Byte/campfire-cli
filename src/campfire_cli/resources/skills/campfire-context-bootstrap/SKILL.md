@@ -19,7 +19,7 @@ Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路�
 
 ```text
 当前任务缺什么？
-|-- 本机定时任务 -> Tickwork 入口，见下文
+|-- 本机定时任务 -> Job Skill 入口，见下文
 |-- 不缺上下文 -> 直接返回原任务
 |-- Workspace -> resolve
 |-- 目标领域 -> domain list，已知项目则缩小范围
@@ -40,11 +40,9 @@ Workspace 使用根级 `campfire --workspace <id> ...` 选择。文档相对路�
 
 ### 本机定时任务入口
 
-用户要求注册、查询、调频、暂停、恢复、删除或排查本机定时任务时，加载 `tickwork-task-management`，通过 Tickwork CLI 管理；不额外查询无关的 Domain、Project 或 Profile。
+用户要求配置、查询、启停、删除或诊断本机命令与定时任务时，使用 `campfire-job-management` 和 Campfire job 命令；不额外查询无关 Domain 或 Project，不再要求安装 Tickwork。Vault 定时工作显式绑定 Workspace，Skill 按环境维护 `_定时任务/` 下自己的记录；普通 Job 不要求 Workspace。
 
-本机缺少 Tickwork 时，按安装授权运行 `uv tool install tickwork-cli`，要求 Python 3.12+；安装工具或环境缺失时说明问题，不自动提升权限。缺少 Tickwork Skill 时，通过 `tickwork agent install --help` 获取接入契约，核实当前 Agent 的 Hint 和 Skill 目录，预览后按授权确认安装，再读取 Skill。安装资源不代表授权启用任务，已有暂停状态保持不变。
-
-Vault Git 定时同步还需读取 `campfire-workspace-maintenance` 的 `references/git-sync-scheduling.md`，确认 Workspace、同步范围和 `remote_synced` 验收要求；其他定时命令直接进入 Tickwork Skill。具体任务管理流程只维护在 Tickwork Skill 中。
+Vault Git 同步还需按需读取 maintenance 的 references/git-sync-scheduling.md，核对实际 remote_synced；配置任务不代表启用授权。
 
 ### 命令示例
 

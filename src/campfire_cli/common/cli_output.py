@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, get_args
 
 import typer
 from pydantic import BaseModel
@@ -40,19 +40,32 @@ def command_tree(command: Any, name: str) -> dict[str, Any]:
 
 def parameter_help(parameter: Any, ctx: Any) -> dict[str, Any]:
     default = parameter.default
+    descriptor = parameter.type_descriptor
+    annotation = descriptor.annotation
+    if descriptor.is_list or descriptor.is_tuple:
+        annotation = get_args(annotation)[0]
+    type_name = (
+        descriptor.path_type
+        if descriptor.is_path
+        else "choice"
+        if descriptor.is_choice
+        else {str: "text", int: "integer", float: "float", bool: "boolean"}.get(
+            annotation, getattr(annotation, "__name__", "text")
+        )
+    )
     value = {
         "name": parameter.name,
         "kind": parameter.param_type_name,
         "options": [*parameter.opts, *getattr(parameter, "secondary_opts", [])],
-        "type": parameter.type.name,
+        "type": type_name,
         "required": parameter.required,
         "default": None if callable(default) else parameter.get_default(ctx),
         "multiple": getattr(parameter, "multiple", False),
         "nargs": parameter.nargs,
         "description": getattr(parameter, "help", None),
     }
-    if hasattr(parameter.type, "choices"):
-        value["choices"] = list(parameter.type.choices)
+    if descriptor.choices is not None:
+        value["choices"] = list(descriptor.choices)
     return value
 
 
