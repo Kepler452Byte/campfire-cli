@@ -63,7 +63,8 @@ def create_sqlite_engine(database_path: Path) -> Engine:
     return create_engine(f"sqlite:///{database_path}", creator=connect, poolclass=NullPool)
 
 
-def _current(connection: Connection, metadata: MetaData) -> bool:
+def schema_matches(connection: Connection, metadata: MetaData) -> bool:
+    """Check the current table contract without changing persistent data."""
     inspector = inspect(connection)
     actual = set(inspector.get_table_names())
     if actual != set(metadata.tables):
@@ -100,7 +101,7 @@ def _current(connection: Connection, metadata: MetaData) -> bool:
 def _compatible(engine: Engine, metadata: MetaData) -> bool:
     try:
         with engine.connect() as connection:
-            return _current(connection, metadata)
+            return schema_matches(connection, metadata)
     except DatabaseError as exc:
         if getattr(exc.orig, "sqlite_errorname", "") in {"SQLITE_CORRUPT", "SQLITE_NOTADB"}:
             return False
