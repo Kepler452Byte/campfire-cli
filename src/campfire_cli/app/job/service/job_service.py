@@ -210,7 +210,7 @@ class JobService:
     def change(
         self, action: str, job_id: str, job: Job | None, confirm: bool, expected: str | None
     ) -> dict[str, Any]:
-        if job is not None and (not Path(job.command[0]).is_file() or not Path(job.cwd).is_dir()):
+        if job is not None and (not Path(job.argv[0]).is_file() or not Path(job.cwd).is_dir()):
             raise JobError(
                 "invalid-job",
                 "Executable and working directory must exist when creating or updating",
@@ -310,10 +310,10 @@ class JobService:
                         f"Operation failed and native configuration was restored: {exc}",
                     ) from exc
             changed_execution = old is None or (
-                replacement.command,
+                replacement.argv,
                 replacement.cwd,
                 replacement.timeout,
-            ) != (old.command, old.cwd, old.timeout)
+            ) != (old.argv, old.cwd, old.timeout)
             try:
                 after = self.state(replacement)
             except AppError as exc:

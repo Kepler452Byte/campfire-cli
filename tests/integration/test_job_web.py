@@ -104,26 +104,26 @@ def test_cli_and_http_share_definition_and_reject_stale_preview(client, service,
     assert service.repository.path.read_bytes() == before
 
 
-def test_agent_prompt_is_structured_and_generic_argv_round_trips(client, service, tmp_path):
+def test_script_argv_round_trips_and_rejects_agent_configuration(client, service, tmp_path):
     data = definition(tmp_path)
-    data.pop("argv")
-    data["agent"] = {
-        "kind": "codex",
-        "executable": sys.executable,
-        "prompt": "整理文档\n保留今天的中文进展",
-        "args": [],
-    }
+    script = tmp_path / "entry.py"
+    script.write_text("import json,sys\nprint(json.dumps(sys.argv[1],ensure_ascii=False))\n")
+    argument = "整理文档\n保留今天的中文进展"
+    data["argv"] = [sys.executable, str(script), argument]
     create(client, data)
     stored = service.repository.read()["example"]
-    assert stored.agent["prompt"] == data["agent"]["prompt"]
-    assert "argv" not in stored.data()
-    assert stored.command[-1] == data["agent"]["prompt"]
-    data["argv"] = [sys.executable]
+    assert stored.argv == data["argv"]
+    plan = service.run("example", False)
+    result = service.run("example", True, plan["expected_plan"])
+    assert result["run"]["status"] == "succeeded"
+    output = "".join(
+        chunk["content"] for chunk in service.logs(result["run"]["id"], 100, 0)["chunks"]
+    )
+    assert json.loads(output) == argument
+    before = service.repository.path.read_bytes()
+    data["agent"] = {"kind": "codex", "prompt": argument, "executable": sys.executable}
     assert client.put("/api/v1/jobs/example", json={"job": data}).status_code == 422
-    raw = definition(tmp_path, "custom", "print('custom\nargument')")
-    create(client, raw)
-    assert service.get("custom").command == raw["argv"]
-    assert service.get("custom").agent is None
+    assert service.repository.path.read_bytes() == before
 
 
 def test_query_pagination_unknown_filters_and_input_errors(client, tmp_path):

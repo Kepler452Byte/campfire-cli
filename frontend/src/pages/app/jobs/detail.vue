@@ -166,9 +166,6 @@ async function saved(): Promise<void> {
                 {{ job.script_project }}
               </el-button>
             </el-descriptions-item>
-            <el-descriptions-item label="执行方式">
-              {{ job.agent?.kind || '普通命令' }}
-            </el-descriptions-item>
             <el-descriptions-item label="工作目录">
               {{ job.cwd }}
             </el-descriptions-item>
@@ -176,13 +173,10 @@ async function saved(): Promise<void> {
               {{ job.timeout }} 秒
             </el-descriptions-item>
             <el-descriptions-item label="程序">
-              {{ job.agent?.executable || job.argv?.[0] }}
+              {{ job.argv[0] }}
             </el-descriptions-item>
             <el-descriptions-item label="参数">
-              <pre>{{ JSON.stringify(job.agent?.args || job.argv?.slice(1), null, 2) }}</pre>
-            </el-descriptions-item>
-            <el-descriptions-item v-if="job.agent" label="提示词">
-              <pre>{{ job.agent.prompt }}</pre>
+              <pre>{{ JSON.stringify(job.argv.slice(1), null, 2) }}</pre>
             </el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>

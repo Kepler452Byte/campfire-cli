@@ -135,9 +135,9 @@ async function refresh(): Promise<void> {
 .script-project {
   display: flex;
   min-width: 0;
-  height: calc(100dvh - var(--v3-header-height) - 42px);
+  height: calc(100dvh - var(--v3-header-height));
   min-height: 380px;
-  margin: 16px;
+  margin: 0;
   border: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
   overflow: hidden;
@@ -214,7 +214,6 @@ async function refresh(): Promise<void> {
 }
 @media (max-width: 768px) {
   .script-project {
-    margin: 8px;
     flex-direction: column;
   }
   .script-files {

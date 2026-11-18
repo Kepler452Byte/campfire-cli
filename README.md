@@ -40,7 +40,7 @@ campfire script tree personal-growth --path helpers
 campfire script read personal-growth --path helpers/study.py
 ```
 
-Job JSON 可选 `script_project: "personal-growth"`，创建或更新前先准备对应目录；它只关联预览，执行仍由 argv / agent 和 cwd 决定，多个 Job 可以共用。现有外部脚本不会自动搬迁，脚本不随 Vault Git 自动同步；升级、日志清理和文档索引重建保留这些文件。预览是当前文本，不是历史运行的源码快照；默认忽略依赖和缓存目录，单文件上限 1 MiB、每层目录上限 1,000 项，不跟随链接或读取二进制文件。
+Job JSON 可选 `script_project: "personal-growth"`，创建或更新前先准备对应目录；它只关联预览，执行仍由 argv 和 cwd 决定，多个 Job 可以共用。现有外部脚本不会自动搬迁，脚本不随 Vault Git 自动同步；升级、日志清理和文档索引重建保留这些文件。预览是当前文本，不是历史运行的源码快照；默认忽略依赖和缓存目录，单文件上限 1 MiB、每层目录上限 1,000 项，不跟随链接或读取二进制文件。
 
 ## 本机命令与定时执行
 
@@ -49,7 +49,7 @@ Job JSON 可选 `script_project: "personal-growth"`，创建或更新前先准�
 ```text
 ~/.campfire/
 +-- local.yaml       Workspace 本机绑定与稳定环境 id
-+-- jobs.yaml        执行定义：argv 或 agent、cwd、时间规则、超时
++-- jobs.yaml        执行定义：argv、cwd、时间规则、超时
 +-- campfire.db      可删除重建的文档索引
 +-- jobs/runs.db     可清理的执行历史与日志
 
@@ -59,7 +59,7 @@ Vault/_定时任务/
 
 使用 `campfire job create --help` 查看 JSON 输入。manual 不部署定时器；interval（整分钟 60..86400 秒）、daily 和 weekly 使用设备本地时区及原生系统调度。新建暂停，更新保留启停状态；运行中拒绝修改和删除。同 Job 及显式绑定同 Workspace 的自动执行互斥，不持有整轮治理写锁。
 
-Job 可提供 name 作为显示名称，id 保持稳定。普通命令用 argv 数组；Codex/Claude Code 可改用 agent 对象，字段为 kind（codex/claude）、executable（绝对路径）、prompt（多行提示词）和可选 args（额外参数数组），与 argv 互斥。已有普通命令保持原样，不自动推断或拆分提示词。
+Job 可提供 name 作为显示名称，id 保持稳定。所有任务统一使用 argv 数组描述程序和参数；需要 Codex/Claude Code 时，由脚本项目维护调用方式与提示词文件。Campfire 不提供 Agent 专用任务类型、提示词字段或命令编译层。旧 agent 定义在升级前由 Agent 按用户授权，使用原版本的预览和确认流程手动改为脚本与 argv；升级后再关联脚本项目，不提供自动转换。
 
 ```sh
 campfire job create --file /absolute/job.json

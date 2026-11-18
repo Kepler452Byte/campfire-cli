@@ -68,7 +68,7 @@ def run_job(
         if sys.platform == "win32":
             creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP
         process = subprocess.Popen(
-            task.command,
+            task.argv,
             cwd=task.cwd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,

@@ -23,9 +23,7 @@ File = Annotated[
             'UTF-8 JSON: {"id":"example","argv":["/absolute/executable","arg"],'
             '"cwd":"/absolute/directory","schedule":{"kind":"manual"},"timeout":3600}。'
             "可选 name、workspace_id、script_project（本机 scripts 顶级文件夹名称）；"
-            "workspace_root 自动解析。可用 agent 替代 argv："
-            '{"kind":"codex","executable":"/absolute/codex","prompt":"多行提示词","args":[]}；'
-            "kind 为 codex 或 claude，agent 与 argv 互斥。schedule 支持 manual、"
+            "workspace_root 自动解析。程序、参数和脚本入口统一使用 argv。schedule 支持 manual、"
             "interval（seconds 为整分钟 60..86400）、daily（time HH:MM）、"
             "weekly（day mon..sun、time HH:MM），按设备本地时区执行。"
         ),

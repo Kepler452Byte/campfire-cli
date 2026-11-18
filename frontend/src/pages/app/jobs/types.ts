@@ -4,17 +4,10 @@ export interface Schedule {
   time?: string
   day?: string
 }
-export interface Agent {
-  kind: "codex" | "claude"
-  executable: string
-  args: string[]
-  prompt: string
-}
 export interface Job {
   id: string
   name: string | null
-  argv?: string[]
-  agent?: Agent
+  argv: string[]
   cwd: string
   timeout: number
   workspace_id: string | null

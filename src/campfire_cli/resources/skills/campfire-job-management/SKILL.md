@@ -14,7 +14,7 @@ description: 管理本机手动或定时命令及关联脚本项目、启动 Cod
 ## 上下文与契约
 
 - 已知命令契约直接使用，未知时读目标 `--help`。普通 Job 不要求 Workspace；Vault 工作显式填写稳定 workspace_id，查询时使用根级 `--workspace`，不从 cwd、任务名或默认 Workspace 猜绑定。
-- 输入为 JSON 文件：id、绝对 cwd、schedule、timeout 与 argv 或 agent；可选 name、workspace_id，workspace_root 由 CLI 解析。argv 与 agent 互斥；Agent 的提示词独立放在 agent.prompt，不从已有 argv 猜测拆分。无隐式 shell，需要时显式调用 shell。运行环境来自系统调度器，不依赖终端 PATH 或 shell 初始化；凭据使用客户端自己的登录或安全环境。
+- 输入为 JSON 文件：id、argv、绝对 cwd、schedule、timeout；可选 name、workspace_id、script_project，workspace_root 由 CLI 解析。所有任务使用同一命令契约，Agent 调用与提示词由脚本项目维护。无隐式 shell，需要时显式调用 shell。运行环境来自系统调度器，不依赖终端 PATH 或 shell 初始化；凭据使用客户端自己的登录或安全环境。
 - manual 无原生条目；interval 为整分钟 60..86400 秒，daily/weekly 按设备本地时间。新定时 Job 暂停，更新保持启停；不补跑、不重试、不唤醒机器。平台会话或启动失败时按需读 [平台诊断](references/platform-notes.md)。
 - Job 定义在 CAMPFIRE_HOME/jobs.yaml，环境 id 在 local.yaml，历史与日志在 jobs/runs.db。索引 campfire.db 可删除重建，不影响 Job。不要在有活动运行时删除日志库或锁。
 
@@ -51,7 +51,7 @@ description: 管理本机手动或定时命令及关联脚本项目、启动 Cod
 
 用户需要创建或维护任务脚本时，读取 [脚本项目操作指引](references/script-projects.md)。通过 campfire script list 取得实际根目录；一个顶级文件夹是一个完整脚本项目，内部允许多级源码、模板和依赖声明。脚本由文件工具维护，不另外登记或复制进数据库。
 
-任务可用 script_project 显式关联项目，执行仍由 argv / agent 与 cwd 决定；多个任务可共用项目，不从复杂命令猜关联。创建脚本、测试执行、修改任务和启用定时分别遵守已有授权。Web 展示当前只读文件，文件树顶部刷新，不代表某次历史运行的源码快照。
+任务可用 script_project 显式关联项目，执行仍由 argv 与 cwd 决定；多个任务可共用项目，不从复杂命令猜关联。创建脚本、测试执行、修改任务和启用定时分别遵守已有授权。Web 展示当前只读文件，文件树顶部刷新，不代表某次历史运行的源码快照。
 
 ## 环境任务文档
 

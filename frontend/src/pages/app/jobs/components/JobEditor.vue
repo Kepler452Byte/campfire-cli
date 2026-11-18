@@ -20,10 +20,8 @@ const model = ref<Job>(props.job
     })
 const workspace = ref(model.value.workspace_id ?? "")
 const scriptProject = ref(model.value.script_project ?? "")
-const kind = ref<"command" | "codex" | "claude">(model.value.agent?.kind ?? "command")
-const executable = ref(model.value.agent?.executable ?? model.value.argv?.[0] ?? "")
-const args = ref(JSON.stringify(model.value.agent?.args ?? model.value.argv?.slice(1) ?? []))
-const prompt = ref(model.value.agent?.prompt ?? "")
+const executable = ref(model.value.argv[0] ?? "")
+const args = ref(JSON.stringify(model.value.argv.slice(1)))
 const minutes = ref((model.value.schedule.seconds ?? 60) / 60)
 const time = ref(model.value.schedule.time ?? "22:30")
 const day = ref(model.value.schedule.day ?? "mon")
@@ -55,10 +53,8 @@ function build(): Job {
   if (schedule.kind === "interval") schedule.seconds = minutes.value * 60
   if (schedule.kind === "daily" || schedule.kind === "weekly") schedule.time = time.value
   if (schedule.kind === "weekly") schedule.day = day.value
-  const job: Job = { id: model.value.id, name: model.value.name || null, cwd: model.value.cwd, workspace_id: workspace.value || null, timeout: model.value.timeout, schedule }
+  const job: Job = { id: model.value.id, name: model.value.name || null, argv: [executable.value, ...parameters], cwd: model.value.cwd, workspace_id: workspace.value || null, timeout: model.value.timeout, schedule }
   if (scriptProject.value) job.script_project = scriptProject.value
-  if (kind.value === "command") job.argv = [executable.value, ...parameters]
-  else job.agent = { kind: kind.value, executable: executable.value, args: parameters, prompt: prompt.value }
   return job
 }
 async function preview(): Promise<void> {
@@ -105,14 +101,6 @@ async function confirm(): Promise<void> {
         <el-select v-model="scriptProject" clearable placeholder="未关联" aria-label="脚本项目">
           <el-option v-for="project in scriptProjects" :key="project" :label="project" :value="project" />
         </el-select>
-      </el-form-item>
-      <el-form-item label="执行方式">
-        <el-select v-model="kind" aria-label="执行方式">
-          <el-option label="普通命令" value="command" /><el-option label="Codex" value="codex" /><el-option label="Claude Code" value="claude" />
-        </el-select>
-      </el-form-item>
-      <el-form-item v-if="kind !== 'command'" label="提示词" required>
-        <el-input v-model="prompt" type="textarea" :rows="8" aria-label="提示词" />
       </el-form-item>
       <el-form-item label="执行计划">
         <el-select v-model="model.schedule.kind" aria-label="执行计划">
@@ -182,9 +170,6 @@ async function confirm(): Promise<void> {
         </el-descriptions-item>
         <el-descriptions-item label="参数">
           <pre>{{ args }}</pre>
-        </el-descriptions-item>
-        <el-descriptions-item v-if="submission.agent" label="提示词">
-          <pre>{{ submission.agent.prompt }}</pre>
         </el-descriptions-item>
       </el-descriptions>
     </template>
