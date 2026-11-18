@@ -218,3 +218,21 @@ def test_web_runtime_prevents_installation_replacement(service):
         with pytest.raises(JobError) as error, service.idle():
             pytest.fail("Active Web must prevent environment replacement")
         assert error.value.code == "busy"
+
+
+def test_concurrent_readers_share_config_lock_but_writes_remain_exclusive(
+    client, service, tmp_path
+):
+    from campfire_cli.common.filesystem.process_lock import os_lock
+
+    data = definition(tmp_path)
+    create(client, data)
+    with os_lock(service.home / "jobs/locks/config.lock", shared=True):
+        response = client.get("/api/v1/jobs/example")
+        assert response.status_code == 200, response.text
+        assert client.get("/api/v1/jobs").status_code == 200
+        shown = CliRunner().invoke(app, ["job", "show", data["id"]])
+        assert shown.exit_code == 0, shown.output
+        blocked = client.put("/api/v1/jobs/example", json={"job": data})
+        assert blocked.status_code == 409
+        assert blocked.json()["data"]["code"] == "busy"

@@ -1,4 +1,4 @@
-"""Kernel-held locks for command execution and disposable database leases."""
+"""Kernel-held locks for local operations and database leases."""
 
 import ctypes
 import os
@@ -69,10 +69,10 @@ def os_lock(path: Path, *, shared: bool = False):
 
 
 @contextmanager
-def process_lock(path: Path):
-    """Reject overlapping local operations without deleting persistent lock files."""
+def process_lock(path: Path, *, shared: bool = False):
+    """Reject conflicting operations; allow explicitly shared readers."""
     try:
-        with os_lock(path):
+        with os_lock(path, shared=shared):
             yield
     except OSError as exc:
         if not isinstance(exc, BlockingIOError) and getattr(exc, "winerror", None) not in {32, 33}:

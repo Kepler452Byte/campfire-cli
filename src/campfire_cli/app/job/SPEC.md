@@ -12,6 +12,7 @@ CLI / web/api -> JobService -> JobRepository -> jobs/jobs.db (jobs)
 - name 是可选显示名称，id 保持稳定；argv 是程序与参数的唯一执行契约。Agent 调用和提示词由用户脚本维护，不保留 Agent 专用字段、命令编译层或历史格式转换。
 - Web 及 CLI --detach 通过独立 Runner 执行；取得锁并创建 Run 后握手，调用方确认启动才执行用户命令。Web 关闭不终止任务，活动 Web 阻止替换安装环境。
 - manual 不部署、不要求调度器；interval/daily/weekly 使用本地时区与原生会话规则。新建暂停，更新保留状态；无常驻服务、补跑、自动重试或唤醒。
+- 列表与详情查询使用共享配置锁，避免后台刷新与并行查询互相阻塞；配置写入、启动与维护继续使用独占锁。
 - 写入默认 planned，确认带本次 expected_plan；锁内复核定义和实际原生状态。手动 run 也复核执行摘要。scheduled 入口读取当前定义和启用状态，不复用旧计划；内部标记不构成权限边界。
 - 同 Job 和显式绑定同 Workspace 的 Run 使用独立 OS 锁，不覆盖治理写锁；父进程不持有整轮治理写锁或 SQLite 写事务。运行中拒绝修改、删除、compact 和安装环境替换，不强杀来维护。
 - workspace_id 显式选择稳定注册，workspace_root 由 CLI 用例解析并保存本机绑定快照；运行前绑定不符则停止，更新重新预览。普通 Job 不猜默认 Workspace。

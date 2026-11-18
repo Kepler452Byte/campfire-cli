@@ -45,8 +45,8 @@ class JobService:
         self.config = config
         self.scripts = scripts
 
-    def lock(self):
-        return process_lock(self.home / "jobs/locks/config.lock")
+    def lock(self, *, shared: bool = False):
+        return process_lock(self.home / "jobs/locks/config.lock", shared=shared)
 
     def run_lock(self, job_id: str):
         return process_lock(self.home / f"jobs/locks/run-{job_id}.lock")
@@ -95,7 +95,7 @@ class JobService:
     def list_jobs(self, workspace_id: str | None = None) -> dict:
         if workspace_id is not None:
             self.resolve_workspace(workspace_id)
-        with self.lock():
+        with self.lock(shared=True):
             jobs = []
             for job in self.repository.read().values():
                 if workspace_id is not None and job.workspace_id != workspace_id:
@@ -167,7 +167,7 @@ class JobService:
         return {**result, "follow_up": self.run_follow_up(result["run"]["id"])}
 
     def show(self, job_id: str) -> dict[str, Any]:
-        with self.lock():
+        with self.lock(shared=True):
             job = self.get(job_id)
             return {
                 "status": "ok",

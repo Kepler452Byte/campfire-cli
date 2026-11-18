@@ -26,7 +26,7 @@ def database_lease(path: Path, *, exclusive: bool = False) -> Iterator[None]:
         if not isinstance(exc, BlockingIOError) and getattr(exc, "winerror", None) not in {32, 33}:
             raise
         raise GovernanceBlockedError(
-            "缓存正在使用，等待其他 Campfire 操作结束后重试",
+            "数据库正在使用，等待其他 Campfire 操作结束后重试",
             code="database-busy",
             path=str(path),
         ) from exc
@@ -43,7 +43,7 @@ class _CacheConnection(sqlite3.Connection):
 
 
 def create_sqlite_engine(database_path: Path) -> Engine:
-    """Create an engine whose live connections prevent cache replacement."""
+    """Create an engine whose live connections hold database maintenance leases."""
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
     def connect() -> _CacheConnection:

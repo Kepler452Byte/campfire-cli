@@ -36,7 +36,9 @@ test("真实后端的列表、预览、新建、执行与日志", async ({ page 
   await expect(dialog.getByRole("button", { name: "确认保存" })).toBeVisible()
   await dialog.getByRole("button", { name: "确认保存" }).click()
   await expect(dialog).toHaveCount(0)
-  const created = (await (await page.request.get("/api/v1/jobs/browser-test")).json()).data.job
+  const response = await page.request.get("/api/v1/jobs/browser-test")
+  expect(response.ok(), await response.text()).toBe(true)
+  const created = (await response.json()).data.job
   expect(created.timeout).toBe(450)
   await page.getByRole("button", { name: "浏览器测试任务", exact: true }).click()
   const summary = page.getByRole("table", { name: "任务概览", exact: true })
