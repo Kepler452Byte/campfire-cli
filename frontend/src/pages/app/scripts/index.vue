@@ -190,6 +190,10 @@ async function refresh(): Promise<void> {
 }
 .file-tabs {
   flex: 0 0 auto;
+  :deep(.el-tabs__header .el-tabs__nav),
+  :deep(.el-tabs__item) {
+    border-radius: 0;
+  }
   :deep(.el-tabs__header) {
     margin: 0;
   }

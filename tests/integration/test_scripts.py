@@ -23,7 +23,7 @@ def scripts(tmp_path, monkeypatch):
     project = home / "scripts" / "growth"
     (project / "helpers").mkdir(parents=True)
     (project / "daily.py").write_bytes(b"print('hello')\r\n")
-    (project / "helpers" / "study.py").write_text("# 学习\n", encoding="utf-8")
+    (project / "helpers" / "study.py").write_text("# 学习\n", encoding="utf-8", newline="\n")
     (project / "node_modules").mkdir()
     (project / "node_modules" / "ignored.js").write_text("ignored")
     return ScriptService(home, builtin_section("scripts"))
