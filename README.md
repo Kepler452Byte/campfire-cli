@@ -24,6 +24,24 @@
 
 用户通过 Web 查看、编辑、启停任务和查看 stdout/stderr；Agent 继续通过 CLI 维护。两种入口共用 JobService、定义、预览摘要和锁。Web 的立即执行使用独立 Runner，关闭网页或停止 Web 不终止任务；替换安装环境前需停止 Web 并等待活动任务结束。连接链接是一次性凭据，不分享或写入 Vault。
 
+### 本机脚本项目
+
+任务脚本默认放在 ~/.campfire/scripts，每个顶级文件夹是一个完整项目，允许多级源码、模板和依赖声明。文件由用户或 Agent 维护，Web 在任务「查看脚本」中提供文件树、文件标签及 CodeMirror 只读预览；刷新仅在文件树顶部。Python、Shell、PowerShell、JS/TS、JSON、YAML、Markdown、HTML 和 CSS 支持按需高亮，其他 UTF-8 文件按纯文本显示。
+
+```text
+~/.campfire/scripts/
+└── personal-growth/
+    ├── daily.py
+    └── helpers/
+        └── study.py
+
+campfire script list
+campfire script tree personal-growth --path helpers
+campfire script read personal-growth --path helpers/study.py
+```
+
+Job JSON 可选 `script_project: "personal-growth"`，创建或更新前先准备对应目录；它只关联预览，执行仍由 argv / agent 和 cwd 决定，多个 Job 可以共用。现有外部脚本不会自动搬迁，脚本不随 Vault Git 自动同步；升级、日志清理和文档索引重建保留这些文件。预览是当前文本，不是历史运行的源码快照；默认忽略依赖和缓存目录，单文件上限 1 MiB、每层目录上限 1,000 项，不跟随链接或读取二进制文件。
+
 ## 本机命令与定时执行
 
 安装使用 `uv tool install campfire-cli`，升级使用 `campfire upgrade`。Tickwork 的执行能力已并入 `campfire job`，支持普通脚本、Campfire、`codex exec` 和 `claude -p`，不要求另装 Tickwork。

@@ -108,6 +108,13 @@ class AppContainer:
         return WorkspaceService(home, FilesystemWorkspaceRepository(home))
 
     @staticmethod
+    def build_script():
+        from campfire_cli.app.script.service.script_service import ScriptService
+        from campfire_cli.config.defaults import config_section
+
+        return ScriptService(campfire_home(), config_section("scripts"))
+
+    @staticmethod
     def build_job():
         import sys
 
@@ -141,6 +148,7 @@ class AppContainer:
             RetentionPolicy(**config["retention"]),
             resolve,
             config,
+            AppContainer.build_script(),
         )
 
     @classmethod

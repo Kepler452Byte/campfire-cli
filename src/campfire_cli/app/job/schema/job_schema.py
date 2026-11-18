@@ -3,6 +3,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from campfire_cli.app.script.schema.project_schema import validate_project_name
 from campfire_cli.common.exceptions import JobError
 
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -19,8 +20,11 @@ class Job:
     workspace_root: str | None = None
     name: str | None = None
     agent: dict[str, Any] | None = None
+    script_project: str | None = None
 
     def __post_init__(self) -> None:
+        if self.script_project is not None:
+            validate_project_name(self.script_project)
         if self.name is not None and (not isinstance(self.name, str) or not self.name.strip()):
             raise JobError("invalid-job", "name must be a nonempty string")
         if self.workspace_id is not None and (
@@ -101,6 +105,8 @@ class Job:
     def data(self) -> dict[str, Any]:
         data = asdict(self)
         data.pop("argv" if self.agent is not None else "agent")
+        if self.script_project is None:
+            data.pop("script_project")
         return data
 
     @classmethod
@@ -115,11 +121,12 @@ class Job:
             "workspace_root",
             "name",
             "agent",
+            "script_project",
         }:
             raise JobError(
                 "invalid-job",
                 "Use id, cwd, schedule, timeout and exactly one of argv/agent; "
-                "optional name, workspace_id, workspace_root",
+                "optional name, workspace_id, workspace_root, script_project",
             )
         try:
             return cls(**({"argv": None, **data} if "agent" in data else data))

@@ -14,6 +14,17 @@ from campfire_cli.web.server import create_app
 
 with tempfile.TemporaryDirectory(prefix="campfire-web-e2e-") as raw:
     os.environ["CAMPFIRE_HOME"] = str(Path(raw) / "home")
+    project = Path(raw) / "home/scripts/growth"
+    (project / "helpers").mkdir(parents=True)
+    (project / "daily.py").write_text(
+        "from helpers.study import collect\n\ndef main():\n    return collect()\n", encoding="utf-8"
+    )
+    (project / "helpers/study.py").write_text(
+        "def collect():\n    return '学习记录'\n", encoding="utf-8"
+    )
+    (project / "unknown.custom").write_text("plain text", encoding="utf-8")
+    (project / "binary.bin").write_bytes(b"a\0b")
+    (project / "node_modules").mkdir()
     service = AppContainer.build_job()
     job = Job(
         "seed",
@@ -21,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix="campfire-web-e2e-") as raw:
         raw,
         {"kind": "manual"},
         name="预置任务",
+        script_project="growth",
     )
     plan = service.change("create", job.id, job, False, None)
     service.change("create", job.id, job, True, plan["expected_plan"])

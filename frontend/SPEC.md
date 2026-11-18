@@ -11,7 +11,7 @@
 
 ## 文件职责
 
-- `pages/app/jobs/` 收拢任务页面、接口、类型和专用组件；后续业务按实际需求增加。
+- `pages/app/jobs/` 收拢任务页面，`pages/app/scripts/` 收拢只读脚本项目页；接口、类型和专用组件靠近业务。CodeViewer 放公共组件，语言扩展按需加载。
 - `common/` 放共用组件、样式和 composable，`layouts/` 放外壳，`http/` 放请求与错误适配，`router/` 组合模块路由。
 - 公共层不导入业务页面，App 不导入 Admin 业务；可复用列表能力已在公共层，不复制页面 loading、分页和竞态状态机。
 

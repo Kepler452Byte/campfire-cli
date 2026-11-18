@@ -12,6 +12,7 @@ from campfire_cli.app.base.cli.base_cli import base_cli
 from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.job.cli.job_cli import job_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
+from campfire_cli.app.script.cli.script_cli import script_cli
 from campfire_cli.app.system.cli.system_cli import register_system_commands, version_option
 from campfire_cli.app.system.cli.web_cli import web
 from campfire_cli.app.video.cli.video_cli import video_cli
@@ -75,6 +76,7 @@ app.add_typer(skill_cli, name="skill")
 app.add_typer(base_cli, name="base")
 app.add_typer(video_cli, name="video")
 app.add_typer(job_cli, name="job")
+app.add_typer(script_cli, name="script")
 
 
 @app.callback()

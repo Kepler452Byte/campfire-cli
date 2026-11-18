@@ -61,6 +61,10 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
             "PYTHONIOENCODING": "utf-8",
         }
         environment.pop("PYTHONPATH", None)
+        script = root / "state" / "scripts" / "growth" / "helpers" / "study.py"
+        script.parent.mkdir(parents=True)
+        script_content = b"# User-maintained script\r\nprint('preserve me')\r\n"
+        script.write_bytes(script_content)
         executable = shutil.which("uv" if manager == "uv-tool" else "pipx")
         if not executable:
             raise RuntimeError(f"Missing installer: {manager}")
@@ -117,6 +121,7 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
             raise RuntimeError(Path(operation["log_path"]).read_text(encoding="utf-8"))
         assert result["installed_version"] == new_version, result
         assert result["package_stage"] == result["resource_stage"] == "completed", result
+        assert script.read_bytes() == script_content, "Upgrade changed user script files"
         return {
             "manager": manager,
             "from_version": old_version,
@@ -125,6 +130,7 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
             "package_stage": result["package_stage"],
             "resource_stage": result["resource_stage"],
             "spaces_in_paths": True,
+            "scripts_preserved": True,
         }
 
 

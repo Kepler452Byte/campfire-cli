@@ -19,6 +19,7 @@ export interface Job {
   timeout: number
   workspace_id: string | null
   workspace_root?: string | null
+  script_project?: string | null
   schedule: Schedule
 }
 export interface Run {

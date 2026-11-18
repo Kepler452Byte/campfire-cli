@@ -93,6 +93,8 @@ async function saved(): Promise<void> {
                     立即执行
                   </el-button><el-button v-if="job.schedule.kind !== 'manual'" :disabled="actions.busy.value" @click="actions.execute(job, job.scheduler.enabled ? 'pause' : 'resume')">
                     {{ job.scheduler.enabled ? '暂停' : '恢复' }}
+                  </el-button><el-button v-if="job.script_project" @click="router.push(`/app/scripts/${encodeURIComponent(job.script_project)}`)">
+                    查看脚本
                   </el-button><el-button @click="editor = true">
                     编辑
                   </el-button>
@@ -158,6 +160,11 @@ async function saved(): Promise<void> {
             </el-descriptions-item>
             <el-descriptions-item label="启用状态">
               {{ job.schedule.kind === 'manual' ? '不适用' : job.scheduler.enabled ? '已启用' : '已暂停' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="job.script_project" label="脚本项目">
+              <el-button link type="primary" @click="router.push(`/app/scripts/${encodeURIComponent(job.script_project)}`)">
+                {{ job.script_project }}
+              </el-button>
             </el-descriptions-item>
             <el-descriptions-item label="执行方式">
               {{ job.agent?.kind || '普通命令' }}

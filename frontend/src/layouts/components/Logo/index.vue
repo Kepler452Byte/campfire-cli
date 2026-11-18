@@ -1,6 +1,5 @@
 <script lang="ts" setup>
-import ExpandedLogoSvg from "@@/assets/images/layouts/logo-expanded.svg?component"
-import LogoSvg from "@@/assets/images/layouts/logo.svg?component"
+import logoUrl from "@@/assets/images/layouts/logo.svg?url"
 import { useModuleNavigation } from "@@/composables/use-module-navigation"
 import { useLayoutMode } from "@@/composables/useLayoutMode"
 import { APP_TITLE } from "@@/constants/app"
@@ -19,12 +18,13 @@ const { home } = useModuleNavigation()
     <router-link :to="home" :aria-label="APP_TITLE">
       <transition name="layout-logo-fade">
         <span v-show="collapse" class="logo-layer">
-          <LogoSvg class="layout-logo" aria-hidden="true" />
+          <img :src="logoUrl" class="layout-logo" alt="">
         </span>
       </transition>
       <transition name="layout-logo-fade">
-        <span v-show="!collapse" class="logo-layer">
-          <ExpandedLogoSvg class="layout-logo-expanded" aria-hidden="true" />
+        <span v-show="!collapse" class="logo-layer logo-brand">
+          <img :src="logoUrl" class="layout-logo-expanded" alt="">
+          <span class="logo-title">{{ APP_TITLE }}</span>
         </span>
       </transition>
     </router-link>
@@ -42,7 +42,7 @@ const { home } = useModuleNavigation()
   color: var(--logo-color);
 
   &.is-left {
-    --logo-color: var(--v3-sidebar-menu-active-text-color);
+    --logo-color: var(--v3-sidebar-menu-hover-text-color);
     &::after {
       content: "";
       position: absolute;
@@ -77,15 +77,24 @@ const { home } = useModuleNavigation()
 }
 
 .layout-logo {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
 }
 
 .layout-logo-expanded {
-  width: calc(var(--v3-sidebar-width) - 24px);
-  height: 100%;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
+}
+.logo-brand {
+  gap: 4px;
+  white-space: nowrap;
+}
+.logo-title {
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
 }
 .layout-logo-fade-enter-active {
   transition: opacity var(--layout-logo-duration) ease-out;

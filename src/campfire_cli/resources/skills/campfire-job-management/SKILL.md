@@ -1,6 +1,6 @@
 ---
 name: campfire-job-management
-description: 管理本机手动或定时命令、启动 Codex/Claude Code、查询运行日志，并按环境维护 Vault 的定时任务记录；不负责分派主线或管理远程设备。
+description: 管理本机手动或定时命令及关联脚本项目、启动 Codex/Claude Code、查询运行日志，并按环境维护 Vault 的定时任务记录；不负责分派主线或管理远程设备。
 ---
 
 # Campfire 本机 Job
@@ -46,6 +46,12 @@ description: 管理本机手动或定时命令、启动 Codex/Claude Code、查�
 4. 需要启动 Codex 或 Claude Code 时读取 [围绕 Vault 执行 Agent](references/agent-execution.md)。明确任务入口、允许动作、产物和停止条件，先在隔离或已授权范围测试。启动成功、模型自报和退出 0 都不等于业务验收。
 5. 用户要求启用才执行 resume 的预览与确认；原已暂停的更新后保持暂停。移除旧 Tickwork 时先记录执行要求、暂停并等运行结束、删除旧条目，再用普通 Job 命令重建；不迁移历史、不保留双入口。
 6. 用户需要 Vault 环境清单快照时，按下节维护，不要求每次任务变更刷新；Web 可直接查询实际状态。维护快照时，Job 改绑 Workspace 需核验 before/after，分别刷新原、新 Workspace 中当前环境的记录。每次定时触发不强制改记录，不自动删除已有快照。
+
+## 脚本项目
+
+用户需要创建或维护任务脚本时，读取 [脚本项目操作指引](references/script-projects.md)。通过 campfire script list 取得实际根目录；一个顶级文件夹是一个完整脚本项目，内部允许多级源码、模板和依赖声明。脚本由文件工具维护，不另外登记或复制进数据库。
+
+任务可用 script_project 显式关联项目，执行仍由 argv / agent 与 cwd 决定；多个任务可共用项目，不从复杂命令猜关联。创建脚本、测试执行、修改任务和启用定时分别遵守已有授权。Web 展示当前只读文件，文件树顶部刷新，不代表某次历史运行的源码快照。
 
 ## 环境任务文档
 

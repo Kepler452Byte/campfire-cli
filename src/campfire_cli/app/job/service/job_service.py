@@ -17,6 +17,7 @@ from campfire_cli.app.job.repository.run_repository import RunRepository
 from campfire_cli.app.job.schema.job_schema import Job
 from campfire_cli.app.job.schema.retention_schema import RetentionPolicy
 from campfire_cli.app.job.service.runner import run_job
+from campfire_cli.app.script.service.script_service import ScriptService
 from campfire_cli.common.exceptions import AppError, JobError
 from campfire_cli.common.filesystem.process_lock import process_lock
 from campfire_cli.common.time_display import display_run
@@ -33,6 +34,7 @@ class JobService:
         policy: RetentionPolicy,
         resolve_workspace,
         config: dict,
+        scripts: ScriptService,
     ) -> None:
         self.home = home
         self.repository = repository
@@ -41,6 +43,7 @@ class JobService:
         self.policy = policy
         self.resolve_workspace = resolve_workspace
         self.config = config
+        self.scripts = scripts
 
     def lock(self):
         return process_lock(self.home / "jobs/locks/config.lock")
@@ -212,6 +215,8 @@ class JobService:
                 "invalid-job",
                 "Executable and working directory must exist when creating or updating",
             )
+        if job is not None and job.script_project is not None:
+            self.scripts.require_project(job.script_project)
         if job is not None and job.workspace_id is not None:
             job = replace(job, workspace_root=str(self.resolve_workspace(job.workspace_id)))
         with self.lock():

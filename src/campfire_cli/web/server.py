@@ -17,6 +17,7 @@ from campfire_cli.common.exceptions import AppError, JobError
 from campfire_cli.common.filesystem.process_lock import process_lock
 from campfire_cli.container import AppContainer
 from campfire_cli.web.api.jobs import router
+from campfire_cli.web.api.scripts import router as script_router
 from campfire_cli.web.exceptions import app_error_handler, envelope, validation_handler
 from campfire_cli.web.security import LocalAccess
 
@@ -99,6 +100,7 @@ def create_app(*, build_job=AppContainer.build_job, assets: Path | None = None) 
         return response
 
     application.include_router(router)
+    application.include_router(script_router)
 
     @application.get("/{path:path}")
     def page(path: str):

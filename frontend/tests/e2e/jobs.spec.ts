@@ -137,7 +137,7 @@ test("长命令配置保持标签完整和页面宽度", async ({ page }) => {
     await expect(label).toBeVisible()
     const box = await label.boundingBox()
     expect(box!.width).toBeGreaterThanOrEqual(100)
-    expect(box!.height).toBeLessThan(55)
+    await expect.poll(async () => (await label.boundingBox())?.height ?? Infinity).toBeLessThan(55)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
     const table = label.locator("xpath=ancestor::table")
     expect(await table.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)

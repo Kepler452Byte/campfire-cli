@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Job, Plan, Schedule } from "../types"
 import { ElMessage } from "element-plus"
+import { getScriptProjects } from "../../scripts/api"
 import { getWorkspaces, saveJob } from "../api"
 import { scheduleLabel } from "../types"
 
@@ -18,6 +19,7 @@ const model = ref<Job>(props.job
       schedule: { kind: "manual" }
     })
 const workspace = ref(model.value.workspace_id ?? "")
+const scriptProject = ref(model.value.script_project ?? "")
 const kind = ref<"command" | "codex" | "claude">(model.value.agent?.kind ?? "command")
 const executable = ref(model.value.agent?.executable ?? model.value.argv?.[0] ?? "")
 const args = ref(JSON.stringify(model.value.agent?.args ?? model.value.argv?.slice(1) ?? []))
@@ -26,6 +28,7 @@ const minutes = ref((model.value.schedule.seconds ?? 60) / 60)
 const time = ref(model.value.schedule.time ?? "22:30")
 const day = ref(model.value.schedule.day ?? "mon")
 const workspaceOptions = ref<string[]>([])
+const scriptProjects = ref<string[]>([])
 const saving = ref(false)
 const plan = ref<Plan>()
 const submission = ref<Job>()
@@ -38,6 +41,13 @@ onMounted(async () => {
     // 请求层报告加载失败；保留表单中已有的绑定。
   }
 })
+onMounted(async () => {
+  try {
+    scriptProjects.value = (await getScriptProjects()).projects
+  } catch {
+    // 查询失败时保留已有选择，执行配置仍可核对。
+  }
+})
 function build(): Job {
   const parameters: unknown = JSON.parse(args.value)
   if (!Array.isArray(parameters) || !parameters.every(arg => typeof arg === "string")) throw new Error("参数需为 JSON 字符串数组")
@@ -46,6 +56,7 @@ function build(): Job {
   if (schedule.kind === "daily" || schedule.kind === "weekly") schedule.time = time.value
   if (schedule.kind === "weekly") schedule.day = day.value
   const job: Job = { id: model.value.id, name: model.value.name || null, cwd: model.value.cwd, workspace_id: workspace.value || null, timeout: model.value.timeout, schedule }
+  if (scriptProject.value) job.script_project = scriptProject.value
   if (kind.value === "command") job.argv = [executable.value, ...parameters]
   else job.agent = { kind: kind.value, executable: executable.value, args: parameters, prompt: prompt.value }
   return job
@@ -88,6 +99,11 @@ async function confirm(): Promise<void> {
       <el-form-item label="工作区">
         <el-select v-model="workspace" clearable placeholder="未绑定" aria-label="工作区">
           <el-option v-for="id in workspaceOptions" :key="id" :label="id" :value="id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="脚本项目">
+        <el-select v-model="scriptProject" clearable placeholder="未关联" aria-label="脚本项目">
+          <el-option v-for="project in scriptProjects" :key="project" :label="project" :value="project" />
         </el-select>
       </el-form-item>
       <el-form-item label="执行方式">
@@ -151,6 +167,9 @@ async function confirm(): Promise<void> {
         </el-descriptions-item>
         <el-descriptions-item label="保存后状态">
           {{ submission.schedule.kind === 'manual' ? '仅手动执行' : plan.enabled_after ? '已启用，将按此计划运行' : '已暂停，不会定时运行' }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="submission.script_project" label="脚本项目">
+          {{ submission.script_project }}
         </el-descriptions-item>
         <el-descriptions-item label="程序">
           {{ executable }}

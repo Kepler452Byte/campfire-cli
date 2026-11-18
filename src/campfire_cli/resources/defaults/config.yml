@@ -1,4 +1,9 @@
 version: 5
+scripts:
+  directory: scripts
+  max_entries: 1000
+  max_file_bytes: 1048576
+  ignored_names: [.git, .venv, venv, node_modules, __pycache__, .pytest_cache, .ruff_cache, .mypy_cache, .DS_Store]
 jobs:
   inventory_root: _定时任务
   log_limit_bytes: 10485760
