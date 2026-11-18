@@ -3,12 +3,12 @@
 Job 是设备本地的命令执行与原生调度能力，独立于 Workspace 装配。CLI 只适配参数与 JSON；JobService 负责用例、身份与时间；Repository 只持久化调用者提供的数据；消费方 Scheduler Protocol 由三平台 adapter 实现。
 
 ```text
-CLI / web/api -> JobService -> JobRepository -> jobs.yaml
+CLI / web/api -> JobService -> JobRepository -> jobs/jobs.db (jobs)
                      -> Scheduler -> systemd / launchd / Task Scheduler
-                     -> Runner -> RunRepository -> jobs/runs.db
+                     -> Runner -> RunRepository -> jobs/jobs.db (runs, logs)
 ```
 
-- jobs.yaml 是唯一执行定义，local.yaml 保存稳定环境 id；runs.db 是可清理且丢失后不可恢复的历史，和可删除重建的 campfire.db 分离。无旧格式兼容或迁移链，替换日志库拒绝活动 Run 和连接。
+- jobs/jobs.db 是任务事实来源，jobs、runs、logs 共用一个 JobDatabase；local.yaml 保存稳定环境 id。只初始化缺失的新库，现有库必须符合当前表契约，不兼容或损坏时明确阻塞，不删库、不转换。旧存储未切换时给出诊断，不把它显示为空任务；不解析旧定义或自动导入。历史清理只删除已完成 runs 及关联 logs；删除任务保留其历史。
 - name 是可选显示名称，id 保持稳定；argv 是程序与参数的唯一执行契约。Agent 调用和提示词由用户脚本维护，不保留 Agent 专用字段、命令编译层或历史格式转换。
 - Web 及 CLI --detach 通过独立 Runner 执行；取得锁并创建 Run 后握手，调用方确认启动才执行用户命令。Web 关闭不终止任务，活动 Web 阻止替换安装环境。
 - manual 不部署、不要求调度器；interval/daily/weekly 使用本地时区与原生会话规则。新建暂停，更新保留状态；无常驻服务、补跑、自动重试或唤醒。

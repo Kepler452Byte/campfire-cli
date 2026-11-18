@@ -26,10 +26,10 @@
 
 ### 本机脚本项目
 
-任务脚本默认放在 ~/.campfire/scripts，每个顶级文件夹是一个完整项目，允许多级源码、模板和依赖声明。文件由用户或 Agent 维护，Web 在任务「查看脚本」中提供文件树、文件标签及 CodeMirror 只读预览；刷新仅在文件树顶部。Python、Shell、PowerShell、JS/TS、JSON、YAML、Markdown、HTML 和 CSS 支持按需高亮，其他 UTF-8 文件按纯文本显示。
+任务脚本默认放在 ~/.campfire/jobs/scripts，每个顶级文件夹是一个完整项目，允许多级源码、模板和依赖声明。文件由用户或 Agent 维护，Web 在任务「查看脚本」中提供文件树、文件标签及 CodeMirror 只读预览；刷新仅在文件树顶部。Python、Shell、PowerShell、JS/TS、JSON、YAML、Markdown、HTML 和 CSS 支持按需高亮，其他 UTF-8 文件按纯文本显示。
 
 ```text
-~/.campfire/scripts/
+~/.campfire/jobs/scripts/
 └── personal-growth/
     ├── daily.py
     └── helpers/
@@ -49,9 +49,11 @@ Job JSON 可选 `script_project: "personal-growth"`，创建或更新前先准�
 ```text
 ~/.campfire/
 +-- local.yaml       Workspace 本机绑定与稳定环境 id
-+-- jobs.yaml        执行定义：argv、cwd、时间规则、超时
 +-- campfire.db      可删除重建的文档索引
-+-- jobs/runs.db     可清理的执行历史与日志
++-- jobs/
+    +-- jobs.db      jobs 任务定义、runs 历史、logs 输出
+    +-- scripts/     用户或 Agent 维护的多文件脚本项目
+    +-- locks/       执行与配置互斥
 
 Vault/_定时任务/
 +-- 记录-<主机名>.md  按需由 Agent 维护的快照；一环境一篇
@@ -77,7 +79,9 @@ campfire job history --job example
 
 Linux 需要可用的 systemd 用户 manager，macOS 需要已登录 GUI 会话，Windows 当前用户 Task Scheduler 需要登录会话及同安装环境 pythonw。命令使用绝对路径和 argv，stdin 关闭；不提高权限、不唤醒、不自动补跑或重试。升级不启用 Job，活动运行会阻止替换安装环境；重装到其他位置需显式 update 后核验原生入口。
 
-用户需要 Vault 快照时，由 Skill 按需维护环境文档，不要求每次变更刷新。它只是截至核验时间的可读记录，不反向部署、不包含本机命令路径或凭据；CLI 查询、Runner 和升级不自动写它。删 campfire.db 不影响 Job、原生定时器或运行日志；删 runs.db 会失去历史，且活动运行时拒绝替换。旧 Tickwork 任务由 Agent 记录要求、暂停等待并移除，再通过普通 Job 命令新建，不导入或兼容旧数据库。
+用户需要 Vault 快照时，由 Skill 按需维护环境文档，不要求每次变更刷新。它只是截至核验时间的可读记录，不反向部署、不包含本机命令路径或凭据；CLI 查询、Runner 和升级不自动写它。删 campfire.db 不影响 Job、原生定时器或运行日志；jobs/jobs.db 保存任务事实，不可删除重建；cleanup 只清历史及日志，compact 不删除定义，活动运行时拒绝 compact。旧 Tickwork 任务由 Agent 记录要求、暂停等待并移除，再通过普通 Job 命令新建，不导入或兼容旧数据库。
+
+v0.3.6 改为持久任务数据库，脚本根目录为 `~/.campfire/jobs/scripts/`。已有设备由 Agent 在无活动运行、Web 已停止时，一次性整理原 jobs.yaml、jobs/runs.db 与 scripts：保留定义、运行历史和日志，移动脚本并更新显式 argv 路径，核对环境 id 和原生启停，再移除已核验的旧文件。产品不读取或转换旧格式；旧数据尚未切换时返回 job-storage-required。任务库结构不兼容或损坏时停止核实，不套用文档索引的删库恢复办法。
 
 ## 本地视频文字整理（v0.2.0）
 

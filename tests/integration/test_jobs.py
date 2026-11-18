@@ -1,18 +1,14 @@
 import json
 import os
-import sqlite3
 import subprocess
 import sys
-from contextlib import closing
 from dataclasses import replace
 
 import pytest
 from typer.testing import CliRunner
 
-from campfire_cli.app.job.repository.run_repository import METADATA
 from campfire_cli.app.job.schema.job_schema import Job
-from campfire_cli.common.database import create_sqlite_engine, initialize_database
-from campfire_cli.common.exceptions import GovernanceBlockedError, JobError
+from campfire_cli.common.exceptions import JobError
 from campfire_cli.common.filesystem.process_lock import process_lock
 from campfire_cli.config.settings import campfire_home
 from campfire_cli.container import AppContainer
@@ -76,7 +72,8 @@ def test_preview_manual_execution_history_and_environment(service, job):
     change(service, "create", job)
     identity = service.environment()["id"]
     assert len(identity) == 32
-    assert not (service.home / "jobs/runs.db").exists()
+    assert service.runs.path == service.repository.path
+    assert service.history(None, 20, 0) == []
     result = run(service)
     assert result["run"]["status"] == "succeeded"
     assert result["run"]["exit_code"] == 0
@@ -162,7 +159,7 @@ def test_run_preview_cannot_execute_changed_command(service, job):
     with pytest.raises(JobError) as error:
         service.run(job.id, True, preview["expected_plan"])
     assert error.value.code == "stale-plan"
-    assert not service.runs.path.exists()
+    assert service.history(None, 20, 0) == []
 
 
 def test_workspace_filter_binding_and_execution_lock(workspace, service, job):
@@ -229,35 +226,6 @@ def test_upgrade_gate_and_active_run_protection(service, job):
     with pytest.raises(JobError) as error:
         run(service)
     assert error.value.code == "upgrade-active"
-
-
-def test_run_db_rebuild_preserves_definitions_environment_and_document_cache(service, job):
-    change(service, "create", job)
-    run(service)
-    definitions = service.repository.path.read_bytes()
-    local = (service.home / "local.yaml").read_bytes()
-    documents = create_sqlite_engine(service.home / "campfire.db")
-    initialize_database(documents)
-    with documents.begin() as db:
-        db.exec_driver_sql("INSERT INTO workspaces (id) VALUES ('preserved')")
-    service.runs.close()
-    with closing(sqlite3.connect(service.runs.path)) as db, db:
-        db.execute("ALTER TABLE runs ADD COLUMN obsolete TEXT")
-    assert service.history(None, 20, 0) == []
-    assert service.repository.path.read_bytes() == definitions
-    assert (service.home / "local.yaml").read_bytes() == local
-    with documents.connect() as db:
-        assert db.exec_driver_sql("SELECT id FROM workspaces").scalar() == "preserved"
-    with service.runs.lease():
-        with closing(sqlite3.connect(service.runs.path)) as db, db:
-            db.execute("ALTER TABLE runs ADD COLUMN obsolete TEXT")
-        other = create_sqlite_engine(service.runs.path)
-        with pytest.raises(GovernanceBlockedError) as error:
-            initialize_database(other, METADATA)
-        assert error.value.code == "database-busy"
-        other.dispose()
-    service.runs.close()
-    documents.dispose()
 
 
 def test_cli_real_process_json_exit_and_no_workspace(tmp_path):
@@ -375,3 +343,139 @@ def test_confirmed_write_retains_fact_if_native_state_verification_fails(service
     result = service.change("create", job.id, scheduled, True, preview["expected_plan"])
     assert result["status"] == "blocked" and result["write_performed"]
     assert job.id in service.repository.read()
+
+
+def test_definition_preview_survives_logs_but_rejects_other_definition_changes(service, job):
+    change(service, "create", job)
+    updated = replace(job, timeout=8)
+    preview = service.change("update", job.id, updated, False, None)
+    result = run(service)
+    service.change("update", job.id, updated, True, preview["expected_plan"])
+    assert service.result(result["run"]["id"])["status"] == "succeeded"
+    preview = service.change("update", job.id, job, False, None)
+    change(service, "create", replace(job, id="other"), "other")
+    with pytest.raises(JobError) as error:
+        service.change("update", job.id, job, True, preview["expected_plan"])
+    assert error.value.code == "stale-plan"
+
+
+def test_task_database_cleanup_compact_and_document_rebuild_preserve_facts(service, job):
+    from campfire_cli.common.database import create_sqlite_engine, initialize_database
+
+    change(service, "create", job)
+    result = run(service)
+    local = (service.home / "local.yaml").read_bytes()
+    documents = create_sqlite_engine(service.home / "campfire.db")
+    initialize_database(documents)
+    with documents.begin() as db:
+        db.exec_driver_sql("ALTER TABLE documents ADD COLUMN obsolete TEXT")
+    initialize_database(documents)
+    documents.dispose()
+    assert service.get(job.id) == job
+    assert service.logs(result["run"]["id"], 20, 0)["chunks"]
+    preview = service.cleanup(None, 0, None, False, False, None)
+    service.cleanup(None, 0, None, False, True, preview["expected_plan"])
+    assert service.get(job.id) == job
+    assert service.history(None, 20, 0) == []
+    with service.runs.connection() as db:
+        assert db.exec_driver_sql("SELECT count(*) FROM logs").scalar() == 0
+    preview = service.compact(False, None)
+    service.compact(True, preview["expected_plan"])
+    assert service.get(job.id) == job
+    assert (service.home / "local.yaml").read_bytes() == local
+    assert not (service.home / "jobs.yaml").exists()
+    assert not (service.home / "jobs/runs.db").exists()
+    assert service.repository.database is service.runs.database
+
+
+@pytest.mark.parametrize("damage", ["column", "table", "corrupt", "empty"])
+def test_persistent_database_damage_stops_without_rebuild(service, job, damage):
+    import sqlite3
+    from contextlib import closing
+
+    change(service, "create", job)
+    run(service)
+    service.runs.close()
+    if damage in {"column", "table"}:
+        with closing(sqlite3.connect(service.repository.path)) as db, db:
+            db.execute(
+                "ALTER TABLE runs ADD COLUMN obsolete TEXT"
+                if damage == "column"
+                else "DROP TABLE logs"
+            )
+    else:
+        service.repository.path.write_bytes(b"broken database" if damage == "corrupt" else b"")
+    before = service.repository.path.read_bytes()
+    with pytest.raises(JobError) as error:
+        service.list_jobs()
+    assert error.value.code == (
+        "job-database-corrupt" if damage == "corrupt" else "job-database-incompatible"
+    )
+    assert error.value.payload()["status"] == "blocked"
+    assert service.repository.path.read_bytes() == before
+
+
+def test_failed_definition_transaction_restores_definition_and_scheduler(service, job, monkeypatch):
+    from sqlalchemy import event
+
+    scheduled = replace(job, schedule={"kind": "daily", "time": "23:59"})
+    change(service, "create", scheduled)
+    change(service, "resume")
+    engine = service.repository.database.engine
+
+    def fail(connection, cursor, statement, parameters, context, many):
+        if statement.startswith("INSERT INTO jobs"):
+            raise RuntimeError("Injected failure after DELETE, before INSERT")
+
+    event.listen(engine, "before_cursor_execute", fail)
+    try:
+        with pytest.raises(JobError) as error:
+            change(service, "update", replace(scheduled, timeout=9))
+        assert error.value.code == "change-failed"
+    finally:
+        event.remove(engine, "before_cursor_execute", fail)
+    assert service.get(job.id) == scheduled
+    assert service.scheduler.jobs[job.id] == (scheduled, True)
+
+
+def test_database_writer_lock_is_reported_and_does_not_erase_tasks(service, job):
+    import sqlite3
+    from contextlib import closing
+
+    change(service, "create", job)
+    with closing(sqlite3.connect(service.repository.path)) as locked:
+        locked.execute("BEGIN IMMEDIATE")
+        with pytest.raises(JobError) as error:
+            service.repository.write({})
+        assert error.value.code == "job-database-busy"
+        assert service.get(job.id) == job
+        locked.rollback()
+    assert service.get(job.id) == job
+
+
+def test_old_storage_is_not_read_or_silently_presented_as_empty(service):
+    source = service.home / "jobs.yaml"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("invalid obsolete configuration")
+    before = source.read_bytes()
+    with pytest.raises(JobError) as error:
+        service.list_jobs()
+    assert error.value.code == "job-storage-required"
+    assert source.read_bytes() == before
+    assert not service.repository.path.exists()
+
+
+def test_compact_rejects_an_active_connection_and_definition_change(service, job):
+    from campfire_cli.common.exceptions import GovernanceBlockedError
+
+    change(service, "create", job)
+    preview = service.compact(False, None)
+    with service.runs.connection(), pytest.raises(GovernanceBlockedError) as error:
+        service.compact(True, preview["expected_plan"])
+    assert error.value.code == "database-busy"
+    assert service.get(job.id) == job
+    preview = service.compact(False, None)
+    change(service, "update", replace(job, name="Updated name"))
+    with pytest.raises(JobError) as error:
+        service.compact(True, preview["expected_plan"])
+    assert error.value.code == "stale-plan"

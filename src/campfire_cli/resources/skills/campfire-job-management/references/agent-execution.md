@@ -1,6 +1,6 @@
 # 定时启动 Codex 或 Claude Code
 
-在脚本项目中维护启动脚本和提示词文件，用普通 Job 的 argv 调用入口；Campfire 不解析提示词或编译 Agent 命令。按 [脚本项目指南](script-projects.md) 创建和关联目录；固定提示词可放 prompt.md，由启动脚本读取，动态提示词在脚本中组合，不复制进 jobs.yaml。
+在脚本项目中维护启动脚本和提示词文件，用普通 Job 的 argv 调用入口；Campfire 不解析提示词或编译 Agent 命令。按 [脚本项目指南](script-projects.md) 创建和关联目录；固定提示词可放 prompt.md，由启动脚本读取，动态提示词在脚本中组合，不复制进任务数据库。
 
 先核对本机 `codex exec --help` 或 `claude --help`，由脚本明确绝对程序路径、参数、工作目录和非交互模式。读取 prompt.md 时按脚本文件的位置定位，不依赖调度器的当前目录；用参数数组调用子进程，不把提示词拼接为 shell 命令。Job 的 stdin 关闭，脚本需按客户端实际契约传递提示词，并传回子进程退出码、stdout 和 stderr。登录、工具权限与网络必须在实际调度环境中测试，不只在交互终端验证。
 

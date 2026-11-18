@@ -95,7 +95,7 @@ Campfire 使用语义化版本：
 - 已公开标签对象不可变。发布准备必须执行 `scripts/release_check.py --tag <tag>` 对比本地、远端对象及目标提交；对象或提交不一致即停止，禁止重建、强推或自动覆盖本地标签。发布重试复用原标签，不以提交相同为理由替换附注对象。
 - 只修复既有行为时增加补丁版本，例如 `0.17.0 -> 0.17.1`。
 - 新增 CLI 能力、改变治理契约或增加可选公共字段时增加次版本，例如 `0.17.x -> 0.18.0`。
-- Web 扩展与后续脚本项目浏览按用户指定继续使用 0.3.x，作为新增能力版本递增规则的例外；v0.3.4 按用户确认移除 Job agent 定义并统一 argv 入口，不保留旧格式转换；不改变既有发行物和标签。
+- Web 扩展与后续脚本项目浏览按用户指定继续使用 0.3.x，作为新增能力版本递增规则的例外；v0.3.4 按用户确认移除 Job agent 定义并统一 argv 入口，v0.3.6 按确认改为持久任务数据库和 jobs/scripts，不保留旧格式转换；不改变既有发行物和标签。
 - 删除或重命名公共命令、改变不可兼容的数据格式时增加主版本；`0.x` 阶段仍应显式记录破坏性变化。
 - 配置文件的 `version` 独立于 Python 包版本；只有配置结构或解释语义变化时递增。
 - PyPI、源码标签、构建产物和 CLI 报告的版本必须一致。
@@ -131,7 +131,7 @@ Campfire 使用语义化版本：
 - Markdown Frontmatter 的 `related_docs` 是文档关系唯一 SSOT，采用 `[[Workspace相对路径.md]]`。不解析、索引或自动改写正文链接；历史正文保留，SQLite 关系投影可从该字段重建；不再生成 Markdown 关系页，Agent 通过 document inspect 查询关系。
 - 改名、移动与类型联动改名只定向更新 `related_docs` 引用方；预览输出 `expected_plan`，确认复核整个变更集摘要和文件哈希。文件提交后的索引失败必须报告已写入事实，并使索引可在下次查询恢复。
 
-- campfire.db 全部表只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT；Job 运行日志独立存储在 jobs/runs.db，删除后不恢复历史。
+- campfire.db 全部表只允许作为可重建本机投影，不得反向覆盖 Markdown SSOT；Job 定义与运行日志独立存储在 jobs/jobs.db，属于不可删除重建的本机事实。
 - Document App 拥有文档记录、确定关系、集合查询和单篇关系查询；Repository 只持久化投影，不解释 Profile、Domain 或链接语义。
 - 文档索引保存 schema version、parser version、有效配置 hash、拓扑 hash 和 generation；Domain 声明、Project 文档根映射等任一解释输入变化都必须自动完整重建。
 - `document list` 与 `document inspect` 查询前必须轻量 reconcile。文件 stat 只筛选变化候选，content hash 表示内容版本；调用方不需要先运行 Maintenance。
@@ -169,7 +169,7 @@ Campfire 使用语义化版本：
 ## 本机 Job
 
 - v0.3.0 将 Tickwork 核心并入 app/job，通过 campfire job 管理本机手动与原生定时命令，可启动 Codex、Claude Code 等外部 CLI；不引入常驻调度器或 Agent 会话编排。
-- jobs.yaml 保存唯一任务定义，local.yaml 保存稳定环境 id，jobs/runs.db 保存运行历史；删 campfire.db 不影响这些数据与原生部署。
+- jobs/jobs.db 统一保存 jobs、runs、logs；local.yaml 保存稳定环境 id，jobs/scripts 保存用户脚本。任务库不兼容或损坏时停止，不自动删除、重建或迁移；清理只删历史和日志。删 campfire.db 不影响任务事实与原生部署。
 - Job 配置和执行确认采用当前计划摘要，同 Job 与同 Workspace 执行互斥，运行中拒绝修改、删除、compact 和升级替换环境；不持有整轮治理写锁。
 - Vault 的 _定时任务/ 一环境一篇 record，由 Skill 查询后维护，属于可读记录而非执行配置；无 Domain、无额外总览，不写本机路径、凭据或原始日志。
 - 统一到当前 Typer 0.29 参数描述接口与 JSON 帮助，依赖限制在已验证的次版本范围，不保留旧参数接口兼容分支。

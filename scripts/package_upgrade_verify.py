@@ -61,7 +61,7 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
             "PYTHONIOENCODING": "utf-8",
         }
         environment.pop("PYTHONPATH", None)
-        script = root / "state" / "scripts" / "growth" / "helpers" / "study.py"
+        script = root / "state" / "jobs" / "scripts" / "growth" / "helpers" / "study.py"
         script.parent.mkdir(parents=True)
         script_content = b"# User-maintained script\r\nprint('preserve me')\r\n"
         script.write_bytes(script_content)
@@ -80,6 +80,22 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
             else root / "pipx home" / "venvs" / "campfire-cli"
         )
         python = prefix / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        from campfire_cli.app.job.repository.database import JobDatabase
+        from campfire_cli.app.job.repository.job_repository import JobRepository
+        from campfire_cli.app.job.repository.run_repository import RunRepository
+        from campfire_cli.app.job.schema.job_schema import Job
+
+        database = JobDatabase(root / "state/jobs/jobs.db")
+        repository = JobRepository(root / "state", database)
+        definition = Job("upgrade-probe", [str(python), str(script)], str(root), {"kind": "manual"})
+        repository.write({definition.id: definition})
+        repository.ensure_environment("a" * 32)
+        history = RunRepository(database)
+        history.start("upgrade-run", definition.id, 0, "2026-11-18T00:00:00+00:00")
+        history.append("upgrade-run", "stdout", "preserved 中文\n")
+        history.finish("upgrade-run", "succeeded", 0, 1.0, False, "2026-11-18T00:00:01+00:00")
+        history.close()
+        local = (root / "state/local.yaml").read_bytes()
         shutil.rmtree(source)
         shutil.copytree(candidate, source)
         host = (
@@ -122,6 +138,27 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
         assert result["installed_version"] == new_version, result
         assert result["package_stage"] == result["resource_stage"] == "completed", result
         assert script.read_bytes() == script_content, "Upgrade changed user script files"
+        check = subprocess.run(
+            [str(python), "-m", "campfire_cli.main", "job", "show", definition.id],
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        )
+        observed = json.loads(check.stdout)
+        assert observed["job"]["argv"] == definition.argv, observed
+        assert observed["environment"]["id"] == "a" * 32, observed
+        check = subprocess.run(
+            [str(python), "-m", "campfire_cli.main", "job", "logs", "upgrade-run"],
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        )
+        assert "preserved 中文" in check.stdout, check.stdout
+        assert (root / "state/local.yaml").read_bytes() == local
         return {
             "manager": manager,
             "from_version": old_version,
@@ -131,6 +168,7 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
             "resource_stage": result["resource_stage"],
             "spaces_in_paths": True,
             "scripts_preserved": True,
+            "task_database_preserved": True,
         }
 
 

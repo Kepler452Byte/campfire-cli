@@ -258,9 +258,7 @@ class JobService:
                 "after": replacement.data() if action != "delete" and replacement else None,
                 "scheduler_before": state,
                 "enabled_after": enabled,
-                "config": hashlib.sha256(self.repository.path.read_bytes()).hexdigest()
-                if self.repository.path.exists()
-                else "missing",
+                "config": [jobs[key].data() for key in sorted(jobs)],
             }
             digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
             plan: dict[str, Any] = {
@@ -303,7 +301,7 @@ class JobService:
                         raise JobError(
                             "recovery-required",
                             f"Operation failed: {exc}; compensation failed: {rollback}. "
-                            "Inspect native scheduler and jobs.yaml.",
+                            "Inspect native scheduler and jobs/jobs.db.",
                         ) from exc
                     raise JobError(
                         "change-failed",
@@ -525,7 +523,8 @@ class JobService:
             path = self.runs.path
             stats = {
                 str(file): {"size": file.stat().st_size, "modified": file.stat().st_mtime_ns}
-                for file in path.parent.glob("runs.db*")
+                for file in (Path(str(path) + suffix) for suffix in ("", "-wal", "-shm"))
+                if file.exists()
             }
             plan = self.runs.compaction_state()
             result = {

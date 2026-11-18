@@ -35,13 +35,7 @@ def deliver(operation) -> None:
     def execute():
         service = AppContainer.build_job()
         try:
-            result = operation(service)
-            if service.runs.history_rebuilt:
-                result["history_rebuilt"] = True
-                result["history_notice"] = (
-                    "Incompatible run cache rebuilt; old logs are not recoverable"
-                )
-            return result
+            return operation(service)
         finally:
             service.runs.close()
 

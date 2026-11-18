@@ -76,7 +76,7 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
 Markdown Workspace Adapter   用户级状态
  文档事实、任务、知识、项目    ~/.campfire/
                               local.yaml + campfire.db + config.yml
-                              jobs.yaml + jobs/runs.db
+                              jobs/jobs.db + jobs/scripts
                               batches/reports/locks
                               models/faster-whisper-small
 ```
@@ -213,7 +213,7 @@ Campfire 不把“调用方能够猜对未声明契约”作为可靠性前提�
 | 文档查询索引 | Workspace Markdown、结构声明与有效治理契约 | `~/.campfire/campfire.db` 中按 `workspace_id` 隔离的可重建投影 |
 | 结构重构批次和维护运行状态 | `~/.campfire/campfire.db` | Markdown 投影、报告与有限变更日志；可丢弃并重新生成，新计划重新审批 |
 
-Vault 根目录 `.campfire.yaml` 和本机 `~/.campfire/local.yaml` 保存注册事实；campfire.db 全部可重建，不是知识内容或注册数据的 SSOT；jobs/runs.db 是可清理但不可从文件重建的运行历史。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
+Vault 根目录 `.campfire.yaml` 和本机 `~/.campfire/local.yaml` 保存注册事实；campfire.db 全部可重建，不是知识内容或注册数据的 SSOT；jobs/jobs.db 保存任务定义、运行历史和日志，是不可从 Vault 重建的本机事实。工具状态不写入 Workspace，因而一个 Campfire 安装可以管理多个 Workspace。
 
 ### 文档查询投影
 
@@ -288,16 +288,16 @@ Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain
 
 当前版本先稳定 Workspace 注册、存量结构重构、增量维护、归档、Skill 与治理视图。下一阶段围绕 Task Channel 补齐任务创建、进度事件、交接、待确认和验收协议，再连接工作日志、周报与绩效证据。只有出现真实用例时才新增模块，避免为未来能力预建空架构。
 
-本机配置按 Workspace id 分节，repository_bindings 按 Project id 和 repository id 保存路径；remote 和分支只在 Vault 根目录 `.campfire.yaml`。文档索引 campfire.db 无注册事实、无历史迁移链，只从当前文件生成投影；停止运行中的操作后可删除重建。jobs/runs.db 的历史不能从文档恢复，任务定义仍由 jobs.yaml 保存。
+本机配置按 Workspace id 分节，repository_bindings 按 Project id 和 repository id 保存路径；remote 和分支只在 Vault 根目录 `.campfire.yaml`。文档索引 campfire.db 无注册事实、无历史迁移链，只从当前文件生成投影；停止运行中的操作后可删除重建。jobs/jobs.db 的定义和历史不能从文档恢复，不做自动删除重建；任务脚本独立保存在 jobs/scripts。
 
 领域分类与 Project 归属不决定治理方式。所有领域共用结构、检查与 MOC 生成；Project 只关联仓库便携信息与本机位置，Domain 不保存 governance 字段。
 
-## 本机执行与环境记录（v0.3.0）
+## 本机执行与环境记录
 
 ```text
-campfire job -> JobService -> jobs.yaml（本机执行定义）
+campfire job -> JobService -> JobRepository -> jobs/jobs.db (jobs)
                           -> 原生调度器（实际启停与触发）
-                          -> Runner -> jobs/runs.db（历史与日志）
+                          -> Runner -> RunRepository -> jobs/jobs.db (runs, logs)
                                       |
                                       +-> 普通命令 / Codex / Claude Code
 

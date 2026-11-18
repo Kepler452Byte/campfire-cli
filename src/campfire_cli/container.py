@@ -121,6 +121,7 @@ class AppContainer:
         from campfire_cli.app.job.adapter.launchd_scheduler import LaunchdScheduler
         from campfire_cli.app.job.adapter.systemd_scheduler import SystemdScheduler
         from campfire_cli.app.job.adapter.windows_scheduler import WindowsScheduler
+        from campfire_cli.app.job.repository.database import JobDatabase
         from campfire_cli.app.job.repository.job_repository import JobRepository
         from campfire_cli.app.job.repository.run_repository import RunRepository
         from campfire_cli.app.job.schema.retention_schema import RetentionPolicy
@@ -140,11 +141,12 @@ class AppContainer:
             resolution = WorkspaceService(home, registry).resolve(identity, safe_cwd())
             return Path(resolution.workspace)
 
+        database = JobDatabase(home / "jobs/jobs.db")
         return JobService(
             home,
             scheduler,
-            JobRepository(home),
-            RunRepository(home / "jobs/runs.db"),
+            JobRepository(home, database),
+            RunRepository(database),
             RetentionPolicy(**config["retention"]),
             resolve,
             config,

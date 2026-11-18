@@ -14,7 +14,7 @@ from campfire_cli.web.server import create_app
 
 with tempfile.TemporaryDirectory(prefix="campfire-web-e2e-") as raw:
     os.environ["CAMPFIRE_HOME"] = str(Path(raw) / "home")
-    project = Path(raw) / "home/scripts/growth"
+    project = Path(raw) / "home/jobs/scripts/growth"
     (project / "helpers").mkdir(parents=True)
     (project / "daily.py").write_text(
         "from helpers.study import collect\n\ndef main():\n    return collect()\n", encoding="utf-8"

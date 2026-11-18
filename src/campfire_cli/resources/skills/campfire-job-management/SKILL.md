@@ -16,7 +16,7 @@ description: 管理本机手动或定时命令及关联脚本项目、启动 Cod
 - 已知命令契约直接使用，未知时读目标 `--help`。普通 Job 不要求 Workspace；Vault 工作显式填写稳定 workspace_id，查询时使用根级 `--workspace`，不从 cwd、任务名或默认 Workspace 猜绑定。
 - 输入为 JSON 文件：id、argv、绝对 cwd、schedule、timeout；可选 name、workspace_id、script_project，workspace_root 由 CLI 解析。所有任务使用同一命令契约，Agent 调用与提示词由脚本项目维护。无隐式 shell，需要时显式调用 shell。运行环境来自系统调度器，不依赖终端 PATH 或 shell 初始化；凭据使用客户端自己的登录或安全环境。
 - manual 无原生条目；interval 为整分钟 60..86400 秒，daily/weekly 按设备本地时间。新定时 Job 暂停，更新保持启停；不补跑、不重试、不唤醒机器。平台会话或启动失败时按需读 [平台诊断](references/platform-notes.md)。
-- Job 定义在 CAMPFIRE_HOME/jobs.yaml，环境 id 在 local.yaml，历史与日志在 jobs/runs.db。索引 campfire.db 可删除重建，不影响 Job。不要在有活动运行时删除日志库或锁。
+- Job 定义、历史与日志统一在 CAMPFIRE_HOME/jobs/jobs.db，环境 id 在 local.yaml，脚本项目在 jobs/scripts。只有文档索引 campfire.db 可删除重建；任务库是持久事实，结构不兼容或损坏时停止核实，不能删库。cleanup 只清已完成历史和日志，不删定义或脚本，不删除活动锁。
 
 ## SOP
 

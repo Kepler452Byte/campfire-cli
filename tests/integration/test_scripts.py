@@ -20,7 +20,7 @@ from campfire_cli.web.server import create_app
 def scripts(tmp_path, monkeypatch):
     home = tmp_path / "state"
     monkeypatch.setenv("CAMPFIRE_HOME", str(home))
-    project = home / "scripts" / "growth"
+    project = home / "jobs" / "scripts" / "growth"
     (project / "helpers").mkdir(parents=True)
     (project / "daily.py").write_bytes(b"print('hello')\r\n")
     (project / "helpers" / "study.py").write_text("# 学习\n", encoding="utf-8", newline="\n")
@@ -121,7 +121,7 @@ def test_symlinks_do_not_expose_external_files(scripts, tmp_path):
     with pytest.raises(InputError):
         scripts.directory("linked-project")
     dangling = ScriptService(tmp_path / "dangling", builtin_section("scripts"))
-    dangling.root.parent.mkdir()
+    dangling.root.parent.mkdir(parents=True)
     dangling.root.symlink_to(tmp_path / "absent", target_is_directory=True)
     with pytest.raises(InputError):
         dangling.projects()

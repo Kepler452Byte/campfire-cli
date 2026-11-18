@@ -1,6 +1,6 @@
-version: 5
+version: 6
 scripts:
-  directory: scripts
+  directory: jobs/scripts
   max_entries: 1000
   max_file_bytes: 1048576
   ignored_names: [.git, .venv, venv, node_modules, __pycache__, .pytest_cache, .ruff_cache, .mypy_cache, .DS_Store]

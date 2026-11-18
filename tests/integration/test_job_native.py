@@ -109,8 +109,7 @@ def test_native_lifecycle_and_real_interval_trigger(tmp_path: Path) -> None:
             mutate(home, "job", "update", "--file", str(spec))
             mutate(home, "job", "resume", "native-probe")
             mutate(home, "job", "pause", "native-probe")
-        for path in (home / "jobs").glob("runs.db*"):
-            path.unlink()
+        mutate(home, "job", "cleanup", "--older-than", "0")
         assert len(invoke(home, "job", "list")["jobs"]) == 1
         assert invoke(home, "job", "history")["runs"] == []
         mutate(home, "job", "delete", "native-probe")

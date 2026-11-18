@@ -54,6 +54,10 @@ class JobError(AppError):
             "workspace-binding-changed",
             "environment-missing",
             "recovery-required",
+            "job-storage-required",
+            "job-database-incompatible",
+            "job-database-corrupt",
+            "job-database-busy",
         }
         self.exit_code = 3 if self.blocked else (2 if code.startswith("invalid-") else 1)
 

@@ -2,7 +2,10 @@ import re
 from pathlib import Path
 
 import yaml
+from sqlalchemy import delete, insert, select
 
+from campfire_cli.app.job.repository.database import JobDatabase
+from campfire_cli.app.job.repository.schema import JOBS
 from campfire_cli.app.job.schema.job_schema import Job
 from campfire_cli.common.exceptions import JobError
 from campfire_cli.common.filesystem import atomic_write
@@ -10,37 +13,28 @@ from campfire_cli.common.filesystem.locking import workspace_write_lock
 
 
 class JobRepository:
-    def __init__(self, home: Path) -> None:
+    def __init__(self, home: Path, database: JobDatabase) -> None:
         self.home = home
-        self.path = home / "jobs.yaml"
+        self.database = database
+        self.path = database.path
 
     def read(self) -> dict[str, Job]:
-        if not self.path.exists():
+        if not self.database.exists():
             return {}
-        try:
-            data = yaml.safe_load(self.path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
-            raise JobError("invalid-config", str(exc)) from exc
-        if (
-            not isinstance(data, dict)
-            or set(data) != {"jobs"}
-            or not isinstance(data["jobs"], list)
-        ):
-            raise JobError("invalid-config", "jobs.yaml requires one jobs array")
-        tasks = [Job.parse(item) for item in data["jobs"]]
-        if len({task.id for task in tasks}) != len(tasks):
-            raise JobError("invalid-config", "Duplicate job ids")
-        return {task.id: task for task in tasks}
+        with self.database.connection() as db:
+            return {
+                row["id"]: Job.parse(dict(row))
+                for row in db.execute(select(JOBS).order_by(JOBS.c.id)).mappings()
+            }
 
     def write(self, jobs: dict[str, Job]) -> None:
-        atomic_write(
-            self.path,
-            yaml.safe_dump(
-                {"jobs": [job.data() for job in jobs.values()]},
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-        )
+        with self.database.connection() as db:
+            db.execute(delete(JOBS))
+            if jobs:
+                db.execute(
+                    insert(JOBS),
+                    [dict(job.data(), script_project=job.script_project) for job in jobs.values()],
+                )
 
     def environment_id(self) -> str | None:
         path = self.home / "local.yaml"
