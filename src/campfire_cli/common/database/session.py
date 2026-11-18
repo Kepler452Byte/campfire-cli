@@ -95,6 +95,25 @@ def schema_matches(connection: Connection, metadata: MetaData) -> bool:
             (tuple(i["column_names"]), i["unique"]) for i in inspector.get_indexes(name)
         }:
             return False
+        expected_foreign_keys = {
+            (
+                tuple(element.parent.name for element in constraint.elements),
+                constraint.referred_table.name,
+                tuple(element.column.name for element in constraint.elements),
+                constraint.ondelete,
+            )
+            for constraint in table.foreign_key_constraints
+        }
+        if expected_foreign_keys != {
+            (
+                tuple(key["constrained_columns"]),
+                key["referred_table"],
+                tuple(key["referred_columns"]),
+                key.get("options", {}).get("ondelete"),
+            )
+            for key in inspector.get_foreign_keys(name)
+        }:
+            return False
     return True
 
 

@@ -388,7 +388,7 @@ def test_task_database_cleanup_compact_and_document_rebuild_preserve_facts(servi
     assert service.repository.database is service.runs.database
 
 
-@pytest.mark.parametrize("damage", ["column", "table", "corrupt", "empty"])
+@pytest.mark.parametrize("damage", ["column", "table", "foreign-key", "corrupt", "empty"])
 def test_persistent_database_damage_stops_without_rebuild(service, job, damage):
     import sqlite3
     from contextlib import closing
@@ -396,7 +396,17 @@ def test_persistent_database_damage_stops_without_rebuild(service, job, damage):
     change(service, "create", job)
     run(service)
     service.runs.close()
-    if damage in {"column", "table"}:
+    if damage == "foreign-key":
+        with closing(sqlite3.connect(service.repository.path)) as db, db:
+            db.executescript(
+                "ALTER TABLE logs RENAME TO previous_logs;"
+                "CREATE TABLE logs (seq INTEGER NOT NULL PRIMARY KEY, "
+                "run_id VARCHAR NOT NULL, stream VARCHAR NOT NULL, content TEXT NOT NULL);"
+                "INSERT INTO logs SELECT * FROM previous_logs;"
+                "DROP TABLE previous_logs;"
+                "CREATE INDEX logs_run ON logs (run_id, seq);"
+            )
+    elif damage in {"column", "table"}:
         with closing(sqlite3.connect(service.repository.path)) as db, db:
             db.execute(
                 "ALTER TABLE runs ADD COLUMN obsolete TEXT"
