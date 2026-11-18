@@ -66,6 +66,8 @@ def test_reject_paths_outside_project_or_filtered_directory(scripts, path):
     with pytest.raises(InputError) as exc:
         scripts.file("growth", path)
     assert exc.value.code == "invalid-script-path"
+    assert exc.value.details["field"] == "path"
+    assert exc.value.details["expected_type"] == "project-relative-path"
 
 
 @pytest.mark.parametrize(

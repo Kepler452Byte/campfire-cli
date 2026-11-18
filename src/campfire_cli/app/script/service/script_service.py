@@ -91,7 +91,12 @@ class ScriptService:
     def _target(self, project: str, path: str) -> tuple[Path, Path]:
         validate_project_name(project)
         if project in self.ignored:
-            raise InputError("该目录不属于可预览的脚本项目", code="invalid-script-project")
+            raise InputError(
+                "该目录不属于可预览的脚本项目",
+                code="invalid-script-project",
+                field="script_project",
+                expected_type="single-directory-name",
+            )
         parts = path.split("/") if path else []
         if any(
             part in {"", ".", ".."}
@@ -101,7 +106,12 @@ class ScriptService:
             or "\0" in part
             for part in parts
         ):
-            raise InputError("文件路径必须位于选定脚本项目内", code="invalid-script-path")
+            raise InputError(
+                "文件路径必须位于选定脚本项目内",
+                code="invalid-script-path",
+                field="path",
+                expected_type="project-relative-path",
+            )
         root = self.root / project
         target = root.joinpath(*parts)
         for entry in [
