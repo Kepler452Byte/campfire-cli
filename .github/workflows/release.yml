@@ -2,8 +2,14 @@ name: release
 
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
+    inputs:
+      publish:
+        description: 验证通过后创建标签并发布 PyPI
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   web:
@@ -13,6 +19,37 @@ jobs:
       npm_config_registry: https://registry.npmjs.org
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm lint && pnpm exec vitest run && pnpm build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web/
+          if-no-files-found: error
+  browser:
+    needs: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+    env:
+      npm_config_registry: https://registry.npmjs.org
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
       - uses: pnpm/action-setup@v4
         with:
@@ -25,19 +62,9 @@ jobs:
       - run: uv sync --frozen
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
-      - run: pnpm lint && pnpm typecheck && pnpm exec vitest run && pnpm build
-        working-directory: frontend
-      - run: pnpm exec playwright install --with-deps chromium
-        working-directory: frontend
       - run: pnpm test:e2e
         working-directory: frontend
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-assets
-          path: src/campfire_cli/resources/web/
-          if-no-files-found: error
   native:
-    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -50,17 +77,13 @@ jobs:
       NATIVE_EVIDENCE_DIR: native-evidence
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: web-assets
-          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --frozen
       - name: Start Linux test user manager
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          sudo systemctl start user@$(id -u).service
+          sudo systemctl start "user@$(id -u).service"
           echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
       - name: Verify native lifecycle and actual timer execution
@@ -92,7 +115,6 @@ jobs:
       - run: uv sync --frozen
       - run: uv run --with pipx python scripts/package_upgrade_verify.py --manager ${{ matrix.manager }}
   video:
-    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -103,10 +125,6 @@ jobs:
       HF_HUB_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: web-assets
-          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --frozen --extra video
       - run: uv run --no-sync python -m pytest tests/unit/test_video.py tests/unit/test_video_runtime.py
@@ -146,19 +164,42 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'push'
-    needs: [web, quality, video, upgrade, native]
+    if: inputs.publish
+    needs: [web, browser, quality, video, upgrade, native]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Read release version
+        id: version
+        shell: bash
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          release_version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_TAG=v$release_version" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v10.1.0
       - uses: actions/download-artifact@v4
         with:
           name: distributions
           path: dist
+      - name: Tag verified commit
+        shell: bash
+        run: |
+          python scripts/release_check.py --tag "$RELEASE_TAG"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            git tag -a "$RELEASE_TAG" -m "Campfire CLI $RELEASE_TAG"
+          fi
+          git push origin "refs/tags/$RELEASE_TAG"
+          python scripts/release_check.py --tag "$RELEASE_TAG"
       - name: Publish to PyPI
         run: uv publish --check-url https://pypi.org/simple/ dist/*
 
@@ -170,5 +211,6 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
       - name: Install published package from PyPI
         shell: bash
-        run: |
-          python scripts/pypi_verify.py "${GITHUB_REF_NAME#v}"
+        env:
+          RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+        run: python scripts/pypi_verify.py "$RELEASE_VERSION"

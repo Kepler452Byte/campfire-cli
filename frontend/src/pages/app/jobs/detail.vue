@@ -143,7 +143,7 @@ async function saved(): Promise<void> {
           </div>
         </el-tab-pane>
         <el-tab-pane label="任务配置" name="configuration">
-          <el-descriptions :column="1" border>
+          <el-descriptions class="job-configuration" :column="1" label-width="112px" border>
             <el-descriptions-item label="任务 ID">
               {{ job.id }}
             </el-descriptions-item>
@@ -215,6 +215,17 @@ async function saved(): Promise<void> {
 }
 .history-pager {
   margin: 16px 0;
+}
+.job-configuration {
+  :deep(.el-descriptions__table) {
+    table-layout: fixed;
+  }
+  :deep(.el-descriptions__label) {
+    white-space: nowrap;
+  }
+  :deep(.el-descriptions__content) {
+    overflow-wrap: anywhere;
+  }
 }
 pre {
   white-space: pre-wrap;

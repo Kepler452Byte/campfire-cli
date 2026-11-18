@@ -24,4 +24,4 @@ Web 源码检查和构建还需要 Node 24 与 pnpm 10.12.1，先按 [frontend/R
 
 ## 发布职责
 
-维护者核对 CHANGELOG、版本和标签，运行 release_check 与本地门禁；只有明确发布授权后才推送标签。三平台 release 工作流通过后发布验证过的包，随后从公共 PyPI 安装验证。GitHub Release Notes 摘录 CHANGELOG 对应版本；不修改已有版本的包和标签。
+维护者核对 CHANGELOG、版本和标签，运行 release_check 与本地门禁，再推送 main。默认 `gh workflow run release.yml --ref main` 只验证；获得明确发布授权后使用 `gh workflow run release.yml --ref main -f publish=true`。工作流通过三平台、浏览器、构建与隔离安装门禁后，在本次验收提交创建或复用附注标签，发布同一份已验证产物，并从公共 PyPI 安装核验；标签推送不再重复运行完整矩阵。GitHub Release 使用该产物，Notes 摘录 CHANGELOG 对应版本；不修改已有版本的包和标签。

@@ -121,3 +121,26 @@ test("390px 页面和模板侧栏", async ({ page }) => {
   expect(box!.x + box!.width).toBeLessThanOrEqual(375)
   await page.screenshot({ path: "test-results/job-editor-mobile.png", fullPage: true, animations: "disabled" })
 })
+
+test("长命令配置保持标签完整和页面宽度", async ({ page }) => {
+  const seed = (await (await page.request.get("/api/v1/jobs/seed")).json()).data.job
+  const job = { ...seed, id: "long-command", name: "长命令任务", argv: [seed.argv[0], "-c", `claude -p "${"参数".repeat(500)}" --add-dir /Users/${"project".repeat(100)}`] }
+  delete job.scheduler
+  const headers = { "Origin": "http://127.0.0.1:4173", "X-Campfire-Request": "1" }
+  const preview = (await (await page.request.post("/api/v1/jobs", { headers, data: { job } })).json()).data
+  expect((await page.request.post("/api/v1/jobs", { headers, data: { job, confirm: true, expected_plan: preview.expected_plan } })).ok()).toBe(true)
+  await page.goto("/app/jobs/long-command")
+  await page.getByRole("tab", { name: "任务配置", exact: true }).click()
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    const label = page.getByRole("cell", { name: "执行计划", exact: true })
+    await expect(label).toBeVisible()
+    const box = await label.boundingBox()
+    expect(box!.width).toBeGreaterThanOrEqual(100)
+    expect(box!.height).toBeLessThan(55)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    const table = label.locator("xpath=ancestor::table")
+    expect(await table.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await page.screenshot({ path: `test-results/job-configuration-${width}.png`, fullPage: true, animations: "disabled" })
+  }
+})
