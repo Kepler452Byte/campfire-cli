@@ -194,6 +194,12 @@ async function refresh(): Promise<void> {
   :deep(.el-tabs__item) {
     border-radius: 0;
   }
+  :deep(.el-tabs__header .el-tabs__item .is-icon-close) {
+    width: 14px;
+  }
+  :deep(.el-tabs__header .el-tabs__nav .el-tabs__item.is-closable) {
+    padding: 0 20px;
+  }
   :deep(.el-tabs__header) {
     margin: 0;
   }
