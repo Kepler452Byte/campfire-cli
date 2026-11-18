@@ -17,6 +17,7 @@ from sqlalchemy import (
     Table,
     Text,
     delete,
+    func,
     insert,
     select,
     update,
@@ -132,6 +133,12 @@ class RunRepository:
             query = query.where(RUNS.c.job_id == job_id)
         with self.connection() as db:
             return [dict(row) for row in db.execute(query.limit(limit).offset(offset)).mappings()]
+
+    def count(self, job_id: str) -> int:
+        if not self.path.exists():
+            return 0
+        with self.connection() as db:
+            return db.scalar(select(func.count()).select_from(RUNS).where(RUNS.c.job_id == job_id))
 
     def result(self, run_id: str) -> dict:
         if self.path.exists():

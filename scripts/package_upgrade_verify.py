@@ -39,6 +39,12 @@ def verify(manager: str, baseline: str = "v0.2.5") -> dict:
         candidate = root / "candidate"
         archive(baseline, source)
         archive("HEAD", candidate)
+        if (candidate / "frontend/package.json").exists():
+            shutil.copytree(
+                ROOT / "src/campfire_cli/resources/web",
+                candidate / "src/campfire_cli/resources/web",
+                dirs_exist_ok=True,
+            )
         old_version = tomllib.loads((source / "pyproject.toml").read_text())["project"]["version"]
         new_version = tomllib.loads((candidate / "pyproject.toml").read_text())["project"][
             "version"

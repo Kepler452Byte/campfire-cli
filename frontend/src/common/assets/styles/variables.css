@@ -1,0 +1,66 @@
+/* 全局 CSS 变量，这种变量不仅可以在 CSS 和 SCSS 中使用，还可以导入到 JS 中使用 */
+
+:root {
+  /* Body */
+  --v3-body-text-color: var(--el-text-color-primary);
+  --v3-body-bg-color: var(--el-bg-color-page);
+  /* Header 区域 = NavigationBar 组件 + TagsView 组件 */
+  --v3-header-height: calc(
+    var(--v3-navigationbar-height) + var(--v3-tagsview-height) + var(--v3-header-border-bottom-width)
+  );
+  --v3-header-bg-color: var(--el-bg-color);
+  --v3-header-box-shadow: var(--el-box-shadow-lighter);
+  --v3-header-border-bottom-width: 1px;
+  --v3-header-border-bottom: var(--v3-header-border-bottom-width) solid var(--el-fill-color);
+  /* NavigationBar 组件 */
+  --v3-navigationbar-height: 50px;
+  --v3-navigationbar-text-color: var(--el-text-color-regular);
+  /* Sidebar 组件（左侧模式全部生效、顶部模式全部不生效、混合模式非颜色部分生效） */
+  --v3-sidebar-width: 220px;
+  --v3-sidebar-hide-width: 58px;
+  --v3-sidebar-border-right: 1px solid var(--el-fill-color);
+  --v3-sidebar-menu-item-height: var(--sidebar-item-height);
+  --v3-sidebar-menu-bg-color: var(--theme-sidebar-bg);
+  --v3-sidebar-menu-hover-bg-color: var(--theme-sidebar-hover-bg);
+  --v3-sidebar-menu-text-color: var(--theme-sidebar-text);
+  --v3-sidebar-menu-active-text-color: var(--theme-sidebar-accent);
+  --v3-sidebar-menu-hover-text-color: var(--theme-sidebar-text-hover);
+  --v3-sidebar-menu-selected-bg-color: var(--theme-sidebar-selected-bg);
+  --v3-sidebar-menu-selected-hover-bg-color: var(--theme-sidebar-selected-hover-bg);
+  --v3-sidebar-divider-color: var(--theme-sidebar-divider);
+  /* TagsView 组件 */
+  --v3-tagsview-height: 34px;
+  --v3-tagsview-text-color: var(--el-text-color-regular);
+  --v3-tagsview-tag-active-text-color: #ffffff;
+  --v3-tagsview-tag-bg-color: var(--el-bg-color);
+  --v3-tagsview-tag-active-bg-color: var(--el-color-primary);
+  --v3-tagsview-tag-border-radius: 2px;
+  --v3-tagsview-tag-border-color: var(--el-border-color-lighter);
+  --v3-tagsview-tag-active-border-color: var(--el-color-primary);
+  --v3-tagsview-tag-icon-hover-bg-color: #00000030;
+  --v3-tagsview-tag-icon-hover-color: #ffffff;
+  --v3-tagsview-contextmenu-text-color: var(--el-text-color-regular);
+  --v3-tagsview-contextmenu-hover-text-color: var(--el-text-color-primary);
+  --v3-tagsview-contextmenu-bg-color: var(--el-bg-color-overlay);
+  --v3-tagsview-contextmenu-hover-bg-color: var(--el-fill-color);
+  --v3-tagsview-contextmenu-box-shadow: var(--el-box-shadow);
+  /* Hamburger 组件 */
+  --v3-hamburger-text-color: var(--el-text-color-primary);
+  /* RightPanel 组件  */
+  --v3-rightpanel-button-bg-color: var(--theme-sidebar-bg);
+}
+
+/* 顶部/混合布局沿用主题表面配色；只有左侧布局使用独立侧栏配色。 */
+[data-layout-mode="top"],
+[data-layout-mode="left-top"],
+.layout-mode-top,
+.layout-mode-left-top {
+  --v3-sidebar-menu-bg-color: var(--el-bg-color);
+  --v3-sidebar-menu-text-color: var(--el-text-color-regular);
+  --v3-sidebar-menu-hover-text-color: var(--el-text-color-primary);
+  --v3-sidebar-menu-active-text-color: var(--el-color-primary);
+  --v3-sidebar-menu-hover-bg-color: var(--el-fill-color-light);
+  --v3-sidebar-menu-selected-bg-color: var(--el-color-primary-light-9);
+  --v3-sidebar-menu-selected-hover-bg-color: var(--el-color-primary-light-8);
+  --v3-sidebar-divider-color: var(--el-border-color-light);
+}

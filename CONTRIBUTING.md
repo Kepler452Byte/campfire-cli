@@ -14,6 +14,8 @@ uv run python scripts/quality_check.py --release
 
 最后一项额外构建并在临时环境安装 wheel，不发布。测试必须隔离 CAMPFIRE_HOME、Skill 与提示词目录，不修改开发者真实 Workspace。公开上手案例见 [quickstart](docs/quickstart.md)。
 
+Web 源码检查和构建还需要 Node 24 与 pnpm 10.12.1，先按 [frontend/README.md](frontend/README.md) 安装、检查并构建。发布门禁要求已有网页构建资源；CI 统一构建一次并向三平台验证分发同一份资源。
+
 提交使用 conventional commits，说明动机、改动范围和验证结果。只暂存相关文件；不提交 .venv、状态数据库、真实 Vault 或凭据。行为保持型重构与功能变更分开提交。不要自行重写公开历史或重建已发布标签。
 
 ## 报告问题
@@ -23,5 +25,3 @@ uv run python scripts/quality_check.py --release
 ## 发布职责
 
 维护者核对 CHANGELOG、版本和标签，运行 release_check 与本地门禁；只有明确发布授权后才推送标签。三平台 release 工作流通过后发布验证过的包，随后从公共 PyPI 安装验证。GitHub Release Notes 摘录 CHANGELOG 对应版本；不修改已有版本的包和标签。
-
-当前 v0.1.25 聚焦开源文档、隔离示例与使用安全；领域模式重构、搜索和插件自动管理不在本轮范围。

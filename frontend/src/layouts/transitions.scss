@@ -1,0 +1,15 @@
+// Shared behavior, consumed by independent module layouts and Logo.
+:root {
+  --layout-sidebar-duration: 350ms;
+  --layout-logo-duration: 180ms;
+}
+.layout-scope {
+  --layout-sidebar-duration: 350ms;
+  --layout-logo-duration: 180ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .layout-scope {
+    --layout-sidebar-duration: 0ms;
+    --layout-logo-duration: 0ms;
+  }
+}

@@ -1,0 +1,138 @@
+:root {
+  --admin-gap: 16px; // 三段之间的纵向间距
+  --admin-inner-gap: 12px; // 筛选控件之间的 gap
+  --admin-actions-gap: 6px; // 行内文字按钮之间的间距
+}
+
+// 页面根容器 —— 三段式：search → table → pager
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-gap);
+  padding: 20px; // 外圈留白，与全局 .app-container 保持一致；admin 页面不再叠加 app-container
+  flex: 1;
+  min-height: 0;
+}
+
+// 筛选区。通常与 <el-card class="admin-search"> 组合。
+.admin-search {
+  // 消掉 el-card 底部空白，让筛选行的 margin-bottom 承担节奏
+  flex-shrink: 0;
+  > .el-card__body {
+    padding-bottom: 0;
+  }
+
+  &__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 var(--admin-inner-gap);
+    > .el-form-item {
+      min-width: 0;
+      max-width: 100%;
+      margin-right: 0;
+      margin-bottom: 16px;
+    }
+    .el-form-item__content {
+      min-width: 0;
+    }
+    .el-input {
+      width: 220px;
+      max-width: 100%;
+    }
+    .el-select {
+      width: 140px;
+      max-width: 100%;
+    }
+    .el-date-editor {
+      width: 360px;
+      max-width: 100%;
+    }
+  }
+
+  // 筛选表单里最后一个 el-form-item：DOM 顺序必须是 [新增] [查询] [重置]
+  &__actions {
+    .el-button + .el-button {
+      margin-left: 8px;
+    }
+  }
+}
+
+// 表格区。通常与 <el-card class="admin-table"> 组合。
+.admin-table {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  > .el-card__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  &__body {
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    margin-bottom: var(--admin-gap);
+  }
+}
+
+// 表格行内操作按钮容器。
+.admin-actions-cell {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: var(--admin-actions-gap);
+
+  // 抵消 Element Plus 相邻按钮默认的 12px margin
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+}
+
+// 分页区，右对齐。
+.admin-pager {
+  display: flex;
+  justify-content: flex-end;
+  overflow-x: auto;
+  flex-shrink: 0;
+  .el-pagination {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+}
+
+.admin-dialog--primary,
+.admin-dialog--confirm {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  > .el-dialog__body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  > .el-dialog__header,
+  > .el-dialog__footer {
+    flex-shrink: 0;
+  }
+}
+
+// 由布局显式启用列表高度约束；高度跟随布局 Header、标签栏和全屏状态。
+:is(.admin-layout, .list-layout) .app-main {
+  height: calc(100dvh - var(--v3-header-height));
+}
+:is(.admin-layout, .list-layout).fixedHeader .app-main,
+:is(.admin-layout, .list-layout)[data-mode="top"] .app-main,
+:is(.admin-layout, .list-layout)[data-mode="left-top"] .app-main {
+  height: 100dvh;
+}
+:is(.admin-layout, .list-layout) .app-scrollbar {
+  min-height: 0;
+}
+:is(.admin-layout, .list-layout) .layout-footer {
+  flex-shrink: 0;
+}

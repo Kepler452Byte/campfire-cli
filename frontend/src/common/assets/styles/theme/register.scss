@@ -1,0 +1,4 @@
+// 默认主题先提供完整变量，其他主题按 html class 覆盖。
+@use "./normal";
+@use "./dark";
+@use "./dark-blue";

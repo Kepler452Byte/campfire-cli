@@ -103,6 +103,11 @@ class AppContainer:
         )
 
     @staticmethod
+    def build_workspace():
+        home = campfire_home()
+        return WorkspaceService(home, FilesystemWorkspaceRepository(home))
+
+    @staticmethod
     def build_job():
         import sys
 

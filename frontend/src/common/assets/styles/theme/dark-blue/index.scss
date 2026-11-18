@@ -1,0 +1,27 @@
+@use "../palette";
+
+html.dark-blue {
+  @include palette.palette(
+    (
+      primary: #fbbf24,
+      danger: #f56c6c,
+      surface: #001b44,
+      paper: #001535,
+      overlay: #002359,
+      ink: #e5eaf3,
+      text: #cfd3dc,
+      muted: #a3a6ad,
+      line: #003380,
+      fill: #002359,
+      sidebar-bg: #001535,
+      sidebar-accent: #fbbf24,
+      sidebar-text: #a3a6ad,
+      sidebar-text-hover: #e5eaf3,
+      sidebar-hover-bg: #002359,
+      sidebar-selected-bg: #00383f,
+      sidebar-selected-hover-bg: #00464b,
+      sidebar-divider: #003380,
+    ),
+    $dark: true
+  );
+}

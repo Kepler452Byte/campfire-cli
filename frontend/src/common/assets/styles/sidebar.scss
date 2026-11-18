@@ -1,0 +1,57 @@
+// 配色由主题提供；这里只定义结构预设，与主题组合使用。
+:root,
+.template-sidebar-popup {
+  --sidebar-radius: 10px;
+  --sidebar-inset: 12px;
+  --sidebar-item-height: 46px;
+  --sidebar-group-gap: 12px;
+  --sidebar-marker-width: 0px;
+}
+[data-sidebar-style="compact"],
+.sidebar-style-compact {
+  --sidebar-radius: 6px;
+  --sidebar-inset: 8px;
+  --sidebar-item-height: 38px;
+  --sidebar-group-gap: 6px;
+}
+[data-sidebar-style="classic"],
+.sidebar-style-classic {
+  --sidebar-radius: 0px;
+  --sidebar-inset: 0px;
+  --sidebar-item-height: 48px;
+  --sidebar-group-gap: 12px;
+  --sidebar-marker-width: 3px;
+}
+
+.template-sidebar-popup {
+  --el-menu-bg-color: var(--v3-sidebar-menu-bg-color);
+  --el-menu-text-color: var(--v3-sidebar-menu-text-color);
+  --el-menu-active-color: var(--v3-sidebar-menu-active-text-color);
+  --el-menu-hover-bg-color: var(--v3-sidebar-menu-hover-bg-color);
+  --el-menu-item-height: var(--sidebar-item-height);
+
+  .el-menu-item {
+    border-radius: var(--sidebar-radius);
+    margin: 4px var(--sidebar-inset);
+    &:hover {
+      color: var(--v3-sidebar-menu-hover-text-color);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--v3-sidebar-menu-active-text-color);
+      outline-offset: -2px;
+    }
+    &.is-active {
+      background: var(--v3-sidebar-menu-selected-bg-color);
+      &::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: var(--sidebar-marker-width);
+        background: var(--v3-sidebar-menu-active-text-color);
+      }
+      &:hover {
+        background: var(--v3-sidebar-menu-selected-hover-bg-color);
+      }
+    }
+  }
+}

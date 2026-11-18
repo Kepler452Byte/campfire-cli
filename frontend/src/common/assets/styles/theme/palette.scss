@@ -1,0 +1,46 @@
+@use "sass:color";
+@use "sass:map";
+
+// 每个主题必须提供完整配色，组件不选择主题或固定品牌颜色。
+@mixin palette($colors, $dark: false) {
+  $surface: map.get($colors, surface);
+  @each $name, $value in $colors {
+    --theme-#{$name}: #{$value};
+  }
+  @each $name in (primary, danger) {
+    $base: map.get($colors, $name);
+    --el-color-#{$name}: #{$base};
+    @each $level in (3, 5, 7, 8, 9) {
+      --el-color-#{$name}-light-#{$level}: #{color.mix($surface, $base, $level * 10%)};
+    }
+    --el-color-#{$name}-dark-2: #{color.mix(if($dark, white, black), $base, 20%)};
+  }
+  --el-color-error: var(--el-color-danger);
+  @each $level in (3, 5, 7, 8, 9) {
+    --el-color-error-light-#{$level}: var(--el-color-danger-light-#{$level});
+  }
+  --el-color-error-dark-2: var(--el-color-danger-dark-2);
+  --el-bg-color: var(--theme-surface);
+  --el-bg-color-page: var(--theme-paper);
+  --el-bg-color-overlay: var(--theme-overlay);
+  --el-text-color-primary: var(--theme-ink);
+  --el-text-color-regular: var(--theme-text);
+  --el-text-color-secondary: var(--theme-muted);
+  --el-text-color-disabled: #{color.mix($surface, map.get($colors, ink), 65%)};
+  --el-text-color-placeholder: var(--theme-muted);
+  --el-border-color-darker: #{color.mix(map.get($colors, ink), map.get($colors, line), 20%)};
+  --el-border-color-dark: #{color.mix(map.get($colors, ink), map.get($colors, line), 10%)};
+  --el-border-color: var(--theme-line);
+  --el-border-color-light: var(--theme-line);
+  --el-border-color-lighter: var(--theme-line);
+  --el-border-color-extra-light: var(--theme-line);
+  --el-fill-color-darker: #{color.mix(map.get($colors, ink), map.get($colors, fill), 15%)};
+  --el-fill-color-dark: #{color.mix(map.get($colors, ink), map.get($colors, fill), 8%)};
+  --el-fill-color: var(--theme-fill);
+  --el-fill-color-light: var(--theme-fill);
+  --el-fill-color-lighter: var(--theme-paper);
+  --el-fill-color-extra-light: var(--theme-paper);
+  --el-fill-color-blank: var(--theme-surface);
+  --el-mask-color: #{if($dark, rgba(0, 0, 0, 0.5), rgba(255, 255, 255, 0.9))};
+  --el-mask-color-extra-light: #{if($dark, rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.3))};
+}

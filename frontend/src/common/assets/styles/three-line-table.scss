@@ -1,0 +1,30 @@
+.three-line-table-wrap {
+  flex-shrink: 0;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.three-line-table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  border-top: 2px solid var(--el-border-color);
+  border-bottom: 2px solid var(--el-border-color);
+
+  th,
+  td {
+    padding: 12px 16px;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    color: var(--el-text-color-secondary);
+    font-weight: 500;
+    border-bottom: 1px solid var(--el-border-color);
+  }
+
+  td {
+    color: var(--el-text-color-primary);
+  }
+}

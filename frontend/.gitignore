@@ -1,0 +1,28 @@
+# Common
+dist
+node_modules
+.eslintcache
+vite.config.*.timestamp*
+
+# MacOS
+.DS_Store
+
+# Local env files
+*.local
+
+# Logs
+*.log
+
+# Use the pnpm
+package-lock.json
+yarn.lock
+
+# Deployment secrets and browser artifacts
+deploy/.env
+test-results/
+playwright-report/
+artifacts/
+__pycache__/
+*.pyc
+
+.e2e-session.json

@@ -6,7 +6,35 @@ on:
     tags: ["v*"]
 
 jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: uv sync --frozen
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: pnpm lint && pnpm typecheck && pnpm exec vitest run && pnpm build
+        working-directory: frontend
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: frontend
+      - run: pnpm test:e2e
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web/
+          if-no-files-found: error
   native:
+    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +47,10 @@ jobs:
       NATIVE_EVIDENCE_DIR: native-evidence
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --frozen
       - name: Start Linux test user manager
@@ -36,6 +68,7 @@ jobs:
           name: native-${{ runner.os }}
           path: native-evidence/
   upgrade:
+    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -48,10 +81,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --frozen
       - run: uv run --with pipx python scripts/package_upgrade_verify.py --manager ${{ matrix.manager }}
   video:
+    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -62,10 +100,15 @@ jobs:
       HF_HUB_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --frozen --extra video
       - run: uv run --no-sync python -m pytest tests/unit/test_video.py tests/unit/test_video_runtime.py
   quality:
+    needs: web
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +118,10 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: src/campfire_cli/resources/web
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: true
@@ -97,7 +144,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    needs: [quality, video, upgrade, native]
+    needs: [web, quality, video, upgrade, native]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

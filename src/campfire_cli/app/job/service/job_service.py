@@ -4,6 +4,7 @@ import platform
 import re
 import socket
 import uuid
+from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
@@ -113,6 +114,55 @@ class JobService:
                 "issues": [],
             }
 
+    def query_jobs(
+        self,
+        *,
+        name: str = "",
+        workspace_id: str | None = None,
+        state: str | None = None,
+        unbound: bool = False,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> dict:
+        """Filter and paginate one observed snapshot of local task state."""
+        if type(page) is not int or page < 1:
+            raise JobError("invalid-page", "page must be a positive integer")
+        self.validate_page(page_size, 0)
+        if state not in {None, "enabled", "paused", "manual"}:
+            raise JobError("invalid-state", "Use enabled, paused or manual")
+        if unbound and workspace_id is not None:
+            raise JobError("invalid-filter", "unbound and workspace_id are mutually exclusive")
+        result = self.list_jobs(workspace_id)
+        rows = result.pop("jobs")
+        rows = [row for row in rows if name.casefold() in (row.get("name") or row["id"]).casefold()]
+        if unbound:
+            rows = [row for row in rows if row["workspace_id"] is None]
+        if state:
+            rows = [row for row in rows if self.job_state(row) == state]
+        rows.sort(key=lambda row: ((row.get("name") or row["id"]).casefold(), row["id"]))
+        total = len(rows)
+        return {
+            **result,
+            "list": rows[(page - 1) * page_size : page * page_size],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size,
+        }
+
+    @staticmethod
+    def job_state(row: dict) -> str:
+        if row["schedule"]["kind"] == "manual":
+            return "manual"
+        return "enabled" if row["scheduler"]["enabled"] else "paused"
+
+    def start_run(self, job_id: str, expected: str) -> dict:
+        """Start an independent runner after it acquires locks and records its Run."""
+        from campfire_cli.app.job.service.detached_runner import start_detached
+
+        result = start_detached(self.home, job_id, expected)
+        return {**result, "follow_up": self.run_follow_up(result["run"]["id"])}
+
     def show(self, job_id: str) -> dict[str, Any]:
         with self.lock():
             job = self.get(job_id)
@@ -140,7 +190,7 @@ class JobService:
     @contextmanager
     def idle(self):
         """Prevent new starts while the caller schedules an environment replacement."""
-        with self.lock(), ExitStack() as stack:
+        with self.lock(), process_lock(self.home / "jobs/locks/web.lock"), ExitStack() as stack:
             for identity in sorted(set(self.repository.read()) | set(self.runs.running_jobs())):
                 stack.enter_context(self.run_lock(identity))
             yield
@@ -157,7 +207,7 @@ class JobService:
     def change(
         self, action: str, job_id: str, job: Job | None, confirm: bool, expected: str | None
     ) -> dict[str, Any]:
-        if job is not None and (not Path(job.argv[0]).is_file() or not Path(job.cwd).is_dir()):
+        if job is not None and (not Path(job.command[0]).is_file() or not Path(job.cwd).is_dir()):
             raise JobError(
                 "invalid-job",
                 "Executable and working directory must exist when creating or updating",
@@ -255,10 +305,10 @@ class JobService:
                         f"Operation failed and native configuration was restored: {exc}",
                     ) from exc
             changed_execution = old is None or (
-                replacement.argv,
+                replacement.command,
                 replacement.cwd,
                 replacement.timeout,
-            ) != (old.argv, old.cwd, old.timeout)
+            ) != (old.command, old.cwd, old.timeout)
             try:
                 after = self.state(replacement)
             except AppError as exc:
@@ -283,7 +333,13 @@ class JobService:
             }
 
     def run(
-        self, job_id: str, confirm: bool, expected: str | None = None, scheduled: bool = False
+        self,
+        job_id: str,
+        confirm: bool,
+        expected: str | None = None,
+        scheduled: bool = False,
+        *,
+        on_started: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         with self.lock(), ExitStack() as stack:
             self.check_upgrade()
@@ -311,7 +367,7 @@ class JobService:
             execution = stack.pop_all()
         try:
             self.runs.delete_completed(self.policy.select(self.runs.completed(), datetime.now(UTC)))
-            result = run_job(job, self.runs, self.config["log_limit_bytes"])
+            result = run_job(job, self.runs, self.config["log_limit_bytes"], on_started=on_started)
             expired = self.policy.select(self.runs.completed(), datetime.now(UTC))
             self.runs.delete_completed([run for run in expired if run != result["id"]])
             payload = {
@@ -333,6 +389,20 @@ class JobService:
         self.validate_page(limit, offset)
         display_run({}, timezone)
         return [display_run(run, timezone) for run in self.runs.history(job_id, limit, offset)]
+
+    def history_page(self, job_id: str, page: int, page_size: int) -> dict:
+        if page < 1:
+            raise JobError("invalid-page", "page must be positive")
+        rows = self.history(job_id, page_size, (page - 1) * page_size, "local")
+        total = self.runs.count(job_id)
+        return {
+            "status": "ok",
+            "list": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size,
+        }
 
     def result(self, run_id: str, timezone: str = "UTC") -> dict[str, Any]:
         display_run({}, timezone)

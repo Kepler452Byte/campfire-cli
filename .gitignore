@@ -14,3 +14,6 @@ dist/
 # 本机环境
 .DS_Store
 Thumbs.db
+
+# 网页构建产物由前端生成，发行时包含
+src/campfire_cli/resources/web/

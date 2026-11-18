@@ -1,6 +1,6 @@
 # 定时启动 Codex 或 Claude Code
 
-使用通用 Job 的 argv 启动已安装的 Agent CLI，不新增会话编排。先核对本机 `codex exec --help` 或 `claude --help`，使用绝对程序路径、明确工作目录和非交互模式；stdin 关闭。登录、工具权限与网络必须在实际调度环境中测试，不只在交互终端验证。
+使用 Job 的 agent 配置启动已安装的 Agent CLI，不新增会话编排。agent 包含 kind（codex/claude）、executable（绝对程序路径）、prompt（多行提示词）和可选 args（额外参数数组）；与 argv 互斥。执行时生成 codex exec 或 claude -p 命令，提示词放在 -- 之后；特殊 wrapper 或已有完整命令继续用 argv，不自动反向拆分。先核对本机 `codex exec --help` 或 `claude --help`，明确工作目录和非交互模式；stdin 关闭。登录、工具权限与网络必须在实际调度环境中测试，不只在交互终端验证。
 
 npm 安装的入口可能通过 /usr/bin/env 查找 Node；程序路径绝对也不能保证调度器找到解释器。遇到此类启动失败，查询本次日志并使用绝对 Node 路径加 CLI 脚本路径，或已有的明确环境 wrapper；不为此增加调度服务或修改系统 PATH。
 

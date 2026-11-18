@@ -1,0 +1,26 @@
+@use "../palette";
+
+html:root {
+  @include palette.palette(
+    (
+      primary: #b45309,
+      danger: #dc2626,
+      surface: #ffffff,
+      paper: #f8fafc,
+      overlay: #ffffff,
+      ink: #172033,
+      text: #475569,
+      muted: #64748b,
+      line: #dbe4f0,
+      fill: #f1f5f9,
+      sidebar-bg: #20242c,
+      sidebar-accent: #fbbf24,
+      sidebar-text: #b7c1cf,
+      sidebar-text-hover: #f1f5f9,
+      sidebar-hover-bg: #ffffff09,
+      sidebar-selected-bg: #293c58,
+      sidebar-selected-hover-bg: #324969,
+      sidebar-divider: #ffffff12,
+    )
+  );
+}

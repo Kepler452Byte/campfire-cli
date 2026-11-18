@@ -11,14 +11,18 @@ DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 @dataclass(frozen=True)
 class Job:
     id: str
-    argv: list[str]
+    argv: list[str] | None
     cwd: str
     schedule: dict[str, Any]
     timeout: int = 3600
     workspace_id: str | None = None
     workspace_root: str | None = None
+    name: str | None = None
+    agent: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
+        if self.name is not None and (not isinstance(self.name, str) or not self.name.strip()):
+            raise JobError("invalid-job", "name must be a nonempty string")
         if self.workspace_id is not None and (
             not isinstance(self.workspace_id, str) or not self.workspace_id.strip()
         ):
@@ -31,17 +35,24 @@ class Job:
             raise JobError("invalid-job", "workspace_root must be an absolute resolved binding")
         if not isinstance(self.id, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,47}", self.id):
             raise JobError("invalid-job", "id must match [a-z][a-z0-9-]{0,47}")
+        if (self.argv is None) == (self.agent is None):
+            raise JobError("invalid-job", "Supply exactly one of agent or argv")
+        command = self.command
         if (
-            not isinstance(self.argv, list)
-            or not self.argv
-            or any(not isinstance(arg, str) or "\0" in arg or "\n" in arg for arg in self.argv)
+            not isinstance(command, list)
+            or not command
+            or any(not isinstance(arg, str) or "\0" in arg for arg in command)
         ):
-            raise JobError(
-                "invalid-job", "argv must be a nonempty string array without NUL/newline"
-            )
-        if not Path(self.argv[0]).is_absolute():
-            raise JobError("invalid-job", "argv[0] must be an absolute executable path")
-        if not isinstance(self.cwd, str) or not Path(self.cwd).is_absolute():
+            raise JobError("invalid-job", "argv must be a nonempty string array without NUL")
+        if any(character in command[0] for character in "\r\n"):
+            raise JobError("invalid-job", "Executable paths cannot contain newlines")
+        if not Path(command[0]).is_absolute():
+            raise JobError("invalid-job", "Executable must be an absolute path")
+        if (
+            not isinstance(self.cwd, str)
+            or any(char in self.cwd for char in "\0\r\n")
+            or not Path(self.cwd).is_absolute()
+        ):
             raise JobError("invalid-job", "cwd must be an absolute directory")
         if type(self.timeout) is not int or not 1 <= self.timeout <= 86400:
             raise JobError("invalid-job", "timeout must be 1..86400 seconds")
@@ -79,8 +90,18 @@ class Job:
                 "daily HH:MM, or weekly day mon..sun HH:MM",
             )
 
+    @property
+    def command(self) -> list[str]:
+        if self.agent is not None:
+            from campfire_cli.app.job.schema.agent_command import compile_agent
+
+            return compile_agent(self.agent)
+        return self.argv
+
     def data(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data.pop("argv" if self.agent is not None else "agent")
+        return data
 
     @classmethod
     def parse(cls, data: object) -> "Job":
@@ -92,11 +113,15 @@ class Job:
             "timeout",
             "workspace_id",
             "workspace_root",
+            "name",
+            "agent",
         }:
             raise JobError(
-                "invalid-job", "Use id, argv, cwd, schedule, timeout; optional workspace_id"
+                "invalid-job",
+                "Use id, cwd, schedule, timeout and exactly one of argv/agent; "
+                "optional name, workspace_id, workspace_root",
             )
         try:
-            return cls(**data)
+            return cls(**({"argv": None, **data} if "agent" in data else data))
         except TypeError as exc:
             raise JobError("invalid-job", str(exc)) from exc

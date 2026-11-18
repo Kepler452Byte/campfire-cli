@@ -1,0 +1,32 @@
+:is(.site-layout, .login-container) {
+  --site-accent: var(--el-color-primary);
+  --site-accent-soft: var(--el-color-primary-light-9);
+  --site-ink: var(--theme-ink);
+  --site-paper: var(--theme-paper);
+  --site-surface: var(--theme-surface);
+  --site-line: var(--theme-line);
+  --site-muted: var(--theme-muted);
+  --site-danger: var(--el-color-danger);
+  background: var(--site-paper);
+  color: var(--site-ink);
+
+  a:focus-visible,
+  button:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--site-accent);
+    outline-offset: 4px;
+  }
+}
+
+#nprogress .bar {
+  background: var(--el-color-primary);
+}
+#nprogress .peg {
+  box-shadow:
+    0 0 10px var(--el-color-primary),
+    0 0 5px var(--el-color-primary);
+}
+#nprogress .spinner-icon {
+  border-top-color: var(--el-color-primary);
+  border-left-color: var(--el-color-primary);
+}

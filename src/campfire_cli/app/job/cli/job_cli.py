@@ -22,7 +22,9 @@ File = Annotated[
         help=(
             'UTF-8 JSON: {"id":"example","argv":["/absolute/executable","arg"],'
             '"cwd":"/absolute/directory","schedule":{"kind":"manual"},"timeout":3600}。'
-            "可选 workspace_id；workspace_root 自动解析。schedule 支持 manual、"
+            "可选 name、workspace_id；workspace_root 自动解析。可用 agent 替代 argv："
+            '{"kind":"codex","executable":"/absolute/codex","prompt":"多行提示词","args":[]}；'
+            "kind 为 codex 或 claude，agent 与 argv 互斥。schedule 支持 manual、"
             "interval（seconds 为整分钟 60..86400）、daily（time HH:MM）、"
             "weekly（day mon..sun、time HH:MM），按设备本地时区执行。"
         ),
@@ -69,9 +71,37 @@ def update(file: File, confirm: Confirm = False, expected_plan: Expected = None)
 
 
 @job_cli.command("list")
-def list_jobs(ctx: typer.Context):
-    """查询本机定义、环境和实际状态；根级 --workspace 可精确筛选 Vault。"""
-    deliver(lambda service: service.list_jobs(ctx.find_root().params.get("workspace")))
+def list_jobs(
+    ctx: typer.Context,
+    name: str | None = typer.Option(None, "--name", help="按可读名称包含匹配"),
+    state: str | None = typer.Option(None, "--state", help="enabled / paused / manual"),
+    page: int | None = typer.Option(None, "--page", min=1),
+    page_size: int | None = typer.Option(None, "--page-size", min=1, max=100),
+    unbound: bool = typer.Option(False, "--unbound", help="只列未绑定 Workspace 的 Job"),
+):
+    """查询本机任务；显式筛选或分页时返回分页结果，无选项时保持完整列表。"""
+    workspace = ctx.find_root().params.get("workspace")
+    if unbound and workspace:
+        raise InputError("--unbound 与 --workspace 互斥")
+    if (
+        name is not None
+        or state is not None
+        or page is not None
+        or page_size is not None
+        or unbound
+    ):
+        deliver(
+            lambda service: service.query_jobs(
+                name=name or "",
+                workspace_id=workspace,
+                unbound=unbound,
+                state=state,
+                page=page or 1,
+                page_size=page_size or 10,
+            )
+        )
+    else:
+        deliver(lambda service: service.list_jobs(workspace))
 
 
 @job_cli.command("show")
@@ -85,6 +115,7 @@ def run(
     job_id: str,
     confirm: Confirm = False,
     expected_plan: Expected = None,
+    detach: bool = typer.Option(False, "--detach", help="确认后独立执行并返回 run_id，不等待结束"),
     scheduled: bool = typer.Option(False, "--scheduled", hidden=True),
     home: Path | None = typer.Option(None, "--home", hidden=True),
 ):
@@ -93,7 +124,15 @@ def run(
         if not scheduled:
             raise InputError("内部 --home 仅供原生调度入口使用")
         os.environ["CAMPFIRE_HOME"] = str(home.expanduser().resolve())
-    deliver(lambda service: service.run(job_id, confirm, expected_plan, scheduled))
+    if detach and scheduled:
+        raise InputError("--detach 不用于内部调度入口")
+    deliver(
+        lambda service: (
+            service.start_run(job_id, expected_plan or "")
+            if detach and confirm
+            else service.run(job_id, confirm, expected_plan, scheduled)
+        )
+    )
 
 
 @job_cli.command("pause")

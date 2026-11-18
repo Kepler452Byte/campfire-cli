@@ -18,28 +18,37 @@
 
 推荐搭配 Obsidian：内置 Bases 展示表格，大纲提供章节导航；Kanban 用于看板，Obsidian Git 用于版本历史。它们不是普通文档查询和治理的前提。Templater、TOC 不作为依赖。插件配置教程等待维护者提供博客链接，不在 CLI 输出或仓库重复编写，也不自动修改插件设置。
 
-## 本机命令与定时执行（v0.3.0）
+## 本机 Web（v0.3.2）
+
+运行 `campfire web` 启动仅监听回环地址的任务管理页，使用输出的连接链接打开；`--no-open` 不自动打开浏览器，`--port` 可固定本机端口，支持 SSH 端口转发。网页资源随 Python 包安装，使用者不需要 Node 或额外前端部署。
+
+用户通过 Web 查看、编辑、启停任务和查看 stdout/stderr；Agent 继续通过 CLI 维护。两种入口共用 JobService、定义、预览摘要和锁。Web 的立即执行使用独立 Runner，关闭网页或停止 Web 不终止任务；替换安装环境前需停止 Web 并等待活动任务结束。连接链接是一次性凭据，不分享或写入 Vault。
+
+## 本机命令与定时执行
 
 安装使用 `uv tool install campfire-cli`，升级使用 `campfire upgrade`。Tickwork 的执行能力已并入 `campfire job`，支持普通脚本、Campfire、`codex exec` 和 `claude -p`，不要求另装 Tickwork。
 
 ```text
 ~/.campfire/
 +-- local.yaml       Workspace 本机绑定与稳定环境 id
-+-- jobs.yaml        执行定义：argv、cwd、时间规则、超时
++-- jobs.yaml        执行定义：argv 或 agent、cwd、时间规则、超时
 +-- campfire.db      可删除重建的文档索引
 +-- jobs/runs.db     可清理的执行历史与日志
 
 Vault/_定时任务/
-+-- 记录-<主机名>.md  Agent 根据 Skill 维护；一环境一篇
++-- 记录-<主机名>.md  按需由 Agent 维护的快照；一环境一篇
 ```
 
 使用 `campfire job create --help` 查看 JSON 输入。manual 不部署定时器；interval（整分钟 60..86400 秒）、daily 和 weekly 使用设备本地时区及原生系统调度。新建暂停，更新保留启停状态；运行中拒绝修改和删除。同 Job 及显式绑定同 Workspace 的自动执行互斥，不持有整轮治理写锁。
+
+Job 可提供 name 作为显示名称，id 保持稳定。普通命令用 argv 数组；Codex/Claude Code 可改用 agent 对象，字段为 kind（codex/claude）、executable（绝对路径）、prompt（多行提示词）和可选 args（额外参数数组），与 argv 互斥。已有普通命令保持原样，不自动推断或拆分提示词。
 
 ```sh
 campfire job create --file /absolute/job.json
 campfire job create --file /absolute/job.json --expected-plan <创建预览摘要> --confirm
 campfire job run example
 campfire job run example --expected-plan <运行预览摘要> --confirm
+campfire job run example --expected-plan <运行预览摘要> --confirm --detach
 campfire --workspace demo job list
 campfire job history --job example
 ```
@@ -50,7 +59,7 @@ campfire job history --job example
 
 Linux 需要可用的 systemd 用户 manager，macOS 需要已登录 GUI 会话，Windows 当前用户 Task Scheduler 需要登录会话及同安装环境 pythonw。命令使用绝对路径和 argv，stdin 关闭；不提高权限、不唤醒、不自动补跑或重试。升级不启用 Job，活动运行会阻止替换安装环境；重装到其他位置需显式 update 后核验原生入口。
 
-环境文档只是截至核验时间的可读记录，不反向部署、不包含本机命令路径或凭据；CLI 查询、Runner 和升级不自动写它。删 campfire.db 不影响 Job、原生定时器或运行日志；删 runs.db 会失去历史，且活动运行时拒绝替换。旧 Tickwork 任务由 Agent 记录要求、暂停等待并移除，再通过普通 Job 命令新建，不导入或兼容旧数据库。
+用户需要 Vault 快照时，由 Skill 按需维护环境文档，不要求每次变更刷新。它只是截至核验时间的可读记录，不反向部署、不包含本机命令路径或凭据；CLI 查询、Runner 和升级不自动写它。删 campfire.db 不影响 Job、原生定时器或运行日志；删 runs.db 会失去历史，且活动运行时拒绝替换。旧 Tickwork 任务由 Agent 记录要求、暂停等待并移除，再通过普通 Job 命令新建，不导入或兼容旧数据库。
 
 ## 本地视频文字整理（v0.2.0）
 

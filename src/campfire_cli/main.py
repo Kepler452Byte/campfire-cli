@@ -13,6 +13,7 @@ from campfire_cli.app.document.cli.document_cli import document_cli
 from campfire_cli.app.job.cli.job_cli import job_cli
 from campfire_cli.app.maintenance.cli.maintenance_cli import maintenance_cli
 from campfire_cli.app.system.cli.system_cli import register_system_commands, version_option
+from campfire_cli.app.system.cli.web_cli import web
 from campfire_cli.app.video.cli.video_cli import video_cli
 from campfire_cli.app.workspace.cli.config_cli import config_cli
 from campfire_cli.app.workspace.cli.domain_cli import domain_cli
@@ -96,6 +97,7 @@ def main(
 
 
 register_system_commands(app)
+app.command("web")(web)
 
 if __name__ == "__main__":
     app()

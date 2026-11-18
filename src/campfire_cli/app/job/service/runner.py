@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import IO, Any
@@ -34,7 +35,13 @@ def stop_process(process: subprocess.Popen[bytes]) -> None:
             os.killpg(process.pid, signal.SIGKILL)
 
 
-def run_job(task: Job, repository: RunRepository, log_limit: int) -> dict[str, Any]:
+def run_job(
+    task: Job,
+    repository: RunRepository,
+    log_limit: int,
+    *,
+    on_started: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     run_id = uuid.uuid4().hex
     repository.start(run_id, task.id, os.getpid(), datetime.now(UTC).isoformat())
     started = time.monotonic()
@@ -55,11 +62,13 @@ def run_job(task: Job, repository: RunRepository, log_limit: int) -> dict[str, A
             chunks.put((stream, None))
 
     try:
+        if on_started is not None:
+            on_started(repository.result(run_id))
         creationflags = no_window_flags()
         if sys.platform == "win32":
             creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP
         process = subprocess.Popen(
-            task.argv,
+            task.command,
             cwd=task.cwd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,

@@ -1,0 +1,12 @@
+{
+  "app": {
+    "enabled": true,
+    "title": "Campfire",
+    "home": "/app/jobs",
+    "layout": {
+      "showTagsView": true,
+      "showNotify": false,
+      "showFooter": false
+    }
+  }
+}

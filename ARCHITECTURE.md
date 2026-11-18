@@ -50,6 +50,8 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
 
 本地视频能力由 `app/video` 承担素材准备与交付校验，`common/media` 提供模型下载、媒体探测与语音转写机制；可选原生处理依赖在独立子进程中延迟加载。`AppContainer.deliver_video` 组合文档治理检查与视频交付，不让 Video Service 调用 Document Service。文档结构仍由 `document apply` 创建，正文复用文件变更集及乐观锁；没有新的数据库、独立下载服务或模型调度器。语义整理留给宿主 Agent 与内置 Skill，结构检查不等于语义保真验收。
 
+可选 Web 的 HTTP 入口集中在 `web/`，`frontend/` 继承自有前端模板。CLI 与 HTTP 直接调用同一业务 Service，不互相调用；Service 不依赖 Typer 或 FastAPI。Job 页面管理本机任务，独立 Runner 执行用户命令，Web 不承担调度或 Agent 会话编排。
+
 ```text
 人类 / Codex / Claude Code / 其他 Agent
                   │
@@ -74,6 +76,7 @@ Task Channel 是未来演进设想，借鉴 Go 的原则：**Do not communicate 
 Markdown Workspace Adapter   用户级状态
  文档事实、任务、知识、项目    ~/.campfire/
                               local.yaml + campfire.db + config.yml
+                              jobs.yaml + jobs/runs.db
                               batches/reports/locks
                               models/faster-whisper-small
 ```
@@ -266,7 +269,7 @@ Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain
 
 ## 6. 可选阅读环境与未来交付
 
-当前公共入口是 CLI，没有已交付的 Web 工作台或独立 Decision HTTP 状态机。Obsidian 是推荐阅读工具，不是 CLI 的强依赖；Bases、大纲和可选 Kanban 负责相应展示，普通 Markdown 和文档查询不依赖这些组件。Vault 可选用 `workspace git sync` 获取、提交、合并与推送，系统调度器按用户授权定时调用；不依赖 Obsidian Git，不内置备份平台或常驻服务。
+公共入口以 CLI 为主，另有可选的本机 Web 任务管理页；不提供独立 Decision HTTP 状态机。Obsidian 是推荐阅读工具，不是 CLI 的强依赖；Bases、大纲和可选 Kanban 负责相应展示，普通 Markdown 和文档查询不依赖这些组件。Vault 可选用 `workspace git sync` 获取、提交、合并与推送，系统调度器按用户授权定时调用；不依赖 Obsidian Git，不内置备份平台或常驻调度服务。
 
 如未来增加其他交付适配器，必须复用 Application Service，不复制治理规则；这不是当前版本的交付承诺。插件配置教程由维护者后续博客说明，不在 CLI 内实现安装器或配置管理。
 
@@ -278,14 +281,14 @@ Adoption 是首次接管边界，不属于日常 Maintenance。`workspace domain
 4. MOC、Base 和报告能生成就不手工维护；文档关系通过 CLI 查询，不再复制为关系页。
 5. 有歧义的分类和结构重构进入待确认，不由 Agent 擅自决定。
 6. Markdown 内容可脱离 Campfire 阅读和迁移；文档查询投影在 SQLite 丢失后可以重建，未完成重构批次等本机工作流状态不作此承诺。
-7. 只有一个用户级 SQLite；所有 Workspace 业务表必须携带 `workspace_id`，Repository 查询不得越界。
+7. 文档投影共用用户级 campfire.db，所有 Workspace 业务表携带 `workspace_id`，Repository 查询不得越界；Job 历史独立于文档库，不能随文档重建删除。
 8. 正式文档必须归入 Domain；Space 不直接替代 Domain，系统区域不伪装成 Space。
 
 ## 8. 演进方向
 
 当前版本先稳定 Workspace 注册、存量结构重构、增量维护、归档、Skill 与治理视图。下一阶段围绕 Task Channel 补齐任务创建、进度事件、交接、待确认和验收协议，再连接工作日志、周报与绩效证据。只有出现真实用例时才新增模块，避免为未来能力预建空架构。
 
-本机配置按 Workspace id 分节，repository_bindings 按 Project id 和 repository id 保存路径；remote 和分支只在 Vault 根目录 `.campfire.yaml`。SQLite 无注册事实、无历史迁移链，只从当前文件生成投影；停止运行中的操作后可整库删除重建。
+本机配置按 Workspace id 分节，repository_bindings 按 Project id 和 repository id 保存路径；remote 和分支只在 Vault 根目录 `.campfire.yaml`。文档索引 campfire.db 无注册事实、无历史迁移链，只从当前文件生成投影；停止运行中的操作后可删除重建。jobs/runs.db 的历史不能从文档恢复，任务定义仍由 jobs.yaml 保存。
 
 领域分类与 Project 归属不决定治理方式。所有领域共用结构、检查与 MOC 生成；Project 只关联仓库便携信息与本机位置，Domain 不保存 governance 字段。
 
