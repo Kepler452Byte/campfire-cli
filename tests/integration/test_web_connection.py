@@ -6,7 +6,9 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from contextlib import suppress
 
+import psutil
 import pytest
 from fastapi.testclient import TestClient
 
@@ -111,7 +113,11 @@ def test_cli_reopens_live_web_and_replaces_stale_registration(tmp_path, monkeypa
                     time.sleep(0.05)
             assert ready and ready["action"] == "started"
             info = WebConnection.read(registration)
-            assert info.pid == process.pid
+            # Windows virtualenv launchers run the interpreter in a child process.
+            assert info.pid in {
+                process.pid,
+                *(child.pid for child in psutil.Process(process.pid).children(recursive=True)),
+            }
             before = registration.read_bytes()
             renewed = subprocess.run(
                 [sys.executable, "-m", "campfire_cli.main", "web", "--no-open"],
@@ -143,7 +149,17 @@ def test_cli_reopens_live_web_and_replaces_stale_registration(tmp_path, monkeypa
             with browser.open(f"{result['address']}/api/v1/environment", timeout=5) as response:
                 assert response.status == 200
         finally:
+            children = []
+            with suppress(psutil.NoSuchProcess):
+                children = psutil.Process(process.pid).children(recursive=True)
+            for child in reversed(children):
+                with suppress(psutil.NoSuchProcess):
+                    child.terminate()
             process.terminate()
             process.wait(timeout=10)
+            _, alive = psutil.wait_procs(children, timeout=5)
+            for child in alive:
+                with suppress(psutil.NoSuchProcess):
+                    child.kill()
     if os.name != "nt":
         assert not registration.exists()
