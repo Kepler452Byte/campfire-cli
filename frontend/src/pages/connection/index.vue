@@ -79,7 +79,6 @@ function retry(): void {
 <style scoped lang="scss">
 .connection-page {
   min-height: 100dvh;
-  font-family: var(--el-font-family);
   display: grid;
   place-items: center;
   padding: 24px;
