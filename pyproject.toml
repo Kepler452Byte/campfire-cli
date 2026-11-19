@@ -1,6 +1,6 @@
 [project]
 name = "campfire-cli"
-version = "0.3.7"
+version = "0.3.8"
 description = "Local-first shared context and governance CLI for humans and agents"
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build]
-exclude = ["frontend/node_modules/**", "frontend/test-results/**", "frontend/playwright-report/**", "frontend/.e2e-session.json"]
+exclude = ["frontend/node_modules/**", "frontend/test-results/**", "frontend/playwright-report/**", "frontend/.e2e-*.json"]
 
 [tool.hatch.build.hooks.custom]
 path = "scripts/web_build_hook.py"

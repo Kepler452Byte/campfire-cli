@@ -11,6 +11,7 @@ class LocalAccess:
         self._lock = threading.Lock()
         self.ticket: str | None = secrets.token_urlsafe(32)
         self.session = secrets.token_urlsafe(32)
+        self.control = secrets.token_urlsafe(32)
 
     def exchange(self, ticket: str) -> bool:
         with self._lock:
@@ -18,6 +19,12 @@ class LocalAccess:
                 return False
             self.ticket = None
             return True
+
+    def renew(self) -> str:
+        """Replace the unused ticket without revoking established browser sessions."""
+        with self._lock:
+            self.ticket = secrets.token_urlsafe(32)
+            return self.ticket
 
     def check(self, request: Request) -> tuple[int, str] | None:
         if request.url.hostname not in {"127.0.0.1", "localhost", "::1"}:
@@ -27,6 +34,12 @@ class LocalAccess:
             return 403, "invalid-origin"
         if request.headers.get("sec-fetch-site") == "cross-site":
             return 403, "invalid-origin"
+        if request.url.path == "/api/session/link":
+            if origin or not secrets.compare_digest(
+                request.headers.get("x-campfire-control", ""), self.control
+            ):
+                return 403, "control-required"
+            return None
         if request.method not in {"GET", "HEAD"} and (
             not origin or request.headers.get("x-campfire-request") != "1"
         ):

@@ -83,6 +83,8 @@ test("真实后端的列表、预览、新建、执行与日志", async ({ page 
   await expect(page.getByLabel("运行日志")).toHaveCount(0)
   await page.getByRole("button", { name: "查看日志", exact: true }).click()
   await expect(logTag).toHaveCount(1)
+  await expect(page).toHaveURL(/\/app\/jobs\/browser-test\/runs\//)
+  await expect(page.getByLabel("运行日志")).toBeVisible()
   await logTag.locator(".el-icon").click()
   await expect(page).toHaveURL(/\/app\/jobs\/browser-test$/)
   await expect(summary.getByRole("cell", { name: "浏览器测试任务", exact: true })).toBeVisible()

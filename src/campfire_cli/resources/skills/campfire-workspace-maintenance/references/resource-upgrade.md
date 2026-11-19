@@ -5,6 +5,7 @@
 1. 更新包与资源使用 `campfire upgrade`；明确要求离线、只对齐资源时使用 `campfire upgrade --skip-package`，不查询 PyPI。
 2. 返回 `planned` 时，保存 `operation_id` 并执行 `campfire agent upgrade-status <operation_id>` 查询。只有 `state=completed` 且包与资源阶段符合实际目标时才报告完成，启动成功不等于升级完成。
 3. editable、未知渠道或离线可能仅完成资源对齐；按 `package.action` 与 `hint` 报告，不能称包已更新。资源阶段逐 Workspace 返回配置与 Base 结果。
-4. `blocked` 或非零退出时，查看具体 issue、已完成操作、跳过项与日志路径；修复明确问题后重试，不手写资源登记或清空状态绕过所有权检查。
+4. 升级前停止的 Web 用新版 `campfire web` 启动，提供当前输出的完整 `url`，不能用不带票据的 `address` 代替。认证后核对 API 与实际页面，首页 HTML 200 不代表连接成功；已运行时再次执行可签发新链接，无需重启。票据不写入文档或日志。
+5. `blocked` 或非零退出时，查看具体 issue、已完成操作、跳过项与日志路径；修复明确问题后重试，不手写资源登记或清空状态绕过所有权检查。
 
 托管 Skill 与 Hint 块按包恢复，首次升级可接管旧受管资源。Hint 块外正文、其他产品块和用户新增文件保留；异常标记、未知同名资源或并发变化会阻止写入。受管内容需要定制时维护包内来源，不直接修改安装副本。

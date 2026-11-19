@@ -25,4 +25,4 @@ artifacts/
 __pycache__/
 *.pyc
 
-.e2e-session.json
+.e2e-*.json

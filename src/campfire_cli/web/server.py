@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from starlette.exceptions import HTTPException
+from starlette.types import Lifespan
 
 from campfire_cli.common.exceptions import AppError
 from campfire_cli.container import AppContainer
@@ -16,8 +17,13 @@ from campfire_cli.web.exceptions import app_error_handler, envelope, validation_
 from campfire_cli.web.security import LocalAccess
 
 
-def create_app(*, build_job=AppContainer.build_job, assets: Path | None = None) -> FastAPI:
-    application = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+def create_app(
+    *,
+    build_job=AppContainer.build_job,
+    assets: Path | None = None,
+    lifespan: Lifespan[FastAPI] | None = None,
+) -> FastAPI:
+    application = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     application.state.build_job = build_job
     application.state.access = LocalAccess()
     assets = assets or Path(__file__).resolve().parents[1] / "resources/web"
@@ -43,19 +49,23 @@ def create_app(*, build_job=AppContainer.build_job, assets: Path | None = None) 
 
     @application.middleware("http")
     async def protect(request: Request, call_next):
-        if request.url.path.startswith("/api/"):
-            denied = application.state.access.check(request)
-            if denied:
-                status, code = denied
-                return envelope(
-                    {
-                        "status": "error",
-                        "code": code,
-                        "message": "Open the current local connection link",
-                    },
-                    status,
-                )
-        response = await call_next(request)
+        denied = (
+            application.state.access.check(request)
+            if request.url.path.startswith("/api/")
+            else None
+        )
+        if denied:
+            status, code = denied
+            response = envelope(
+                {
+                    "status": "error",
+                    "code": code,
+                    "message": "Open the current local connection link",
+                },
+                status,
+            )
+        else:
+            response = await call_next(request)
         response.headers.update(
             {
                 "Referrer-Policy": "no-referrer",

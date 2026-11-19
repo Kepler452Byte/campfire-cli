@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test"
 
 const python = process.env.E2E_PYTHON || path.resolve("..", ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python")
 export default defineConfig({
+  globalSetup: "./tests/e2e/global-setup.ts",
   testDir: "tests/e2e",
   fullyParallel: false,
   workers: 1,

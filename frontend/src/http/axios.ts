@@ -2,10 +2,12 @@ import type { AxiosRequestConfig } from "axios"
 import axios from "axios"
 import { ElMessage } from "element-plus"
 import { client } from "./client"
+import { connection } from "./session"
 
 interface Envelope<T> { code: number, message: string, data: T }
 interface ErrorResult { message?: string, code?: string, write_performed?: boolean }
 export async function request<T>(config: AxiosRequestConfig, notifyError = true): Promise<T> {
+  if (connection.value !== "ready") throw new Error("Connection is not ready")
   try {
     const response = await client.request<Envelope<T>>(config)
     if (response.data.code !== 0) throw new Error("响应契约错误")
@@ -15,7 +17,7 @@ export async function request<T>(config: AxiosRequestConfig, notifyError = true)
     const message = axios.isAxiosError(error)
       ? body?.message || body?.data?.message || body?.data?.code || error.message
       : error instanceof Error ? error.message : "请求失败"
-    if (notifyError) ElMessage.error(body?.data?.write_performed ? `部分变更已写入，请核实当前状态。${message}` : message)
+    if (notifyError && connection.value === "ready") ElMessage.error(body?.data?.write_performed ? `部分变更已写入，请核实当前状态。${message}` : message)
     throw error
   }
 }

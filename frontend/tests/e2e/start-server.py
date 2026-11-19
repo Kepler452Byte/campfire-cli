@@ -2,15 +2,14 @@
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
-
-import uvicorn
 
 from campfire_cli.app.job.schema.job_schema import Job
 from campfire_cli.container import AppContainer
-from campfire_cli.web.server import create_app
 
 with tempfile.TemporaryDirectory(prefix="campfire-web-e2e-") as raw:
     os.environ["CAMPFIRE_HOME"] = str(Path(raw) / "home")
@@ -40,26 +39,32 @@ with tempfile.TemporaryDirectory(prefix="campfire-web-e2e-") as raw:
     plan = service.change("create", job.id, job, False, None)
     service.change("create", job.id, job, True, plan["expected_plan"])
     service.runs.close()
-    app = create_app()
-    state = {
-        "cookies": [
-            {
-                "name": "campfire_session",
-                "value": app.state.access.session,
-                "domain": "127.0.0.1",
-                "path": "/",
-                "expires": -1,
-                "httpOnly": True,
-                "secure": False,
-                "sameSite": "Strict",
-            }
-        ],
-        "origins": [],
-    }
-    file = Path(".e2e-session.json")
-    file.write_text(json.dumps(state))
-    file.chmod(0o600)
+    metadata = Path(".e2e-home.json")
+    metadata.write_text(json.dumps({"home": os.environ["CAMPFIRE_HOME"]}))
+    metadata.chmod(0o600)
+    ready = Path(".e2e-web.json")
+    child = None
     try:
-        uvicorn.run(app, host="127.0.0.1", port=4173, access_log=False, log_level="warning")
+        while True:
+            with ready.open("w") as output:
+                ready.chmod(0o600)
+                child = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "campfire_cli.main",
+                        "web",
+                        "--port",
+                        "4173",
+                        "--no-open",
+                    ],
+                    stdout=output,
+                )
+                child.wait()
+            time.sleep(0.1)
     finally:
-        file.unlink(missing_ok=True)
+        if child is not None and child.poll() is None:
+            child.terminate()
+            child.wait(timeout=10)
+        for file in [metadata, ready, Path(".e2e-session.json")]:
+            file.unlink(missing_ok=True)

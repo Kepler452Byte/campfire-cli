@@ -29,3 +29,8 @@ def session(body: SessionInput, request: Request):
         "campfire_session", access.session, httponly=True, samesite="strict", path="/"
     )
     return response
+
+
+@router.post("/api/session/link")
+def connection_link(request: Request):
+    return envelope({"status": "ok", "ticket": request.app.state.access.renew()})
