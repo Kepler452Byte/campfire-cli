@@ -105,6 +105,16 @@ def history(
     return envelope(service.history_page(identity, page, page_size))
 
 
+@router.get("/runs")
+def all_history(
+    service: Service,
+    job_id: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+):
+    return envelope(service.history_page(job_id, page, page_size))
+
+
 @router.get("/runs/{run_id}")
 def result(run_id: str, service: Service):
     return envelope({"status": "ok", "run": service.result(run_id, "local")})

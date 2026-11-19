@@ -19,7 +19,7 @@ watch([jobName, run], () => {
 })
 onMounted(async () => {
   try {
-    const result = await getJob(jobId)
+    const result = await getJob(jobId, false)
     jobName.value = result.job.name || jobId
   } catch {
     // 已删除任务的运行日志仍可按原任务 id 查看。

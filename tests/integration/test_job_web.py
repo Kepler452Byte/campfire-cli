@@ -236,3 +236,37 @@ def test_concurrent_readers_share_config_lock_but_writes_remain_exclusive(
         blocked = client.put("/api/v1/jobs/example", json={"job": data})
         assert blocked.status_code == 409
         assert blocked.json()["data"]["code"] == "busy"
+
+
+def test_global_history_paginates_and_preserves_deleted_job_runs(client, service, tmp_path):
+    run_ids = {}
+    for identity in ["history-first", "history-second"]:
+        create(client, definition(tmp_path, identity))
+        plan = service.run(identity, False)
+        run_ids[identity] = service.run(identity, True, plan["expected_plan"])["run"]["id"]
+    first = client.get("/api/v1/runs?page_size=1").json()["data"]
+    second = client.get("/api/v1/runs?page=2&page_size=1").json()["data"]
+    assert first["total"] == 2 and first["pages"] == 2
+    assert {first["list"][0]["id"], second["list"][0]["id"]} == set(run_ids.values())
+    preview = service.change("delete", "history-first", None, False, None)
+    service.change("delete", "history-first", None, True, preview["expected_plan"])
+    filtered = client.get("/api/v1/runs?job_id=history-first").json()["data"]
+    assert filtered["total"] == 1 and filtered["list"][0]["id"] == run_ids["history-first"]
+    assert client.get(f"/api/v1/runs/{run_ids['history-first']}/logs").status_code == 200
+    assert client.get("/api/v1/runs?job_id=missing").json()["data"]["total"] == 0
+    assert client.get("/api/v1/runs?page=0").status_code == 422
+    assert client.get("/api/v1/runs?page_size=101").status_code == 422
+
+
+def test_scheduled_filter_includes_paused_and_enabled_jobs(client, service, tmp_path, monkeypatch):
+    create(client, definition(tmp_path, "manual"))
+    for identity in ["paused", "enabled"]:
+        data = definition(tmp_path, identity)
+        data["schedule"] = {"kind": "daily", "time": "22:30"}
+        create(client, data)
+    monkeypatch.setattr(
+        service, "state", lambda job: {"enabled": job.id == "enabled", "deployed": True}
+    )
+    result = client.get("/api/v1/jobs?state=scheduled").json()["data"]
+    assert {row["id"] for row in result["list"]} == {"paused", "enabled"}
+    assert client.get("/api/v1/jobs?state=manual").json()["data"]["total"] == 1

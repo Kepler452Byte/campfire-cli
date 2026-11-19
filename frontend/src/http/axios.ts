@@ -15,7 +15,7 @@ export async function establishSession(): Promise<void> {
   await client.get("/environment")
 }
 
-export async function request<T>(config: AxiosRequestConfig): Promise<T> {
+export async function request<T>(config: AxiosRequestConfig, notifyError = true): Promise<T> {
   try {
     const response = await client.request<Envelope<T>>(config)
     if (response.data.code !== 0) throw new Error("响应契约错误")
@@ -25,7 +25,7 @@ export async function request<T>(config: AxiosRequestConfig): Promise<T> {
     const message = axios.isAxiosError(error)
       ? body?.message || body?.data?.message || body?.data?.code || error.message
       : error instanceof Error ? error.message : "请求失败"
-    ElMessage.error(body?.data?.write_performed ? `部分变更已写入，请核实当前状态。${message}` : message)
+    if (notifyError) ElMessage.error(body?.data?.write_performed ? `部分变更已写入，请核实当前状态。${message}` : message)
     throw error
   }
 }

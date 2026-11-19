@@ -67,7 +67,7 @@ def update(file: File, confirm: Confirm = False, expected_plan: Expected = None)
 def list_jobs(
     ctx: typer.Context,
     name: str | None = typer.Option(None, "--name", help="按可读名称包含匹配"),
-    state: str | None = typer.Option(None, "--state", help="enabled / paused / manual"),
+    state: str | None = typer.Option(None, "--state", help="enabled / paused / manual / scheduled"),
     page: int | None = typer.Option(None, "--page", min=1),
     page_size: int | None = typer.Option(None, "--page-size", min=1, max=100),
     unbound: bool = typer.Option(False, "--unbound", help="只列未绑定 Workspace 的 Job"),

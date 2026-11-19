@@ -24,9 +24,11 @@
 
 用户通过 Web 查看、编辑、启停任务和查看 stdout/stderr；Agent 继续通过 CLI 维护。两种入口共用 JobService、定义、预览摘要和锁。Web 的立即执行使用独立 Runner，关闭网页或停止 Web 不终止任务；替换安装环境前需停止 Web 并等待活动任务结束。连接链接是一次性凭据，不分享或写入 Vault。
 
+Web 菜单依次为「脚本」「任务」；任务页提供「任务」「运行记录」两个页签。任务支持名称、工作区及手动/定时/启停筛选；运行记录支持任务 ID 精确筛选与分页，保留已删除任务的历史和日志。
+
 ### 本机脚本项目
 
-任务脚本默认放在 ~/.campfire/jobs/scripts，每个顶级文件夹是一个完整项目，允许多级源码、模板和依赖声明。文件由用户或 Agent 维护，Web 在任务「查看脚本」中提供文件树、文件标签及 CodeMirror 只读预览；刷新仅在文件树顶部。Python、Shell、PowerShell、JS/TS、JSON、YAML、Markdown、HTML 和 CSS 支持按需高亮，其他 UTF-8 文件按纯文本显示。
+任务脚本默认放在 ~/.campfire/jobs/scripts，每个顶级文件夹是一个完整项目，允许多级源码、模板和依赖声明。文件由用户或 Agent 维护，Web 默认打开「脚本」菜单，集中展示全部脚本项目，未关联任务的项目也可浏览；支持项目名筛选、多级文件树、多项目文件标签及 CodeMirror 只读预览。任务列表或详情可定位关联项目，切换页面保留已打开的文件；刷新仅在文件树顶部。Python、Shell、PowerShell、JS/TS、JSON、YAML、Markdown、HTML 和 CSS 支持按需高亮，其他 UTF-8 文件按纯文本显示。
 
 ```text
 ~/.campfire/jobs/scripts/

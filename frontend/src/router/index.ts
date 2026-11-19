@@ -5,7 +5,7 @@ import { createRouter, createWebHistory } from "vue-router"
 import { routes as appRoutes } from "@/pages/app/routes"
 
 export const constantRoutes: RouteRecordRaw[] = [
-  { path: "/", redirect: "/app/jobs", meta: { hidden: true } },
+  { path: "/", redirect: "/app/scripts", meta: { hidden: true } },
   ...appRoutes,
   { path: "/redirect/:path(.*)", component: () => import("@/pages/redirect/index.vue"), meta: { hidden: true } },
   { path: "/:pathMatch(.*)*", component: () => import("@/pages/error/404.vue"), meta: { hidden: true } }

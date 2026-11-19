@@ -2,7 +2,7 @@
   "app": {
     "enabled": true,
     "title": "Campfire",
-    "home": "/app/jobs",
+    "home": "/app/scripts",
     "layout": {
       "showTagsView": true,
       "showNotify": false,

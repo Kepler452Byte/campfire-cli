@@ -25,6 +25,9 @@ with tempfile.TemporaryDirectory(prefix="campfire-web-e2e-") as raw:
     (project / "unknown.custom").write_text("plain text", encoding="utf-8")
     (project / "binary.bin").write_bytes(b"a\0b")
     (project / "node_modules").mkdir()
+    extra = Path(raw) / "home/jobs/scripts/unbound-project"
+    extra.mkdir()
+    (extra / "daily.py").write_text("print('未关联任务的脚本')\n", encoding="utf-8")
     service = AppContainer.build_job()
     job = Job(
         "seed",

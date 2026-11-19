@@ -131,8 +131,8 @@ class JobService:
         if type(page) is not int or page < 1:
             raise JobError("invalid-page", "page must be a positive integer")
         self.validate_page(page_size, 0)
-        if state not in {None, "enabled", "paused", "manual"}:
-            raise JobError("invalid-state", "Use enabled, paused or manual")
+        if state not in {None, "enabled", "paused", "manual", "scheduled"}:
+            raise JobError("invalid-state", "Use enabled, paused, manual or scheduled")
         if unbound and workspace_id is not None:
             raise JobError("invalid-filter", "unbound and workspace_id are mutually exclusive")
         result = self.list_jobs(workspace_id)
@@ -140,7 +140,9 @@ class JobService:
         rows = [row for row in rows if name.casefold() in (row.get("name") or row["id"]).casefold()]
         if unbound:
             rows = [row for row in rows if row["workspace_id"] is None]
-        if state:
+        if state == "scheduled":
+            rows = [row for row in rows if row["schedule"]["kind"] != "manual"]
+        elif state:
             rows = [row for row in rows if self.job_state(row) == state]
         rows.sort(key=lambda row: ((row.get("name") or row["id"]).casefold(), row["id"]))
         total = len(rows)
@@ -393,7 +395,7 @@ class JobService:
         display_run({}, timezone)
         return [display_run(run, timezone) for run in self.runs.history(job_id, limit, offset)]
 
-    def history_page(self, job_id: str, page: int, page_size: int) -> dict:
+    def history_page(self, job_id: str | None, page: int, page_size: int) -> dict:
         if page < 1:
             raise JobError("invalid-page", "page must be positive")
         rows = self.history(job_id, page_size, (page - 1) * page_size, "local")

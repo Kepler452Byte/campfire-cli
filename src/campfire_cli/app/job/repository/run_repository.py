@@ -79,11 +79,14 @@ class RunRepository:
         with self.connection() as db:
             return [dict(row) for row in db.execute(query.limit(limit).offset(offset)).mappings()]
 
-    def count(self, job_id: str) -> int:
+    def count(self, job_id: str | None) -> int:
         if not self.database.exists():
             return 0
+        query = select(func.count()).select_from(RUNS)
+        if job_id is not None:
+            query = query.where(RUNS.c.job_id == job_id)
         with self.connection() as db:
-            return db.scalar(select(func.count()).select_from(RUNS).where(RUNS.c.job_id == job_id))
+            return db.scalar(query)
 
     def result(self, run_id: str) -> dict:
         if self.database.exists():

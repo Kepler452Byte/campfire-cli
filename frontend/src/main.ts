@@ -1,4 +1,4 @@
-import { Clock, Grid } from "@element-plus/icons-vue"
+import { Clock, Folder } from "@element-plus/icons-vue"
 import { createApp } from "vue"
 import SvgIcon from "~virtual/svg-component"
 import App from "@/App.vue"
@@ -14,7 +14,7 @@ import "virtual:uno.css"
 
 const app = createApp(App)
 app.component("Clock", Clock)
-app.component("Grid", Grid)
+app.component("Folder", Folder)
 app.component("SvgIcon", SvgIcon)
 app.use(pinia)
 app.use(router)

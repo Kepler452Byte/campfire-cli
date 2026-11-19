@@ -1,7 +1,7 @@
 {
   "name": "campfire-web",
   "type": "module",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "packageManager": "pnpm@10.12.1",
   "description": "Campfire local job management web interface",

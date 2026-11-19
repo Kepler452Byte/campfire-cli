@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { JobRow, Run } from "./types"
-import { useList } from "@@/composables/use-list"
 import { useTagsViewStore } from "@/pinia/stores/tags-view"
-import { getEnvironment, getJob, listRuns } from "./api"
+import { getEnvironment, getJob } from "./api"
 import JobEditor from "./components/JobEditor.vue"
-import { runLabels, scheduleLabel, startedLabel } from "./types"
+import RunHistory from "./components/RunHistory.vue"
+import { scheduleLabel } from "./types"
 import { useJobActions } from "./use-job-actions"
 
 const route = useRoute()
@@ -17,8 +17,6 @@ const timezone = ref("")
 const failed = ref(false)
 const editor = ref(false)
 const tab = ref("history")
-const history = useList<Run>((page, size) => listRuns(identity, page, size))
-const { rows, pager, loading, failed: historyFailed } = history
 async function refresh(): Promise<void> {
   failed.value = false
   try {
@@ -33,7 +31,7 @@ const actions = useJobActions(async (run?: Run) => {
     await router.push(`/app/jobs/${identity}/runs/${run.id}`)
     return
   }
-  await Promise.all([refresh(), history.load()])
+  await refresh()
 })
 onMounted(async () => {
   await refresh()
@@ -44,8 +42,8 @@ onMounted(async () => {
   }
 })
 const refreshTimer = setInterval(() => {
-  if (!document.hidden && !editor.value && !loading.value && !historyFailed.value && !failed.value) {
-    void Promise.all([refresh(), history.load()])
+  if (!document.hidden && !editor.value && !failed.value) {
+    void refresh()
   }
 }, 5000)
 onScopeDispose(() => clearInterval(refreshTimer))
@@ -93,7 +91,7 @@ async function saved(): Promise<void> {
                     立即执行
                   </el-button><el-button v-if="job.schedule.kind !== 'manual'" :disabled="actions.busy.value" @click="actions.execute(job, job.scheduler.enabled ? 'pause' : 'resume')">
                     {{ job.scheduler.enabled ? '暂停' : '恢复' }}
-                  </el-button><el-button v-if="job.script_project" @click="router.push(`/app/scripts/${encodeURIComponent(job.script_project)}`)">
+                  </el-button><el-button v-if="job.script_project" @click="router.push({ path: '/app/scripts', query: { project: job.script_project } })">
                     查看脚本
                   </el-button><el-button @click="editor = true">
                     编辑
@@ -106,43 +104,7 @@ async function saved(): Promise<void> {
       </div>
       <el-tabs v-model="tab">
         <el-tab-pane label="运行历史" name="history">
-          <el-table :data="rows" row-key="id">
-            <template #empty>
-              <el-button v-if="historyFailed" link @click="history.load">
-                加载失败，请重试
-              </el-button><span v-else>暂无运行记录</span>
-            </template>
-            <el-table-column label="开始时间" min-width="200">
-              <template #default="{ row }">
-                {{ startedLabel(row) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="耗时" width="100">
-              <template #default="{ row }">
-                {{ row.duration == null ? '—' : `${row.duration.toFixed(1)}秒` }}
-              </template>
-            </el-table-column>
-            <el-table-column label="进程结果" width="110">
-              <template #default="{ row }">
-                {{ runLabels[row.status as Run['status']] }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="exit_code" label="退出码" width="90">
-              <template #default="{ row }">
-                {{ row.exit_code ?? '—' }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="100" fixed="right">
-              <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="router.push(`/app/jobs/${identity}/runs/${row.id}`)">
-                  查看日志
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div class="admin-pager history-pager">
-            <el-pagination :total="pager.total" :page-size="pager.pageSize" :current-page="pager.currentPage" layout="total, prev, pager, next" @current-change="history.changePage" />
-          </div>
+          <RunHistory :job-id="identity" />
         </el-tab-pane>
         <el-tab-pane label="任务配置" name="configuration">
           <el-descriptions class="job-configuration" :column="1" label-width="112px" border>
@@ -162,7 +124,7 @@ async function saved(): Promise<void> {
               {{ job.schedule.kind === 'manual' ? '不适用' : job.scheduler.enabled ? '已启用' : '已暂停' }}
             </el-descriptions-item>
             <el-descriptions-item v-if="job.script_project" label="脚本项目">
-              <el-button link type="primary" @click="router.push(`/app/scripts/${encodeURIComponent(job.script_project)}`)">
+              <el-button link type="primary" @click="router.push({ path: '/app/scripts', query: { project: job.script_project } })">
                 {{ job.script_project }}
               </el-button>
             </el-descriptions-item>
@@ -213,9 +175,6 @@ async function saved(): Promise<void> {
   .detail-actions {
     flex-wrap: nowrap;
   }
-}
-.history-pager {
-  margin: 16px 0;
 }
 .job-configuration {
   :deep(.el-descriptions__table) {

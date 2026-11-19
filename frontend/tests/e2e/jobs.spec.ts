@@ -146,3 +146,28 @@ test("长命令配置保持标签完整和页面宽度", async ({ page }) => {
     await page.screenshot({ path: `test-results/job-configuration-${width}.png`, fullPage: true, animations: "disabled" })
   }
 })
+
+test("全局运行记录分页筛选并打开已删除任务日志", async ({ page }) => {
+  const headers = { "Origin": "http://127.0.0.1:4173", "X-Campfire-Request": "1" }
+  const seed = (await (await page.request.get("/api/v1/jobs/seed")).json()).data.job
+  const job = { ...seed, id: "deleted-history", name: "历史任务", schedule: { kind: "manual" } }
+  delete job.scheduler
+  const plan = (await (await page.request.post("/api/v1/jobs", { headers, data: { job } })).json()).data
+  expect((await page.request.post("/api/v1/jobs", { headers, data: { job, confirm: true, expected_plan: plan.expected_plan } })).ok()).toBe(true)
+  const preview = (await (await page.request.post("/api/v1/jobs/deleted-history/run", { headers, data: {} })).json()).data
+  const run = (await (await page.request.post("/api/v1/jobs/deleted-history/run", { headers, data: { confirm: true, expected_plan: preview.expected_plan } })).json()).data.run
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/runs/${run.id}`)).json()).data.run.status).toBe("succeeded")
+  const deletion = (await (await page.request.post("/api/v1/jobs/deleted-history/delete", { headers, data: {} })).json()).data
+  expect((await page.request.post("/api/v1/jobs/deleted-history/delete", { headers, data: { confirm: true, expected_plan: deletion.expected_plan } })).ok()).toBe(true)
+  await page.goto("/app/jobs")
+  await page.getByRole("tab", { name: "运行记录", exact: true }).click()
+  await page.getByRole("textbox", { name: "筛选运行记录的任务 ID" }).fill(job.id)
+  await page.getByRole("button", { name: "查询", exact: true }).click()
+  await expect(page.getByRole("cell", { name: job.id, exact: true })).toBeVisible()
+  await expect(page.getByRole("row").filter({ has: page.getByRole("button", { name: "查看日志", exact: true }) })).toHaveCount(1)
+  await page.screenshot({ path: "test-results/global-history.png", fullPage: true, animations: "disabled" })
+  await page.getByRole("button", { name: "查看日志", exact: true }).click()
+  await expect(page.getByLabel("运行日志")).toContainText("隔离环境")
+  await expect(page.locator(".el-message--error")).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`/app/jobs/${job.id}/runs/${run.id}`))
+})
