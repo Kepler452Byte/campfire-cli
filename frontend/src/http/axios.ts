@@ -1,20 +1,10 @@
 import type { AxiosRequestConfig } from "axios"
 import axios from "axios"
 import { ElMessage } from "element-plus"
+import { client } from "./client"
 
 interface Envelope<T> { code: number, message: string, data: T }
 interface ErrorResult { message?: string, code?: string, write_performed?: boolean }
-const client = axios.create({ baseURL: "/api/v1", timeout: 30000, headers: { "X-Campfire-Request": "1" } })
-
-export async function establishSession(): Promise<void> {
-  const ticket = new URLSearchParams(location.hash.slice(1)).get("connect")
-  if (ticket) {
-    history.replaceState(null, "", location.pathname + location.search)
-    await client.post("/api/session", { ticket }, { baseURL: "" })
-  }
-  await client.get("/environment")
-}
-
 export async function request<T>(config: AxiosRequestConfig, notifyError = true): Promise<T> {
   try {
     const response = await client.request<Envelope<T>>(config)
