@@ -10,6 +10,7 @@ from campfire_cli.app.document.repository.document_profile_repository import (
 from campfire_cli.app.document.service.rules.document_profile_service import (
     DocumentProfileService,
 )
+from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.repository.workspace_repository import FilesystemWorkspaceRepository
 from campfire_cli.app.workspace.service.workspace_service import WorkspaceService
 from campfire_cli.common.cli_output import emit, invoke
@@ -29,11 +30,13 @@ def service(ctx: typer.Context) -> DocumentProfileService:
         selector, safe_cwd()
     )
     settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
+    skill_roots, _ = WorkspaceManifestRepository().skill_roots(settings.vault_root)
     return DocumentProfileService(
         settings.workspace_id,
         settings.vault_root,
         settings.document_types,
         DocumentProfileRepository(settings.state_root),
+        skill_roots=skill_roots,
     )
 
 

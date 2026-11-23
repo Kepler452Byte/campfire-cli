@@ -25,11 +25,14 @@ class DocumentRuleService:
         type_config: dict[str, Any],
         schema: dict[str, Any],
         candidate_sets: dict[str, list[str]] | None = None,
+        *,
+        skill_roots: tuple[Path, ...] = (),
     ) -> None:
         self._type_config = type_config
         self._schema = schema
         self._profiles = ProfileRegistry(type_config, schema)
         self._candidate_sets = candidate_sets or {}
+        self._skill_roots = skill_roots
 
     def check_document(self, root: Path, path: Path) -> list[dict[str, Any]]:
         return self.check_content(root, path, path.read_text(encoding="utf-8"))
@@ -358,7 +361,8 @@ class DocumentRuleService:
         if not fields:
             return []
         candidates = {
-            p.relative_to(root).as_posix() for p in iter_documents(root, self._type_config)
+            p.relative_to(root).as_posix()
+            for p in iter_documents(root, self._type_config, skill_roots=self._skill_roots)
         }
         targets = {
             item.target

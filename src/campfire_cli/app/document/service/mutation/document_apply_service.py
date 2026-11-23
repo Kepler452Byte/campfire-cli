@@ -12,7 +12,10 @@ from campfire_cli.app.document.schema import (
     DocumentApplyRequest,
     DocumentApplyResult,
 )
-from campfire_cli.app.document.service.document_scanner import is_system_scope_path
+from campfire_cli.app.document.service.document_scanner import (
+    is_system_scope_path,
+    require_document_path,
+)
 from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.mutation.document_relocation import (
     prepare_document_relocation,
@@ -78,6 +81,7 @@ class DocumentApplyService:
                 expected_suffix=".md",
                 hint="请删除其他扩展名；无扩展名时 CLI 会自动补充 .md",
             )
+        require_document_path(source, self._settings.skill_roots)
         exists = source.is_file()
         original = source.read_bytes().decode("utf-8") if exists else ""
         parsed = parse_document(original)
@@ -295,9 +299,12 @@ class DocumentApplyService:
                     ],
                 }
             )
-        self._executor.execute(
-            change_set, before_write=lambda: self._index.prepare_write(generation)
-        )
+
+        def verify_scope() -> None:
+            require_document_path(target, self._settings.skill_roots)
+            self._index.prepare_write(generation)
+
+        self._executor.execute(change_set, before_write=verify_scope)
         index_issues = refresh_after_write(
             self._index,
             {

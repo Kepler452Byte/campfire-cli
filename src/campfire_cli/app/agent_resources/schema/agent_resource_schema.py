@@ -10,11 +10,20 @@ from pydantic import BaseModel, Field
 from campfire_cli.common.exceptions import GovernanceBlockedError
 
 
-class SkillInfo(BaseModel):
+class SkillEntry(BaseModel):
     name: str
     description: str = ""
     path: str
+
+
+class SkillInfo(SkillEntry):
     status: str = "unknown"
+
+
+class WorkspaceSkillListResult(BaseModel):
+    status: str
+    skills: list[SkillEntry]
+    issues: list[dict[str, str]]
 
 
 class SkillResult(BaseModel):

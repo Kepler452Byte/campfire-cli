@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -43,6 +44,10 @@ class LazyContainer:
         self._workspace = workspace
         self._container: AppContainer | None = None
         self._skill: AgentResourceService | None = None
+
+    @property
+    def workspace_skill_roots(self) -> tuple[tuple[Path, ...], list[dict[str, str]]]:
+        return AppContainer.workspace_skill_roots(self._workspace)
 
     def __getattr__(self, name: str) -> Any:
         # Skill 是全局资源（同步到 ~/.claude/skills 等），不依赖任何已注册

@@ -33,6 +33,7 @@ from campfire_cli.common.filesystem import (
     FileWrite,
     atomic_write,
 )
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 from campfire_cli.common.governance import (
     capture_snapshot,
     enrich_issue,
@@ -59,6 +60,7 @@ class MaintenanceService:
             settings.document_types,
             settings.frontmatter_schema,
             workspace_candidate_sets(settings.vault_root),
+            skill_roots=settings.skill_roots,
         )
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
@@ -222,6 +224,7 @@ class MaintenanceService:
             self._settings.vault_root,
             self._settings.document_types,
             (domain.path for domain in domains),
+            skill_roots=self._settings.skill_roots,
         )
         snapshot = capture_snapshot(self._settings.vault_root, scoped_documents)
         snapshot.update(topology_snapshot)
@@ -233,7 +236,12 @@ class MaintenanceService:
             domain.id: governance_sync.direct_notes(domain, marker_name) for domain in domains
         }
         templates_by_domain = {
-            domain.id: governance_sync.direct_templates(domain) for domain in domains
+            domain.id: [
+                path
+                for path in governance_sync.direct_templates(domain)
+                if not in_skill_package(path, self._settings.skill_roots)
+            ]
+            for domain in domains
         }
         try:
             index = self._document_index.reconcile()
@@ -377,7 +385,11 @@ class MaintenanceService:
         )
 
     def _iter_documents(self) -> list[Path]:
-        return iter_documents(self._settings.vault_root, self._settings.document_types)
+        return iter_documents(
+            self._settings.vault_root,
+            self._settings.document_types,
+            skill_roots=self._settings.skill_roots,
+        )
 
     def _nearest_domain(self, path: Path) -> str | None:
         try:

@@ -23,6 +23,7 @@ class WorkspaceSettings:
     frontmatter_schema: dict[str, Any]
     skills: dict[str, Any]
     bases: dict[str, Any]
+    skill_roots: tuple[Path, ...] = ()
 
     def skill_targets(self) -> list[Path]:
         override = os.environ.get("CAMPFIRE_SKILL_TARGETS")
@@ -30,7 +31,9 @@ class WorkspaceSettings:
         return [Path(value).expanduser().resolve() for value in values]
 
     @classmethod
-    def load(cls, workspace_id: str, root: Path) -> WorkspaceSettings:
+    def load(
+        cls, workspace_id: str, root: Path, *, skill_roots: tuple[Path, ...] = ()
+    ) -> WorkspaceSettings:
         if not root.is_dir():
             raise ConfigurationError(f"已注册 Workspace 不存在：{root}")
         state_root = campfire_home() / "workspaces" / workspace_id
@@ -47,6 +50,7 @@ class WorkspaceSettings:
             frontmatter_schema=config["frontmatter_schema"],
             skills=config["skills"],
             bases=config["bases"],
+            skill_roots=skill_roots,
         )
 
 

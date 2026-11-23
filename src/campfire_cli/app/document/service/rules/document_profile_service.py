@@ -6,6 +6,7 @@ from typing import Any
 from campfire_cli.app.document.repository.document_profile_repository import (
     DocumentProfileRepository,
 )
+from campfire_cli.app.document.service.document_scanner import require_document_path
 from campfire_cli.app.document.service.rules.profile_candidates import workspace_candidate_sets
 from campfire_cli.app.document.service.rules.profile_registry import ProfileRegistry
 from campfire_cli.common.documents.markdown import parse_document
@@ -19,11 +20,14 @@ class DocumentProfileService:
         vault_root: Path,
         type_config: dict[str, Any],
         repository: DocumentProfileRepository,
+        *,
+        skill_roots: tuple[Path, ...] = (),
     ) -> None:
         self._workspace_id = workspace_id
         self._vault_root = vault_root
         self._type_config = type_config
         self._repository = repository
+        self._skill_roots = skill_roots
 
     def list_profiles(self) -> dict[str, Any]:
         profiles = self._profiles()
@@ -78,6 +82,7 @@ class DocumentProfileService:
                 raise ConfigurationError("path 必须位于当前 Workspace 内")
             if not path.is_file():
                 raise ConfigurationError(f"文档不存在：{relative_path}")
+            require_document_path(path, self._skill_roots)
             frontmatter = parse_document(path.read_text(encoding="utf-8")).frontmatter
             document_type = frontmatter.get("type")
         if not isinstance(document_type, str) or document_type not in self._type_config.get(

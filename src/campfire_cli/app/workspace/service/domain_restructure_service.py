@@ -38,6 +38,7 @@ from campfire_cli.common.filesystem import (
     safe_path,
 )
 from campfire_cli.common.filesystem.plan import plan_digest
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -170,6 +171,7 @@ class DomainRestructureService:
         source = self._domain(source_domain)
         target = self._domain(target_domain)
         issues = self._merge_issues(source, target)
+        skill_root_issues = self._skill_root_move_issues(source.path, target.path)
         projects = [
             project
             for project in self._workspaces.list_projects(self._settings.workspace_id)
@@ -183,7 +185,14 @@ class DomainRestructureService:
         retained = [path for path in files if path not in {source.path / DOMAIN_MARKER, source_moc}]
         targets = {path: target.path / path.relative_to(source.path) for path in retained}
         for source_path, target_path in targets.items():
-            if target_path.exists():
+            if in_skill_package(target_path, self._settings.skill_roots):
+                issues.append(
+                    {
+                        "code": "skill-package-unmanaged",
+                        "path": target_path.relative_to(self._settings.vault_root).as_posix(),
+                    }
+                )
+            elif target_path.exists():
                 issues.append(
                     {
                         "code": "domain-merge-target-exists",
@@ -261,7 +270,7 @@ class DomainRestructureService:
                 reference_count=len(reference_updates),
                 operations=operations,
                 affected_projects=[item.id for item in projects],
-                issues=issues,
+                issues=[*issues, *skill_root_issues],
             )
         current_source = self._domain(source.id)
         current_target = self._domain(target.id)
@@ -271,7 +280,7 @@ class DomainRestructureService:
             if source.path.exists():
                 raise ConfigurationError("Domain 合并后源目录仍然存在")
         return DomainMergeResult(
-            status="applied",
+            status="needs-review" if skill_root_issues else "applied",
             source_domain=source.id,
             target_domain=target.id,
             document_count=len(documents),
@@ -281,6 +290,7 @@ class DomainRestructureService:
             operations=operations,
             affected_projects=[item.id for item in projects],
             write_performed=True,
+            issues=skill_root_issues,
             follow_up=follow_up,
         )
 
@@ -444,6 +454,8 @@ class DomainRestructureService:
             operations.append({"action": "update-file", "path": relative})
         digest = plan_digest(self._settings.vault_root, change_set)
         result = self._result(domain, new_id, name, new_relative, operations, projects, False)
+        skill_root_issues = self._skill_root_move_issues(domain.path, target)
+        result.issues = skill_root_issues
         result.expected_plan = digest
         if not change_set.writes and not change_set.moves:
             result.status = "up-to-date"
@@ -453,10 +465,11 @@ class DomainRestructureService:
         if protect_plan and expected_plan != digest:
             result.status = "blocked"
             result.issues = [
+                *skill_root_issues,
                 {
                     "code": "plan-changed" if expected_plan else "expected-plan-required",
                     "hint": "重新预览并在确认时带回 --expected-plan。",
-                }
+                },
             ]
             return result
 
@@ -485,17 +498,20 @@ class DomainRestructureService:
             raise
         result = self._result(domain, new_id, name, new_relative, operations, projects, True)
         result.expected_plan = digest
+        result.issues = skill_root_issues
+        if result.issues:
+            result.status = "needs-review"
         try:
             domain_check = self._domains.check()
         except (AppError, OSError) as exc:
             result.status = "needs-review"
-            result.issues = [
+            result.issues.append(
                 {
                     "code": "domain-postcheck-failed",
                     "detail": str(exc),
                     "hint": "文件已写入，不要重复改名；排除问题后执行返回的同步与领域检查。",
                 }
-            ]
+            )
             return result
         affected_prefix = f"{new_relative}/"
         issues = [
@@ -506,8 +522,31 @@ class DomainRestructureService:
         ]
         if issues:
             result.status = "needs-review"
-            result.issues = issues
+            result.issues.extend(issues)
         return result
+
+    def _skill_root_move_issues(self, source: Path, target: Path) -> list[dict[str, str]]:
+        if source == target:
+            return []
+        vault = self._settings.vault_root
+        manifest = self._manifests.load(vault)
+        if manifest is None or manifest.skills is None:
+            return []
+        source_path = source.relative_to(vault)
+        target_path = target.relative_to(vault)
+        return [
+            {
+                "code": "skill-root-path-changed",
+                "path": ".campfire.yaml",
+                "field": "skills.roots",
+                "old_path": root,
+                "suggested_path": (target_path / path.relative_to(source_path)).as_posix(),
+                "hint": "目录变更后请核对建议路径，手动更新 skills.roots；不再使用的路径可移除。",
+            }
+            for root in dict.fromkeys(manifest.skills.roots)
+            for path in (Path(root),)
+            if ".." not in path.parts and path.is_relative_to(source_path)
+        ]
 
     def _domain(self, domain_id: str) -> Domain:
         matches = [item for item in self._domains.discover()[0] if item.id == domain_id]
@@ -517,6 +556,8 @@ class DomainRestructureService:
 
     def _validate_target(self, value: str, domain: Domain) -> Path:
         target = safe_path(self._settings.vault_root, value)
+        if in_skill_package(target, self._settings.skill_roots, directory=True):
+            raise ConfigurationError("技能包内不能迁入 Domain", code="skill-package-unmanaged")
         spaces = self._domains.spaces.discover()[0]
         owners = [
             space for space in spaces if (self._settings.vault_root / space.path) in target.parents
@@ -745,7 +786,11 @@ class DomainRestructureService:
 
         if new_id != domain.id:
             for child in domain.path.rglob(DOMAIN_MARKER):
-                if child == marker or parse_marker(child).get("parent_domain") != domain.id:
+                if (
+                    child == marker
+                    or child not in contents
+                    or parse_marker(child).get("parent_domain") != domain.id
+                ):
                     continue
                 child_parsed = parse_document(contents[child])
                 child_frontmatter = dict(child_parsed.frontmatter)
@@ -817,7 +862,11 @@ class DomainRestructureService:
         return self._manifests.path(self._settings.vault_root), self._manifests.render(manifest)
 
     def _reference_files(self) -> list[Path]:
-        documents = iter_documents(self._settings.vault_root, self._settings.document_types)
+        documents = iter_documents(
+            self._settings.vault_root,
+            self._settings.document_types,
+            skill_roots=self._settings.skill_roots,
+        )
         declarations = [domain.path / DOMAIN_MARKER for domain in self._domains.discover()[0]]
         return sorted(set(documents) | set(declarations))
 

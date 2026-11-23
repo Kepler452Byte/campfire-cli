@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from campfire_cli.app.document.schema import DocumentMoveResult
+from campfire_cli.app.document.service.document_scanner import require_document_path
 from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.mutation.document_relocation import (
     prepare_document_relocation,
@@ -89,6 +90,7 @@ class DocumentMoveService:
         if not title or Path(title).name != title or title.endswith(".md"):
             raise ConfigurationError("document rename 的 --name 必须是不含路径和 .md 后缀的标题")
         source = safe_path(self._settings.vault_root, source_name)
+        require_document_path(source, self._settings.skill_roots)
         if not source.is_file() or source.suffix.lower() != ".md":
             raise ConfigurationError(f"Markdown 文档不存在：{source_name}")
         document_type = parse_document(source.read_bytes().decode("utf-8")).frontmatter.get("type")
@@ -127,6 +129,8 @@ class DocumentMoveService:
     ) -> DocumentMoveResult:
         source = safe_path(self._settings.vault_root, source_name)
         target = safe_path(self._settings.vault_root, target_name)
+        for path in (source, target):
+            require_document_path(path, self._settings.skill_roots)
         if source == target and operation == "move":
             raise ConfigurationError("document move 的源路径和目标路径不能相同")
         if not source.is_file():
@@ -327,7 +331,12 @@ class DocumentMoveService:
                     ],
                 }
             )
-        self._executor.execute(changes, before_write=lambda: self._index.prepare_write(generation))
+
+        def verify_scope() -> None:
+            require_document_path(target, self._settings.skill_roots)
+            self._index.prepare_write(generation)
+
+        self._executor.execute(changes, before_write=verify_scope)
         index_issues = refresh_after_write(
             self._index,
             {

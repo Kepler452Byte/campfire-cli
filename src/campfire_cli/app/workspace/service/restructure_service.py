@@ -23,6 +23,7 @@ from campfire_cli.common.documents.markdown import parse_document, render_docume
 from campfire_cli.common.documents.related_docs import rewrite_related_docs
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import FileChangeExecutor, FileChangeSet, FileWrite, safe_path
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 from campfire_cli.common.hashing import file_sha256, text_sha256
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -42,6 +43,7 @@ class RestructureService:
             settings.document_types,
             settings.frontmatter_schema,
             workspace_candidate_sets(settings.vault_root),
+            skill_roots=settings.skill_roots,
         )
         self._executor = FileChangeExecutor(settings.vault_root, settings.state_root)
 
@@ -82,6 +84,9 @@ class RestructureService:
         issues: list[dict[str, object]] = []
         for record in inventory:
             path = safe_path(self._settings.vault_root, record.path)
+            if in_skill_package(path, self._settings.skill_roots):
+                issues.append({"code": "skill-package-unmanaged", "path": record.path})
+                continue
             if not path.is_file():
                 issues.append({"code": "source-missing", "path": record.path})
                 continue
@@ -164,6 +169,9 @@ class RestructureService:
                 target = safe_path(self._settings.vault_root, target_name)
             except GovernanceBlockedError:
                 issues.append({"code": "restructure-path-outside-vault", "path": target_name})
+                continue
+            if any(in_skill_package(path, self._settings.skill_roots) for path in (source, target)):
+                issues.append({"code": "skill-package-unmanaged", "path": target_name})
                 continue
             unknown = sorted(set(intent.frontmatter) - allowed_fields)
             if unknown:
@@ -353,6 +361,14 @@ class RestructureService:
         for item in items:
             source = safe_path(self._settings.vault_root, item.source)
             target = safe_path(self._settings.vault_root, item.target)
+            for path in (source, target):
+                if in_skill_package(path, self._settings.skill_roots):
+                    issues.append(
+                        {
+                            "code": "skill-package-unmanaged",
+                            "path": path.relative_to(self._settings.vault_root).as_posix(),
+                        }
+                    )
             if not source.is_file():
                 issues.append({"code": "source-missing", "path": item.source})
             elif file_sha256(source) != item.source_sha256:
@@ -419,6 +435,7 @@ class RestructureService:
             for path in self._settings.vault_root.rglob("*")
             if path.is_file()
             and path.suffix.lower() in {".md", ".canvas"}
+            and not in_skill_package(path, self._settings.skill_roots)
             and not any(
                 part in ignored for part in path.relative_to(self._settings.vault_root).parts
             )
@@ -430,6 +447,7 @@ class RestructureService:
             path
             for path in root.rglob("*.md")
             if path.name not in exempt
+            and not in_skill_package(path, self._settings.skill_roots)
             and not any(
                 ignored_directory(part, self._settings.document_types)
                 for part in path.relative_to(root).parts[:-1]

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
+
+import yaml
 
 from campfire_cli.app.agent_resources.repository.agent_resource_repository import (
     AgentResourceRepository,
@@ -11,11 +14,14 @@ from campfire_cli.app.agent_resources.schema.agent_resource_schema import (
     Change,
     OwnedFile,
     Registry,
+    SkillEntry,
     SkillInfo,
     SkillResult,
+    WorkspaceSkillListResult,
     resource_digest,
 )
 from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.filesystem.skill_packages import in_skill_package, skill_entry
 from campfire_cli.common.package_version import installed_version
 from campfire_cli.config.defaults import config_section
 from campfire_cli.config.settings import AgentResourceSettings, client_hint_paths
@@ -37,6 +43,79 @@ class AgentResourceService:
 
     def list(self) -> SkillResult:
         return SkillResult(status="ok", skills=self._skills())
+
+    def list_workspace(
+        self, roots: tuple[Path, ...], root_issues: list[dict[str, str]]
+    ) -> WorkspaceSkillListResult:
+        issues = list(root_issues)
+        entries: set[Path] = set()
+
+        def report_scan_error(exc: OSError) -> None:
+            issues.append(
+                {
+                    "code": "skill-directory-unreadable",
+                    "path": exc.filename or "",
+                    "message": str(exc),
+                }
+            )
+
+        for root in roots:
+            if in_skill_package(root.parent, roots, directory=True):
+                continue
+            for directory, children, _files in root.walk(on_error=report_scan_error):
+                entry = skill_entry(directory)
+                if entry is not None:
+                    entries.add(entry)
+                    children.clear()
+                else:
+                    children[:] = [
+                        name for name in children if not (directory / name).is_junction()
+                    ]
+
+        skills: list[SkillEntry] = []
+        for entry in sorted(entries):
+            try:
+                skills.append(self._workspace_entry(entry))
+            except (OSError, ValueError, yaml.YAMLError) as exc:
+                issues.append(
+                    {"code": "skill-entry-invalid", "path": str(entry), "message": str(exc)}
+                )
+        return WorkspaceSkillListResult(
+            status="needs-review" if issues else "ok", skills=skills, issues=issues
+        )
+
+    @staticmethod
+    def _workspace_entry(path: Path) -> SkillEntry:
+        with path.open(encoding="utf-8") as stream:
+            if stream.readline().rstrip("\n") != "---":
+                raise ValueError("SKILL.md 必须以 YAML Frontmatter 开头")
+            lines: list[str] = []
+            for line in stream:
+                if line.rstrip("\n") == "---":
+                    break
+                lines.append(line)
+            else:
+                raise ValueError("SKILL.md 缺少 Frontmatter 结束标记")
+        metadata = yaml.safe_load("".join(lines))
+        if not isinstance(metadata, dict):
+            raise ValueError("Frontmatter 必须是 YAML 映射")
+        name, description = metadata.get("name"), metadata.get("description")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name 必须是非空字符串")
+        normalized = unicodedata.normalize("NFKC", name)
+        if (
+            normalized != unicodedata.normalize("NFKC", path.parent.name)
+            or not 1 <= len(normalized) <= 64
+            or normalized != normalized.lower()
+            or normalized.startswith("-")
+            or normalized.endswith("-")
+            or "--" in normalized
+            or not all(char.isalnum() or char == "-" for char in normalized)
+        ):
+            raise ValueError("name 必须符合 Agent Skills 命名规则并与包目录名一致")
+        if not isinstance(description, str) or not description.strip() or len(description) > 1024:
+            raise ValueError("description 必须是 1 到 1024 字符的非空字符串")
+        return SkillEntry(name=name, description=description, path=str(path))
 
     def show(self, name: str, source: str = "ssot") -> SkillResult:
         root = self._source_root() if source == "ssot" else self._target_roots()[0]

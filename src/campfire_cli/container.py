@@ -18,6 +18,7 @@ from campfire_cli.app.maintenance.repository.maintenance_repository import (
     SqliteMaintenanceRepository,
 )
 from campfire_cli.app.maintenance.service.maintenance_service import MaintenanceService
+from campfire_cli.app.workspace.repository.manifest_repository import WorkspaceManifestRepository
 from campfire_cli.app.workspace.repository.restructure_repository import (
     SqliteRestructureRepository,
 )
@@ -160,13 +161,24 @@ class AppContainer:
         return AgentResourceService(settings, AgentResourceRepository(settings.state_root))
 
     @classmethod
+    def workspace_skill_roots(
+        cls, workspace: str | None
+    ) -> tuple[tuple[Path, ...], list[dict[str, str]]]:
+        resolution = cls.build_workspace().resolve(workspace, safe_cwd())
+        return WorkspaceManifestRepository().skill_roots(Path(resolution.workspace))
+
+    @classmethod
     def build(cls, workspace: str | Path | None) -> AppContainer:
         governance_root = campfire_home()
         workspace_repository = FilesystemWorkspaceRepository(governance_root)
         resolution = WorkspaceService(governance_root, workspace_repository).resolve(
             str(workspace) if workspace is not None else None, safe_cwd()
         )
-        settings = WorkspaceSettings.load(resolution.workspace_id, Path(resolution.workspace))
+        workspace_root = Path(resolution.workspace)
+        skill_roots, _ = WorkspaceManifestRepository().skill_roots(workspace_root)
+        settings = WorkspaceSettings.load(
+            resolution.workspace_id, workspace_root, skill_roots=skill_roots
+        )
         database_path = governance_root / "campfire.db"
         engine = create_sqlite_engine(database_path)
         initialize_database(engine)

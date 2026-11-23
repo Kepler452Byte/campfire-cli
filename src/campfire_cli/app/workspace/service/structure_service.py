@@ -24,6 +24,7 @@ from campfire_cli.common.documents.domain_context import (
 from campfire_cli.common.documents.frontmatter_format import format_text
 from campfire_cli.common.exceptions import ConfigurationError
 from campfire_cli.common.filesystem import atomic_write, workspace_write_lock
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 
 SPACE_MARKER = "_空间.md"
 DOMAIN_MARKER = "_领域.md"
@@ -105,11 +106,17 @@ class SpaceService:
         self.root = workspace_root.resolve()
         self.lock_root = lock_root
 
-    def discover(self) -> tuple[list[Space], list[dict[str, str]]]:
+    def discover(
+        self, *, skill_roots: tuple[Path, ...] | None = None
+    ) -> tuple[list[Space], list[dict[str, str]]]:
+        if skill_roots is None:
+            skill_roots, _ = WorkspaceManifestRepository().skill_roots(self.root)
         spaces: list[Space] = []
         issues: list[dict[str, str]] = []
         seen: set[str] = set()
         for marker in sorted(self.root.glob(f"*/{SPACE_MARKER}")):
+            if in_skill_package(marker, skill_roots):
+                continue
             meta = parse_marker(marker)
             relative = marker.relative_to(self.root).as_posix()
             missing = [
@@ -269,13 +276,16 @@ class DomainService:
         return roots
 
     def discover(self) -> tuple[list[Domain], list[dict[str, str]]]:
-        spaces, issues = self.spaces.discover()
+        skill_roots, _ = WorkspaceManifestRepository().skill_roots(self.root)
+        spaces, issues = self.spaces.discover(skill_roots=skill_roots)
         domains: list[Domain] = []
         seen: dict[str, str] = {}
         for space in spaces:
             space_root = self.root / space.path
             for directory in sorted([space_root, *space_root.rglob("*")]):
                 if not directory.is_dir() or directory == space_root:
+                    continue
+                if in_skill_package(directory, skill_roots, directory=True):
                     continue
                 parts = directory.relative_to(space_root).parts
                 if any(part.startswith(("_", ".")) for part in parts):
@@ -286,7 +296,7 @@ class DomainService:
                 child_domain = any(
                     (child / DOMAIN_MARKER).is_file()
                     for child in directory.iterdir()
-                    if child.is_dir()
+                    if child.is_dir() and not in_skill_package(child, skill_roots, directory=True)
                 )
                 if not (directory / DOMAIN_MARKER).is_file() and (direct_notes or child_domain):
                     issues.append(
@@ -296,7 +306,7 @@ class DomainService:
                         }
                     )
             for marker in sorted(space_root.rglob(DOMAIN_MARKER)):
-                if any(
+                if in_skill_package(marker, skill_roots) or any(
                     part.startswith(("_", "."))
                     for part in marker.relative_to(space_root).parts[:-1]
                 ):
@@ -380,7 +390,14 @@ class DomainService:
                         }
                     )
             moc = item.path / f"{item.moc}.md"
-            if item.moc and not moc.is_file():
+            if item.moc and skill_roots and in_skill_package(moc.resolve(), skill_roots):
+                issues.append(
+                    {
+                        "code": "skill-package-unmanaged",
+                        "path": moc.relative_to(self.root).as_posix(),
+                    }
+                )
+            elif item.moc and not moc.is_file():
                 issues.append(
                     {"code": "moc-missing", "path": moc.relative_to(self.root).as_posix()}
                 )
@@ -460,7 +477,10 @@ class DomainService:
         if not ID_RE.fullmatch(domain_id):
             raise ConfigurationError("Domain id 只能使用小写字母、数字和连字符")
         target = (self.root / PurePosixPath(path)).resolve()
-        spaces = self.spaces.discover()[0]
+        skill_roots, _ = WorkspaceManifestRepository().skill_roots(self.root)
+        if in_skill_package(target, skill_roots, directory=True):
+            raise ConfigurationError("技能包内不能创建 Domain", code="skill-package-unmanaged")
+        spaces = self.spaces.discover(skill_roots=skill_roots)[0]
         owners = [space for space in spaces if (self.root / space.path) in target.parents]
         if len(owners) != 1:
             raise ConfigurationError("Domain path 必须唯一位于一个已声明 Space 下")

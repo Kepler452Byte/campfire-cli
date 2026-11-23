@@ -12,6 +12,7 @@ from campfire_cli.app.document.schema import DocumentEdgeRecord, DocumentIndexRe
 from campfire_cli.common.documents.domain_context import DomainContextError, resolve_domain_context
 from campfire_cli.common.documents.markdown import MarkdownDocument, parse_document
 from campfire_cli.common.documents.related_docs import RELATED_DOCS, related_documents
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 from campfire_cli.config.settings import WorkspaceSettings
 
 
@@ -99,7 +100,7 @@ class DocumentIndexBuilder:
                 path
                 for name in marker_names
                 for path in self._settings.vault_root.rglob(name)
-                if path.is_file()
+                if path.is_file() and not in_skill_package(path, self._settings.skill_roots)
             ),
             key=lambda item: item.relative_to(self._settings.vault_root).as_posix().casefold(),
         ):
@@ -114,6 +115,8 @@ class DocumentIndexBuilder:
         marker_name = self._settings.governance.get("domain_marker", "_领域.md")
         domains: set[str] = set()
         for marker in self._settings.vault_root.rglob(marker_name):
+            if in_skill_package(marker, self._settings.skill_roots):
+                continue
             frontmatter = parse_document(marker.read_text(encoding="utf-8")).frontmatter
             domain = self._string(frontmatter.get("domain_id"))
             if domain:

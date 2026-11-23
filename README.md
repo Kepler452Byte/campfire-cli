@@ -159,6 +159,24 @@ campfire maintenance sync --dry-run
 
 `setup` 会向 `~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md` 注入幂等的 campfire 路标块，保留标记外内容；`CAMPFIRE_AGENT_HINT_PATH` 可覆盖目标。`setup` 与 `skill sync` 会把托管 Skill 同步到 `~/.claude/skills`、`~/.agents/skills`，可通过 `CAMPFIRE_SKILL_TARGETS` 覆盖。单独执行 `skill sync` 不更新提示词路标。Codex 的指令目录跟随 `CODEX_HOME`，Claude Code 的指令和默认 Skill 目录跟随 `CLAUDE_CONFIG_DIR`。非空 `AGENTS.override.md` 优先于同目录 `AGENTS.md`；自定义 Hint 目标须自行接入客户端。对齐结果中的 `loading_verified=false` 表示只完成文件写入，需在新会话核验实际加载；Claude Code 可用 `/memory` 辅助核对。
 
+### Vault 技能库
+
+在 Vault 根目录的 `.campfire.yaml` 中配置技能库路径。每项相对于 Vault 根目录，可以是独立 Space 或现有 Space 下的目录。
+
+```yaml
+skills:
+  roots:
+    - "myworkskill"
+    - "mystudyskill"
+    - "mywork/团队技能"
+```
+
+运行 `campfire --workspace personal skill list --source workspace` 查看名称、描述和 `SKILL.md` 的本机绝对路径。Agent 按任务选择入口，再用文件工具读取正文及必要的包内资源。未配置根目录时返回空技能目录。若有路径或入口问题，读取结果中的 `issues`，其余有效技能仍会返回。
+
+Vault 技能使用 Agent Skills 格式。整个技能包独立于普通文档校验、索引和格式化。随包 Agent Hint 通过现有 `setup` 或 `upgrade --skip-package` 资源对齐流程更新。
+
+Domain 目录改名、移动或合并影响已配置的技能库路径时，命令会在 `issues` 中报告 `skill-root-path-changed`，并提供旧路径和建议路径。目录变更成功后，请核对建议路径，再手动更新 `.campfire.yaml`。
+
 ## 核心概念
 
 ```text

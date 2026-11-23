@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 import typer
 
 from campfire_cli.common.cli_output import emit
@@ -10,10 +12,22 @@ skill_cli = typer.Typer(
 )
 
 
+class SkillListSource(StrEnum):
+    SSOT = "ssot"
+    WORKSPACE = "workspace"
+
+
 @skill_cli.command("list")
-def list_skills(ctx: typer.Context) -> None:
-    """列出包内 SSOT Skill 及全局同步状态。"""
-    emit(ctx.obj.skill.list())
+def list_skills(
+    ctx: typer.Context,
+    source: SkillListSource = typer.Option(SkillListSource.SSOT, "--source"),
+) -> None:
+    """列出包内 Skill 同步状态，或 Workspace 技能的名称、描述及绝对入口路径。"""
+    if source == SkillListSource.WORKSPACE:
+        roots, issues = ctx.obj.workspace_skill_roots
+        emit(ctx.obj.skill.list_workspace(roots, issues))
+    else:
+        emit(ctx.obj.skill.list())
 
 
 @skill_cli.command("show")

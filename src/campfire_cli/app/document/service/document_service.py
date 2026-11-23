@@ -10,7 +10,11 @@ from campfire_cli.app.document.schema import (
     DocumentListResult,
     DocumentMoveResult,
 )
-from campfire_cli.app.document.service.document_scanner import exempt_document, is_system_scope_path
+from campfire_cli.app.document.service.document_scanner import (
+    exempt_document,
+    is_system_scope_path,
+    require_document_path,
+)
 from campfire_cli.app.document.service.index.document_index_service import DocumentIndexService
 from campfire_cli.app.document.service.mutation.document_apply_service import DocumentApplyService
 from campfire_cli.app.document.service.mutation.document_move_service import DocumentMoveService
@@ -30,6 +34,7 @@ from campfire_cli.common.documents.frontmatter_format import format_text
 from campfire_cli.common.documents.markdown import parse_document
 from campfire_cli.common.exceptions import ConfigurationError, GovernanceBlockedError
 from campfire_cli.common.filesystem import atomic_write, safe_path
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 from campfire_cli.common.governance import capture_snapshot, optimistic_write_lock
 from campfire_cli.config.settings import WorkspaceSettings
 
@@ -45,7 +50,10 @@ class DocumentService:
         self._index = index
         self._candidate_sets = workspace_candidate_sets(settings.vault_root)
         self._rules = DocumentRuleService(
-            settings.document_types, settings.frontmatter_schema, self._candidate_sets
+            settings.document_types,
+            settings.frontmatter_schema,
+            self._candidate_sets,
+            skill_roots=settings.skill_roots,
         )
         self._profiles = ProfileRegistry(settings.document_types, settings.frontmatter_schema)
         self._project_roots = project_roots
@@ -173,6 +181,7 @@ class DocumentService:
                     raise GovernanceBlockedError(
                         "文档在格式化期间发生变化：" + ", ".join(concurrent)
                     )
+                require_document_path(path, self._settings.skill_roots)
                 atomic_write(path, formatted)
         return {
             "status": "formatted" if changed and confirm else "planned" if changed else "current",
@@ -265,4 +274,8 @@ class DocumentService:
             self._settings.governance.get("space_marker", "_空间.md"),
             self._settings.governance.get("domain_marker", "_领域.md"),
         }
-        return path.name in markers or exempt_document(path, self._settings.document_types)
+        return (
+            path.name in markers
+            or exempt_document(path, self._settings.document_types)
+            or in_skill_package(path, self._settings.skill_roots)
+        )

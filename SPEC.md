@@ -110,6 +110,7 @@ Campfire 使用语义化版本：
 - 新设备接管已有 Workspace 时，从可移植元数据恢复逻辑关系，再在本机独立绑定项目路径并重建 SQLite 派生状态。
 - Vault 根目录的 `.campfire.yaml` 是唯一可移植 Manifest；禁止在其他文件重复维护 Workspace/Project 便携元数据。
 - `.campfire.yaml` 禁止保存 Vault 或代码仓库的本机绝对路径。
+- Vault 技能库通过 Manifest 的 `skills.roots` 保存 Vault 相对路径。配置范围内的标准 `SKILL.md` 确定包边界；普通文档治理跳过整个包。Skill 目录实时读取入口元数据，正文和资源由调用者按需读取。
 - `campfire setup` 必须幂等完成接入、契约/Skill/Base 同步和健康检查；未绑定项目必须显式报告，不得猜测路径。
 
 ## Domain 重构不变量

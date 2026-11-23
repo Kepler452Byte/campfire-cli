@@ -7,11 +7,22 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from campfire_cli.common.documents.document_types import safe_path
+from campfire_cli.common.exceptions import GovernanceBlockedError
+from campfire_cli.common.filesystem.skill_packages import in_skill_package
 
 
 def exempt_document(path: Path, config: dict[str, Any]) -> bool:
     """Return whether a Markdown file is owned by another app or explicitly unmanaged."""
     return path.name in set(config.get("exempt_basenames", []))
+
+
+def require_document_path(path: Path, skill_roots: tuple[Path, ...]) -> None:
+    if in_skill_package(path, skill_roots):
+        raise GovernanceBlockedError(
+            "技能包文件独立于普通文档治理，请用文件工具处理",
+            code="skill-package-unmanaged",
+            path=str(path),
+        )
 
 
 def is_system_scope_path(root: Path, path: Path, config: dict[str, Any]) -> bool:
@@ -39,6 +50,8 @@ def iter_documents(
     root: Path,
     config: dict[str, Any],
     roots: Iterable[Path] | None = None,
+    *,
+    skill_roots: tuple[Path, ...] = (),
 ) -> list[Path]:
     root = root.resolve()
     documents: set[Path] = set()
@@ -57,17 +70,24 @@ def iter_documents(
     for scope in scope_paths:
         if scope != root and root not in scope.parents:
             continue
-        if not scope.exists():
+        if not scope.is_dir():
             continue
-        for path in scope.rglob("*.md"):
-            scoped_parts = path.relative_to(scope).parts[:-1]
-            if exempt_document(path, config) or any(
-                ignored_directory(part, config) for part in scoped_parts
-            ):
+        for directory, children, files in scope.walk():
+            if in_skill_package(directory, skill_roots, directory=True):
+                children.clear()
                 continue
-            if not path.is_file() or any(
-                part.is_symlink() for part in (path, *path.parents) if part != root
-            ):
-                continue
-            documents.add(path)
+            children[:] = [
+                name
+                for name in children
+                if not ignored_directory(name, config) and not (directory / name).is_junction()
+            ]
+            for name in files:
+                path = directory / name
+                if (
+                    path.match("*.md")
+                    and not exempt_document(path, config)
+                    and not path.is_symlink()
+                    and path.is_file()
+                ):
+                    documents.add(path)
     return sorted(documents, key=lambda path: str(path.relative_to(root)).casefold())

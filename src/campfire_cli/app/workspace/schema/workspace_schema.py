@@ -100,11 +100,18 @@ class ManifestProject(BaseModel):
         return self
 
 
+class ManifestSkills(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    roots: list[str] = Field(default_factory=list)
+
+
 class WorkspaceManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workspace: ManifestWorkspace
     projects: list[ManifestProject] = Field(default_factory=list)
+    skills: ManifestSkills | None = None
 
 
 class WorkspaceSetupResult(WorkspaceResult):

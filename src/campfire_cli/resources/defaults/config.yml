@@ -273,6 +273,7 @@ skills:
   - campfire-task-management
   - campfire-task-mainline
   - campfire-job-management
+  - campfire-skill-maintenance
   unknown_skill_policy: ignore
   orphaned_skill_policy: report
 bases:

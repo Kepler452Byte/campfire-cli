@@ -147,7 +147,11 @@ class DocumentIndexService:
         """Recheck the indexed file set under the caller's write lock."""
         paths = {
             p.relative_to(self._settings.vault_root).as_posix(): p
-            for p in iter_documents(self._settings.vault_root, self._settings.document_types)
+            for p in iter_documents(
+                self._settings.vault_root,
+                self._settings.document_types,
+                skill_roots=self._settings.skill_roots,
+            )
         }
         existing = {r.path: r for r in self._repository.load_fingerprints()}
         state = self._repository.load_state()
@@ -164,7 +168,11 @@ class DocumentIndexService:
     def _reconcile(
         self, *, force: bool, known_changes: set[str] | None = None
     ) -> DocumentIndexResult:
-        paths = iter_documents(self._settings.vault_root, self._settings.document_types)
+        paths = iter_documents(
+            self._settings.vault_root,
+            self._settings.document_types,
+            skill_roots=self._settings.skill_roots,
+        )
         paths_by_relative = {
             path.relative_to(self._settings.vault_root).as_posix(): path for path in paths
         }
