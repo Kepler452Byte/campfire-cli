@@ -221,11 +221,61 @@ def test_upgrade_gate_and_active_run_protection(service, job):
     operation = "a" * 32
     folder = service.home / "upgrades" / operation
     folder.mkdir(parents=True)
-    (folder / "result.json").write_text(json.dumps({"state": "running"}))
-    (service.home / "active-upgrade.json").write_text(json.dumps({"operation_id": operation}))
+    (folder / "result.json").write_text(
+        json.dumps({"operation_id": operation, "package": "campfire-cli", "state": "running"}),
+        encoding="utf-8",
+    )
+    (service.home / "active-upgrade.json").write_text(
+        json.dumps({"operation_id": operation}), encoding="utf-8"
+    )
     with pytest.raises(JobError) as error:
         run(service)
     assert error.value.code == "upgrade-active"
+
+
+@pytest.mark.parametrize("state", ["completed", "failed", "running", "corrupt"])
+def test_scheduled_job_upgrade_gate_uses_utf8(service, job, monkeypatch, state):
+    from pathlib import Path
+
+    job = replace(job, schedule={"kind": "interval", "seconds": 60})
+    change(service, "create", job)
+    change(service, "resume")
+    operation = "b" * 32
+    marker = service.home / "active-upgrade.json"
+    result = service.home / "upgrades" / operation / "result.json"
+    result.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({"operation_id": operation}), encoding="utf-8")
+    content = json.dumps(
+        {
+            "operation_id": operation,
+            "package": "campfire-cli",
+            "state": state,
+            "message": "升级完成，已同步中文文档。😀",
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    with pytest.raises(UnicodeDecodeError):
+        content.decode("gbk")
+    result.write_bytes(b"\xff" if state == "corrupt" else content)
+    read_text = Path.read_text
+
+    def read_with_gbk_default(path, encoding=None, *args, **kwargs):
+        if path in (marker, result) and encoding is None:
+            encoding = "gbk"
+        return read_text(path, encoding, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_with_gbk_default)
+    if state in {"running", "corrupt"}:
+        with pytest.raises(JobError) as error:
+            service.run(job.id, confirm=True, scheduled=True)
+        expected_code = "upgrade-state-unreadable" if state == "corrupt" else "upgrade-active"
+        assert error.value.code == expected_code
+        assert error.value.exit_code == 3
+        if state == "corrupt":
+            assert error.value.details["reason"] == "invalid-job"
+        assert service.history(None, 20, 0) == []
+    else:
+        assert service.run(job.id, confirm=True, scheduled=True)["run"]["status"] == "succeeded"
 
 
 def test_cli_real_process_json_exit_and_no_workspace(tmp_path):

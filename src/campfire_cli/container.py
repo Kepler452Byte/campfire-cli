@@ -32,6 +32,7 @@ from campfire_cli.app.workspace.service.workspace_service import WorkspaceServic
 from campfire_cli.common.database import create_sqlite_engine, initialize_database, open_session
 from campfire_cli.common.database.models import Workspace
 from campfire_cli.common.filesystem.cwd import safe_cwd
+from campfire_cli.common.package_updater import PackageUpdater
 from campfire_cli.config.settings import AgentResourceSettings, WorkspaceSettings, campfire_home
 
 
@@ -95,13 +96,16 @@ class AppContainer:
     @classmethod
     def build_upgrade(cls):
         from campfire_cli.app.system.service.upgrade_service import UpgradeService
-        from campfire_cli.common.package_updater import PackageUpdater
 
         return UpgradeService(
             cls.build_system(),
-            PackageUpdater("campfire-cli", "campfire", campfire_home()),
+            cls._package_updater(campfire_home()),
             cls.build_job(),
         )
+
+    @staticmethod
+    def _package_updater(home: Path) -> PackageUpdater:
+        return PackageUpdater("campfire-cli", "campfire", home)
 
     @staticmethod
     def build_workspace():
@@ -115,8 +119,8 @@ class AppContainer:
 
         return ScriptService(campfire_home(), config_section("scripts"))
 
-    @staticmethod
-    def build_job():
+    @classmethod
+    def build_job(cls):
         import sys
 
         from campfire_cli.app.job.adapter.launchd_scheduler import LaunchdScheduler
@@ -151,7 +155,8 @@ class AppContainer:
             RetentionPolicy(**config["retention"]),
             resolve,
             config,
-            AppContainer.build_script(),
+            cls.build_script(),
+            cls._package_updater(home).active_status,
         )
 
     @classmethod

@@ -35,6 +35,7 @@ class JobService:
         resolve_workspace,
         config: dict,
         scripts: ScriptService,
+        upgrade_status: Callable[[], dict[str, object] | None],
     ) -> None:
         self.home = home
         self.repository = repository
@@ -44,6 +45,7 @@ class JobService:
         self.resolve_workspace = resolve_workspace
         self.config = config
         self.scripts = scripts
+        self._upgrade_status = upgrade_status
 
     def lock(self, *, shared: bool = False):
         return process_lock(self.home / "jobs/locks/config.lock", shared=shared)
@@ -178,19 +180,17 @@ class JobService:
             }
 
     def check_upgrade(self) -> None:
-        active = self.home / "active-upgrade.json"
-        if active.exists():
-            try:
-                identity = json.loads(active.read_text())["operation_id"]
-                state = json.loads((self.home / "upgrades" / identity / "result.json").read_text())
-            except (OSError, KeyError, ValueError) as exc:
-                raise JobError(
-                    "upgrade-active", "Cannot verify active upgrade; inspect its result"
-                ) from exc
-            if state.get("state") not in {"completed", "failed"}:
-                raise JobError(
-                    "upgrade-active", "Package upgrade is active; inspect its result first"
-                )
+        try:
+            state = self._upgrade_status()
+        except (AppError, OSError) as exc:
+            raise JobError(
+                "upgrade-state-unreadable",
+                "Cannot verify package upgrade state",
+                reason=(exc.code or exc.error_code) if isinstance(exc, AppError) else "io-error",
+                hint="Run campfire agent upgrade-status <operation_id> using active-upgrade.json.",
+            ) from exc
+        if state is not None and state["state"] not in {"completed", "failed"}:
+            raise JobError("upgrade-active", "Package upgrade is active; inspect its result first")
 
     @contextmanager
     def idle(self):

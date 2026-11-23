@@ -69,6 +69,7 @@ Web 与 CLI 遵循以下架构约束：
 - 提交使用 conventional commits，类型限定为 feat、fix、perf、refactor、docs、chore，正文说明动机；纯重构独立成 commit，不与功能变更混排。
 - 行为保持型重构的验收等于两条同时满足：既有测试不改断言仍通过，真实数据上新旧输出全等对比。只过测试不足以证明行为未变。
 - Windows 不变量：进程探活用 `psutil.pid_exists`，不用 `os.kill(pid, 0)`，后者在 Windows 等价于发送 CTRL_C_EVENT；CLI 入口处对 stdout/stderr 执行 UTF-8 reconfigure。
+- Campfire 生成的文本文件使用 UTF-8，读取时显式解码或从字节解析结构化数据，避免依赖系统默认文本编码。
 
 ## 注释与文档字符串
 

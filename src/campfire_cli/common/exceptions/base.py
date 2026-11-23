@@ -51,6 +51,7 @@ class JobError(AppError):
             "foreign-job",
             "already-deployed",
             "upgrade-active",
+            "upgrade-state-unreadable",
             "workspace-binding-changed",
             "environment-missing",
             "recovery-required",

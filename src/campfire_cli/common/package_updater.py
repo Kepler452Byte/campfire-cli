@@ -115,18 +115,12 @@ class PackageUpdater:
         source = Path(__file__).with_name("package_update_worker.py")
         with write_lock(self.state_root):
             active_path = self.state_root / "active-upgrade.json"
-            active = read_bytes(active_path)
-            if active:
-                try:
-                    previous = json.loads(active)["operation_id"]
-                    state = self.status(previous)
-                except (ValueError, KeyError, TypeError) as exc:
-                    raise AppError("Active upgrade record is invalid", code="invalid-job") from exc
-                if state.get("state") not in {"completed", "failed"}:
-                    raise AppError(
-                        "An upgrade is already active; query its result before retrying",
-                        code="upgrade-active",
-                    )
+            state = self.active_status()
+            if state is not None and state["state"] not in {"completed", "failed"}:
+                raise AppError(
+                    "An upgrade is already active; query its result before retrying",
+                    code="upgrade-active",
+                )
             # Copy a stdlib-only worker outside the environment being replaced.
             atomic_write(folder / "runner.py", source.read_bytes())
             job = {
@@ -188,6 +182,22 @@ class PackageUpdater:
             "resource_stage": "pending",
             "log_path": str(log_path),
         }
+
+    def active_status(self) -> dict[str, object] | None:
+        """Return the last registered upgrade status, if a marker exists."""
+        raw = read_bytes(self.state_root / "active-upgrade.json")
+        if raw is None:
+            return None
+        try:
+            operation_id = json.loads(raw)["operation_id"]
+            if not isinstance(operation_id, str):
+                raise ValueError("operation_id")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise AppError("Active upgrade record is invalid", code="invalid-job") from exc
+        result = self.status(operation_id)
+        if result.get("state") not in ("scheduled", "waiting", "running", "completed", "failed"):
+            raise AppError("Upgrade result state is invalid", code="invalid-job")
+        return result
 
     def status(self, operation_id: str) -> dict[str, object]:
         if not re.fullmatch(r"[a-f0-9]{32}", operation_id):
