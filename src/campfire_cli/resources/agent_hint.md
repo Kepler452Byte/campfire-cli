@@ -2,6 +2,7 @@
 
 本机提供 campfire CLI（`campfire --help`）。仅在用户的文档、任务或 Workspace 工作适用时使用，按意图加载对应 Skill，不把 Skill 清单当作固定流水线。
 
+- Agent 在对话和文档中讲解业务、技术或知识内容时，优先用 ASCII 架构图呈现关键结构、流程或关系，帮助用户理解。简单内容可直接用文字说明。
 - 首次接入或修复 Workspace 用 campfire-workspace-onboarding；上下文缺失才用 campfire-context-bootstrap。
 - 文档记录或更新用 campfire-document-capture，普通任务用 campfire-task-management；周清单分流和持续主线维护可选 campfire-task-mainline。其他文档意图由 campfire-conversation-router 路由。
 - 当前任务可能适用 Workspace 的业务 Skill 且 Workspace 已明确时，运行 `campfire --workspace <id> skill list --source workspace`。按名称和描述选择一项，用文件工具读取返回路径的 `SKILL.md`，再按正文引用读取必要资源。已知入口时直接读取；目录为空或无合适 Skill 时继续原任务。
